@@ -1,0 +1,61 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh",
+            "args": [
+              "-NoProfile",
+              "-ExecutionPolicy",
+              "Bypass",
+              "-File",
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/gates.ps1"
+            ],
+            "timeout": 180
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "deny": [
+      "Bash(curl *)",
+      "Bash(wget *)",
+      "Bash(scp *)",
+      "Bash(ssh *)",
+      "Bash(rm -rf *)",
+      "PowerShell(Invoke-WebRequest *)",
+      "PowerShell(Invoke-RestMethod *)",
+      "PowerShell(iwr *)",
+      "PowerShell(irm *)",
+      "PowerShell(curl *)",
+      "PowerShell(wget *)"
+    ],
+    "ask": [
+      "Edit(/fixtures/**)",
+      "Bash(* -m pip *)",
+      "Bash(* -m venv *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "PowerShell(* -m pip *)",
+      "PowerShell(* -m venv *)",
+      "PowerShell(git commit *)",
+      "PowerShell(git push *)"
+    ],
+    "allow": [
+      "Edit(/**)",
+      "Bash(.venv/Scripts/python.exe -m pytest *)",
+      "Bash(.venv/Scripts/python.exe -m ruff *)",
+      "Bash(.venv/Scripts/python.exe -m qrsalvage *)",
+      "Bash(.venv/Scripts/python.exe scripts/*)",
+      "Bash(git add *)",
+      "PowerShell(.venv\\Scripts\\python.exe -m pytest *)",
+      "PowerShell(.venv\\Scripts\\python.exe -m ruff *)",
+      "PowerShell(.venv\\Scripts\\python.exe -m qrsalvage *)",
+      "PowerShell(.venv\\Scripts\\python.exe scripts\\*)",
+      "PowerShell(git add *)"
+    ]
+  }
+}

@@ -1,0 +1,22 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# Arbeitsstaende des Tools (Zwischenergebnisse, keine Fixtures)
+out/
+*.grid.json
+
+# Lokale Claude-Code-Einstellungen
+CLAUDE.local.md
+.claude/settings.local.json
+
+# IDE
+.idea/
+*.egg-info/
+
+# Private Testfaelle: echte Fotos und ihre Ergebnisse verlassen den Rechner nicht.
+# Das oeffentliche Korpus in fixtures/ ist synthetisch, siehe scripts/make_fixtures.py
+fixtures-local/

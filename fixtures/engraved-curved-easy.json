@@ -1,0 +1,22 @@
+{
+  "source": "synthetisch erzeugt, siehe scripts/make_fixtures.py",
+  "expected_sha256": "f84b95b5b4252338db70aa40528aa3d7f62d7886f0151c7b5eacd3872f603523",
+  "expected_length": 28,
+  "expected_prefix": "QRSALVAGE-SYNTHETIC-CASE-001",
+  "crop": null,
+  "qr_modules": 25,
+  "damage": {
+    "module_px": 9.0,
+    "curvature": 0.25,
+    "raster_period": 3.0,
+    "raster_depth": 0.55,
+    "contrast": 0.24,
+    "glare": 0.35,
+    "stain": 0.0,
+    "blur": 1.2,
+    "noise": 4.0,
+    "rotation_deg": 0.0
+  },
+  "seed": 0,
+  "synthetic": true
+}
