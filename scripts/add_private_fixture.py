@@ -33,6 +33,17 @@ def main() -> int:
     parser.add_argument("name", help="short lowercase identifier describing the source")
     parser.add_argument("--source", default="", help="one line on where the photograph is from")
     parser.add_argument("--note", nargs="*", default=[], help="what makes this case difficult")
+    parser.add_argument(
+        "--provenance",
+        default="",
+        help="where it came from, if not your own device -- a forum post, a colleague, a photo "
+        "someone sent you",
+    )
+    parser.add_argument(
+        "--third-party",
+        action="store_true",
+        help="the device belongs to someone else; marks the fixture as not ours to publish",
+    )
     args = parser.parse_args()
 
     TARGET.mkdir(parents=True, exist_ok=True)
@@ -58,6 +69,21 @@ def main() -> int:
     meta = {
         "source": args.source or "private photograph",
         "expected_sha256": hashlib.sha256(result.text.encode()).hexdigest(),
+        # Recorded separately from `source` so it cannot be mistaken for a description. A
+        # photograph handed to you does not make the device yours, and the payload of a Zigbee
+        # or Matter label is a pairing secret rather than an identifier.
+        **(
+            {
+                "provenance": args.provenance,
+                "third_party": True,
+                "handling": (
+                    "NOT OURS. The decoded payload is someone else's device secret. Do not "
+                    "publish it, do not put it in an issue, do not paste it into a forum reply."
+                ),
+            }
+            if args.third_party or args.provenance
+            else {}
+        ),
         "expected_length": len(result.text),
         "expected_prefix": "",
         "crop": None,
