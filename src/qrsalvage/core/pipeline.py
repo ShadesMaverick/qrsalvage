@@ -25,6 +25,7 @@ from .geometry import (
 from .matrix import ModuleMatrix
 from .preprocess import prepare
 from .repair import RepairResult, repair_progressive
+from .scanfinder import find_finders_scan, merge_finders
 from .structure import is_valid_size, structure_mask, timing_score, version_for_modules
 
 DEFAULT_SIZES = (21, 25, 29, 33, 37, 41)
@@ -62,6 +63,18 @@ class SolveResult:
 SCALES = (1.0, 0.6, 0.4, 0.25)
 
 
+def detect_finders(binary: np.ndarray) -> list[tuple[float, float, float]]:
+    """Both detectors, merged.
+
+    They fail on different things, which is the whole reason for keeping both. The contour
+    detector wants three intact nested rings and gives a precise centre when it gets them; the
+    scan detector only wants the 1:1:3:1:1 proportions to survive along enough lines, which
+    they do through creases, grit and eroded edges. Contours go first so their precision wins
+    wherever both saw the same pattern.
+    """
+    return merge_finders(find_finders(binary), find_finders_scan(binary))
+
+
 def _search_scales(bgr: np.ndarray, scales=SCALES):
     """Look for the finders across a small scale pyramid and keep the best resolution.
 
@@ -74,8 +87,8 @@ def _search_scales(bgr: np.ndarray, scales=SCALES):
 
     Returns the image actually used, so every coordinate downstream refers to it.
     """
-    best = None
-    for scale in scales:
+    attempts = []
+    for index, scale in enumerate(scales):
         if scale >= 1.0:
             candidate = bgr
         else:
@@ -83,24 +96,33 @@ def _search_scales(bgr: np.ndarray, scales=SCALES):
         if min(candidate.shape[:2]) < 80:
             continue
         gray, binary = prepare(candidate)
-        finders = find_finders(binary)
-        if len(finders) >= 3:
-            triple = select_finder_triple(finders)
-            widths = [w for _, _, w in triple]
-            spread = (max(widths) - min(widths)) / max(max(widths), 1e-6)
-            # Prefer the highest resolution whose three finders agree on their width; a
-            # disagreeing triple usually means a false candidate crept in.
-            if spread < 0.15:
-                return candidate, gray, binary, finders
-            if best is None:
-                best = (candidate, gray, binary, finders)
-        elif best is None and scale >= 1.0:
-            best = (candidate, gray, binary, finders)
+        finders = detect_finders(binary)
 
-    if best is not None:
-        return best
-    gray, binary = prepare(bgr)
-    return bgr, gray, binary, find_finders(binary)
+        spread = 1.0
+        if len(finders) >= 3:
+            widths = [w for _, _, w in select_finder_triple(finders)]
+            spread = (max(widths) - min(widths)) / max(max(widths), 1e-6)
+        attempts.append((index, spread, len(finders), candidate, gray, binary, finders))
+
+        # A clean triple at the highest resolution that offers one is as good as it gets.
+        if len(finders) >= 3 and spread < 0.15:
+            break
+
+    if not attempts:
+        gray, binary = prepare(bgr)
+        return bgr, gray, binary, detect_finders(binary)
+
+    # Ranking, in this order: having three finders at all beats everything, because without
+    # them nothing downstream runs; then agreement on their width, since a disagreeing triple
+    # usually means a false candidate crept in; then resolution. Getting this order wrong is
+    # not academic -- an earlier version preferred a single finder at full resolution over
+    # three finders at 60 percent, and lost images that were perfectly recoverable.
+    def rank(attempt):
+        index, spread, count, *_ = attempt
+        return (count < 3, round(spread, 2), index)
+
+    _, _, _, candidate, gray, binary, finders = min(attempts, key=rank)
+    return candidate, gray, binary, finders
 
 
 def snap_to_finders(binary: np.ndarray, points, radius: float = 60.0):
