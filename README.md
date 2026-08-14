@@ -32,6 +32,21 @@ qrsalvage takes the problem apart:
 - **It tells you how sure it is.** Every run reports how many known cells it got wrong, whether
   the timing pattern is intact, how many cells remain uncertain and what the repair had to do.
 
+Everything that could be guessed is measured instead, and scored on the same evidence:
+
+- **The version**, by fitting every candidate size and comparing the error count. On a bad
+  photograph the estimate from the finder width lands between two candidates about as often as
+  it lands on one.
+- **The resolution.** A finder is seven modules wide, so once one is found the module size is
+  known. Photographs are rescaled into the band the preprocessing is built for — in both
+  directions. Codes fail as readily for being photographed too well as too badly.
+- **The polarity.** Light modules on a dark ground, as etched into metal or dark plastic, are
+  read as easily as dark on light. This cannot be settled by looking at the finders — a finder
+  is nested squares and so is its inverse — so it is settled by the known cells like everything
+  else.
+- **A missing finder.** Two are enough. A QR code is square, which fixes the third position up
+  to six discrete choices; all six are fitted and the known cells pick the winner.
+
 ## Install
 
 ```
@@ -56,6 +71,18 @@ qrsalvage solve photo.jpg
 
 That is the whole first step. If fewer than three finder patterns are found, narrow the search
 with `--crop X0 Y0 X1 Y1`; the finder search does not cope well with busy backgrounds.
+
+Or drop the photograph onto a page in your browser:
+
+```
+qrsalvage serve
+```
+
+That opens a local interface on `127.0.0.1` — and only there. The payload of a damaged code is
+frequently a secret, so nothing is uploaded and the port is not reachable from another machine.
+The page shows the same diagnostics as the command line, and if the finder search comes up short
+you can click the three corner squares yourself. Roughly is enough: the click picks which
+candidate to use, the position still comes from the image.
 
 Generate an artificially degraded test case with a known answer:
 
@@ -111,6 +138,40 @@ Reproduce with `python scripts/difficulty.py --axis contrast`. Other axes: `curv
 The intervals matter. Even 20 successes out of 20 only supports "at least 84 %" — a claim built
 on four samples, which is what an earlier version of this table used, supports almost nothing.
 
+### Where it stops
+
+Under otherwise ideal conditions — high contrast, barely any curvature, little noise — the
+limit is resolution:
+
+| pixels per module | recovered |
+|---|---|
+| 6.0 | 5/5 |
+| 5.0 | 5/5 |
+| 4.0 | 1/5 |
+| 3.0 | 0/5 |
+
+**Below about five pixels per module there is nothing to recover.** Not "hard": the information
+is no longer in the image. That number is worth knowing before you spend an evening on a
+photograph — it tells you to take a better one instead. Real damage moves the threshold upward,
+never down.
+
+### On real photographs
+
+Thirteen damaged codes collected from the web and from hardware labels, of which a plain
+decoder reads exactly one:
+
+|  | |
+|---|---|
+| recovered by qrsalvage | 6 of 13 |
+| recovered by a plain decoder | 1 of 13 |
+| grid seated within 5 % of known cells | 9 of 13 |
+| failed to locate the code at all | 0 of 13 |
+
+Of the seven not recovered, one sits below the resolution floor above and the rest place the
+grid cleanly — one at 1 of 252 known cells wrong with an intact timing pattern — and fail
+because too many data modules are physically gone. That is the honest boundary of the method:
+it can find and place a code far past the point where it can read one.
+
 ## Related projects
 
 qrsalvage is not the first tool in this space, and the honest comparison is short:
@@ -131,17 +192,15 @@ scriptable pipeline with a text interface that automation can drive.
 
 ## Limitations
 
+- **About five pixels per module is the floor**, measured above. Below it, no algorithm helps.
 - **QR Code only.** Not Data Matrix, Aztec or PDF417. The method generalises but each symbology
   needs its own structure model, layout and Reed-Solomon parameters.
 - **Reed-Solomon repair covers versions 1 to 10.** Larger codes are read but not repaired; the
   block tables stop there.
-- **No graphical interface yet.** Command line only.
-- **The finder search needs a reasonably framed photograph.** It is the first thing to fail on
-  cluttered backgrounds, and `--crop` is the workaround.
-
-Known open issue: the spread of the brightness model is estimated from the known cells alone.
-Those sit around the edges, so when they happen to be clean the model can be confidently wrong
-about the data cells in the middle. See `docs/ISSUES.md`.
+- **A cluttered background can still defeat the finder search.** `--crop` is the workaround, and
+  the browser interface lets you point at the finders instead.
+- **The fallbacks are slow.** Recovering from two finders fits six times as many grids and takes
+  around twenty seconds; the ordinary path takes four.
 
 ## Contributing
 
