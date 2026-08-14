@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install ruff
+      - run: ruff check .
+      - run: ruff format --check .
+
+  test:
+    # The fast suite on every platform and version we claim to support. This project was
+    # developed entirely on one Windows machine, so "it works here" carried no information
+    # about anywhere else.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, python: "3.11" }
+          - { os: ubuntu-latest, python: "3.12" }
+          - { os: ubuntu-latest, python: "3.13" }
+          - { os: macos-latest, python: "3.12" }
+          - { os: windows-latest, python: "3.12" }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: pip install -e .
+      - run: pytest -m "not regression" -q
+
+  regression:
+    # The image corpus, and a check that the generator still produces a corpus that solves.
+    # Byte-identical output is deliberately not required: PNG encoders differ between OpenCV
+    # builds, and a test that fails on that would say nothing about the method.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: pip install -e .
+      - run: pytest -m regression -q
+      - name: the corpus can be regenerated and still solves
+        run: |
+          python scripts/make_fixtures.py
+          pytest -m regression -q
+
+  wheel:
+    # Installing from a built wheel, not from the checkout. The browser interface is a data
+    # file inside the package, and the difference between "works from source" and "ships" is
+    # invisible to every other job here.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install build
+      - run: python -m build --wheel
+      - name: the page is inside the wheel
+        run: python -c "import zipfile,glob; names=zipfile.ZipFile(glob.glob('dist/*.whl')[0]).namelist(); assert 'qrsalvage/web/index.html' in names, names"
+      - name: install the wheel somewhere else entirely and run it
+        run: |
+          cd "$(mktemp -d)"
+          python -m venv .venv
+          .venv/bin/pip install "$GITHUB_WORKSPACE"/dist/*.whl
+          .venv/bin/qrsalvage synth "WHEEL-INSTALL-CHECK" --out .
+          .venv/bin/qrsalvage solve synth_0.png

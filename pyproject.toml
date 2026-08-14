@@ -18,6 +18,12 @@ qrsalvage = "qrsalvage.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+# The browser interface is a single static file and has to travel inside the wheel. Without
+# this it is silently left out and `qrsalvage serve` answers 500 on an installed copy while
+# working perfectly from a source checkout.
+[tool.setuptools.package-data]
+qrsalvage = ["web/*.html"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"

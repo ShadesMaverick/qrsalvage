@@ -5,8 +5,10 @@ damaged code is often a secret -- a device pairing code, a key, a serial number 
 that to a server would defeat the point. Nothing here reaches out to the network, and the
 listening socket is not reachable from another machine.
 
-The page itself lives in web/index.html and is served as a single static file. No build step,
-no package manager, no dependency that can go stale.
+The page lives in qrsalvage/web/index.html and is served as a single static file. No build
+step, no package manager, no dependency that can go stale. It sits inside the package rather
+than beside it: resolving it against the repository root worked from a source checkout and
+would have shipped a wheel with no page in it at all.
 """
 
 from __future__ import annotations
@@ -24,7 +26,7 @@ import numpy as np
 from .core.decoding import reencode, render
 from .core.pipeline import solve
 
-WEB_ROOT = Path(__file__).resolve().parents[2] / "web"
+WEB_ROOT = Path(__file__).resolve().parent / "web"
 MAX_UPLOAD = 24 * 1024 * 1024
 
 
