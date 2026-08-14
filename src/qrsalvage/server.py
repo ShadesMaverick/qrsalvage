@@ -127,8 +127,10 @@ def export_payload(payload: dict) -> tuple[bytes, str, str]:
         raise ValueError("size must be between 5 and 500 mm")
 
     # The re-encoded code wherever possible: guaranteed valid, where the reconstruction is one
-    # that happened to pass.
-    matrix = reencode(result.text) if result.solved else result.decoded_matrix
+    # that happened to pass. The error correction level defaults to the one the original
+    # carried, so reproducing a label reproduces it rather than inventing a new one.
+    ecc = payload.get("ecc") or result.ecc
+    matrix = reencode(result.text, ecc=ecc) if result.solved else result.decoded_matrix
 
     if fmt == "svg":
         return to_svg(matrix, size_mm=size_mm).encode("utf-8"), "image/svg+xml", "code.svg"
@@ -166,15 +168,24 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    # Only these, by name. No path joining, so no traversal to worry about.
+    STATIC = {
+        "/": ("index.html", "text/html; charset=utf-8"),
+        "/index.html": ("index.html", "text/html; charset=utf-8"),
+        "/axolotl.png": ("axolotl.png", "image/png"),
+    }
+
     def do_GET(self) -> None:  # noqa: N802 - name fixed by BaseHTTPRequestHandler
-        if self.path not in ("/", "/index.html"):
+        entry = self.STATIC.get(self.path)
+        if entry is None:
             self._send(404, b"not found", "text/plain; charset=utf-8")
             return
-        page = WEB_ROOT / "index.html"
-        if not page.is_file():
-            self._send(500, b"web/index.html is missing", "text/plain; charset=utf-8")
+        name, content_type = entry
+        path = WEB_ROOT / name
+        if not path.is_file():
+            self._send(500, f"{name} is missing".encode(), "text/plain; charset=utf-8")
             return
-        self._send(200, page.read_bytes(), "text/html; charset=utf-8")
+        self._send(200, path.read_bytes(), content_type)
 
     def _send_file(self, body: bytes, content_type: str, filename: str) -> None:
         self.send_response(200)

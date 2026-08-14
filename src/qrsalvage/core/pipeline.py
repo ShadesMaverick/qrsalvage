@@ -23,6 +23,7 @@ from .geometry import (
     select_finder_triple,
     third_finder_candidates,
 )
+from .layout import read_format
 from .matrix import ModuleMatrix
 from .preprocess import prepare
 from .repair import RepairResult, repair_progressive
@@ -55,6 +56,7 @@ class SolveResult:
     geometry: GeometryConsensus | None = None
     repair: RepairResult | None = None
     inverted: bool = False
+    ecc: str | None = None
     failure: str | None = None
 
     @property
@@ -391,6 +393,15 @@ def solve(
     known = known_dark | known_light
     wrong_sampled = int(((posterior >= 0.5)[known] != known_dark[known]).sum())
 
+    # The error correction level of the original, which the format information carries. Worth
+    # reporting: someone reproducing a label wants the level it had, not the one an encoder
+    # would pick.
+    ecc = None
+    if search.matrix is not None:
+        header = read_format(search.matrix)
+        if header is not None:
+            ecc = header[0]
+
     return SolveResult(
         text=search.text,
         modules=best.modules,
@@ -410,5 +421,6 @@ def solve(
         geometry=geometry,
         repair=repair_result,
         inverted=inverted,
+        ecc=ecc,
         failure=None if search.text else "no valid code in the searched space",
     )

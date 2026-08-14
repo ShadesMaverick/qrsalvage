@@ -103,6 +103,39 @@ MARK = f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16
 """
 
 
+def extract_axolotl(source: Path, target: Path, height: int = 132) -> bool:
+    """Cut the creature out of the draft artwork and key its background to transparency.
+
+    The draft is a flat image on a solid ground with a generator's watermark in the corner.
+    What the interface needs is the creature alone, at header size, on whatever background the
+    page happens to have. The ground is keyed by colour distance rather than by a hard
+    threshold, so the anti-aliased pixels along the outline fade instead of leaving a halo --
+    which is what makes a cut-out look pasted on.
+    """
+    art = cv2.imread(str(source))
+    if art is None:
+        return False
+
+    h, w = art.shape[:2]
+    # The creature occupies the middle of the draft; the wordmark below and the watermark in
+    # the corner are not wanted.
+    crop = art[int(h * 0.12) : int(h * 0.64), int(w * 0.31) : int(w * 0.69)]
+
+    ground = np.median(
+        np.concatenate([crop[:6].reshape(-1, 3), crop[:, :6].reshape(-1, 3)]), axis=0
+    )
+    distance = np.linalg.norm(crop.astype(np.float32) - ground, axis=2)
+    alpha = np.clip((distance - 26.0) / 34.0, 0.0, 1.0)
+
+    scale = height / crop.shape[0]
+    resized = cv2.resize(crop, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+    alpha_resized = cv2.resize(alpha, (resized.shape[1], resized.shape[0]), cv2.INTER_AREA)
+
+    rgba = np.dstack([resized, (alpha_resized * 255).astype(np.uint8)])
+    cv2.imwrite(str(target), rgba)
+    return True
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -130,6 +163,14 @@ def main() -> int:
     cv2.imwrite(str(args.out / "logo-code.png"), render(canvas, scale=16, quiet=0))
     (args.out / "mark.svg").write_text(MARK, encoding="utf-8")
     (args.out / "code-plain.svg").write_text(to_svg(matrix, size_mm=40.0), encoding="utf-8")
+
+    web = ROOT / "src" / "qrsalvage" / "web"
+    web.mkdir(parents=True, exist_ok=True)
+    draft = ROOT / "idea.png"
+    if extract_axolotl(draft, web / "axolotl.png"):
+        print(f"  -> {web / 'axolotl.png'}  (cut from {draft.name}, background keyed out)")
+    else:
+        print(f"  !! {draft.name} not found, the interface keeps the abstract mark")
 
     print(f"encodes: {args.text!r}")
     print(f"code    : version {(matrix.shape[0] - 17) // 4}, {matrix.shape[0]} modules")
