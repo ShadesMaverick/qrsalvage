@@ -113,6 +113,13 @@
     color: var(--muted);
   }
   .hidden { display: none !important; }
+  label.size { display: inline-flex; align-items: center; gap: .45rem; color: var(--muted);
+               font-size: .87rem; }
+  label.size input { width: 5rem; font: inherit; padding: .45rem .5rem; border-radius: 7px;
+                     border: 1px solid var(--line); background: var(--panel-in);
+                     color: var(--fg); font-variant-numeric: tabular-nums; }
+  #zigbeeRow { display: flex; gap: .5rem; align-items: flex-start; margin-top: .9rem;
+               max-width: 46rem; }
 </style>
 </head>
 <body>
@@ -161,6 +168,28 @@
     <div class="payload" id="payload"></div>
     <div class="row" id="images"></div>
 
+    <div class="panel hidden" id="exports">
+      <h2>Export</h2>
+      <p class="note" style="margin-top:0">
+        Whether a printed code scans is decided by the width of a module, not by the pixel
+        count. <em>SVG and PDF carry the size below for real</em>; the PNGs above are for sharing.
+      </p>
+      <div class="actions">
+        <label class="size">edge length
+          <input id="sizeMm" type="number" value="40" min="5" max="500" step="1"> mm
+        </label>
+        <button data-format="svg">SVG</button>
+        <button data-format="pdf">PDF</button>
+        <button data-format="json">JSON</button>
+        <button data-format="html">Report</button>
+      </div>
+      <label class="note" id="zigbeeRow" style="display:none">
+        <input id="zigbee" type="checkbox">
+        split the Zigbee payload into fields in the JSON — off by default, the install code is a
+        pairing secret rather than an identifier
+      </label>
+    </div>
+
     <details class="panel">
       <summary>Sampled matrix &mdash; # dark, . light, ? unknown</summary>
       <pre class="grid" id="grid"></pre>
@@ -178,6 +207,7 @@ let imageDataUrl = null;
 let bitmap = null;
 let picking = false;
 let picked = [];
+let token = null;   // identifies the result the server is holding for export
 
 drop.addEventListener("click", () => fileInput.click());
 drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
@@ -298,6 +328,40 @@ function render(a) {
     images.appendChild(panel("Re-encoded · standards clean", a.clean_png, "qrsalvage.png"));
 
   $("grid").textContent = a.grid || "(no grid sampled)";
+
+  token = a.token || null;
+  $("exports").classList.toggle("hidden", !a.exportable);
+  // The Zigbee split is only offered when there is a Zigbee payload to split.
+  $("zigbeeRow").style.display = a.ok && a.text.startsWith("Z:") ? "flex" : "none";
+}
+
+async function download(format) {
+  if (!token) return;
+  const response = await fetch("/api/export", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      token,
+      format,
+      size_mm: parseFloat($("sizeMm").value) || 40,
+      zigbee: $("zigbee").checked,
+    }),
+  });
+  if (!response.ok) {
+    status.textContent = "export failed: " + ((await response.json()).failure || response.status);
+    return;
+  }
+  const name = (response.headers.get("Content-Disposition") || "").match(/"(.+)"/);
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name ? name[1] : `qrsalvage.${format}`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+for (const button of document.querySelectorAll("#exports button")) {
+  button.addEventListener("click", () => download(button.dataset.format));
 }
 
 function panel(title, dataUrl, filename) {

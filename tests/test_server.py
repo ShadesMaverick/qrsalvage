@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from qrsalvage.server import Handler, solve_payload
+from qrsalvage.server import Handler, export_payload, solve_payload
 
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "engraved-curved-hard.png"
 
@@ -69,6 +69,51 @@ def test_hand_placed_finders_are_accepted():
     assert manual["wrong_known"] == automatic["wrong_known"], (
         "a hand-placed click must land on the same grid as the automatic search"
     )
+
+
+def test_exports_are_built_from_the_remembered_result():
+    """The page exports without recovering a second time.
+
+    Rebuilding the result for each export would mean waiting the whole recovery again -- four
+    seconds on an easy image, twenty on one that needs the fallbacks -- for a file the server
+    already has everything to produce.
+    """
+    answer = solve_payload({"image": _data_url(FIXTURE)})
+    assert answer["exportable"] is True
+
+    expected = {
+        "svg": (b"<svg", "image/svg+xml"),
+        "pdf": (b"%PDF", "application/pdf"),
+        "json": (b"{", "application/json"),
+        "html": (b"<!doctype html>", "text/html"),
+    }
+    for fmt, (prefix, content_type) in expected.items():
+        body, kind, filename = export_payload(
+            {"token": answer["token"], "format": fmt, "size_mm": 30}
+        )
+        assert body.startswith(prefix), fmt
+        assert kind == content_type
+        assert filename.endswith(fmt)
+
+    # The size the page asks for has to reach the file, or the millimetres are decoration.
+    svg, _, _ = export_payload({"token": answer["token"], "format": "svg", "size_mm": 30})
+    assert b'width="30.0mm"' in svg
+
+
+def test_export_refuses_an_unknown_result_and_an_absurd_size():
+    answer = solve_payload({"image": _data_url(FIXTURE)})
+    with pytest.raises(KeyError):
+        export_payload({"token": "not-a-token", "format": "svg"})
+    with pytest.raises(ValueError):
+        export_payload({"token": answer["token"], "format": "svg", "size_mm": 5000})
+    with pytest.raises(ValueError):
+        export_payload({"token": answer["token"], "format": "docx"})
+
+
+def test_the_pairing_secret_is_not_split_out_by_default():
+    answer = solve_payload({"image": _data_url(FIXTURE)})
+    plain, _, _ = export_payload({"token": answer["token"], "format": "json"})
+    assert b"zigbee" not in plain
 
 
 @pytest.fixture
