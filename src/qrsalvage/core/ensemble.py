@@ -148,8 +148,8 @@ def consensus_posterior(
             points = points + rng.normal(0.0, config.jitter, points.shape)
 
         warped = warp(gray, points, modules, scale)
-        means, _ = sample_cells(warped, modules, scale, inset_frac=config.inset)
-        fit = estimate_levels(means, known_dark, known_light)
+        means, spread = sample_cells(warped, modules, scale, inset_frac=config.inset)
+        fit = estimate_levels(means, spread, known_dark, known_light)
         posterior = posterior_dark(means, fit)
 
         log_odds.append(_logit(posterior))

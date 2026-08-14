@@ -189,8 +189,8 @@ def initial_corners(
 def evaluate(gray, corners, modules, scale, known_dark, known_light) -> GridFit:
     """Score one corner placement against the cells whose value the standard fixes."""
     warped = warp(gray, corners, modules, scale)
-    means, _ = sample_cells(warped, modules, scale)
-    fit = estimate_levels(means, known_dark, known_light)
+    means, spread = sample_cells(warped, modules, scale)
+    fit = estimate_levels(means, spread, known_dark, known_light)
     posterior = posterior_dark(means, fit)
 
     known = known_dark | known_light
