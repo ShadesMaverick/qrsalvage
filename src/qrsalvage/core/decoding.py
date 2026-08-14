@@ -115,12 +115,28 @@ def ordered_search(
     return SearchResult(text=None, candidates_tried=tried)
 
 
-def reencode(text: str) -> np.ndarray:
+ECC_ARGUMENT = {"L": "1", "M": "2", "Q": "3", "H": "4"}
+
+
+def reencode(text: str, ecc: str | None = None) -> np.ndarray:
     """Encode the recovered content afresh and return a standards-compliant module matrix.
 
     Better than drawing the reconstruction: the result is then guaranteed to be a valid code
     rather than a reconstruction that happened to pass.
+
+    `ecc` forces an error correction level. Left open, the encoder picks one, which is usually
+    not the level the original carried -- worth knowing when the point is to reproduce a label
+    rather than to make a new one. Raising it is not free either: the redundancy has to go
+    somewhere, so a higher level means more modules and, at a fixed printed size, smaller ones.
     """
+    if ecc is not None:
+        level = ECC_ARGUMENT.get(ecc.upper())
+        if level is None:
+            raise ValueError(f"unknown error correction level: {ecc!r}")
+        barcode = zxingcpp.create_barcode(text, QR, ec_level=level)
+        image = np.asarray(zxingcpp.write_barcode_to_image(barcode, scale=1, add_quiet_zones=False))
+        return (image[:, :, 0] if image.ndim == 3 else image) < 128
+
     barcode = zxingcpp.create_barcode(text, QR)
     image = np.asarray(zxingcpp.write_barcode_to_image(barcode, scale=1, add_quiet_zones=False))
     if image.ndim == 3:

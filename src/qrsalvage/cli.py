@@ -35,6 +35,8 @@ def _report(result, out: Path, band: float) -> None:
     if result.wrong_sampled != result.wrong_known:
         print(f"                   {result.wrong_sampled} after sampling")
     print(f"timing pattern:    {result.timing * 100:.1f} %")
+    if result.ecc:
+        print(f"error correction:  level {result.ecc}")
     if result.inverted:
         print("polarity:          inverted (light modules on a dark ground)")
     print(f"uncertain cells:   {result.uncertain} of {result.modules**2} (band {band})")
@@ -75,8 +77,13 @@ def _write_exports(args, result, image) -> None:
         return
 
     # The code that gets exported is the re-encoded one wherever possible: that is guaranteed
-    # to be a valid code, where the reconstruction is one that happened to pass.
-    matrix = reencode(result.text) if result.solved else result.decoded_matrix
+    # to be a valid code, where the reconstruction is one that happened to pass. Its error
+    # correction defaults to the level the original carried, so reproducing a label reproduces
+    # it rather than inventing a new one.
+    ecc = None if args.ecc == "same" else args.ecc
+    matrix = (
+        reencode(result.text, ecc=ecc or result.ecc) if result.solved else result.decoded_matrix
+    )
 
     if "svg" in wanted and matrix is not None:
         path = args.out / "code.svg"
@@ -167,6 +174,13 @@ def main(argv: list[str] | None = None) -> int:
         default=40.0,
         dest="size_mm",
         help="edge length for svg and pdf, in millimetres (default 40)",
+    )
+    solver.add_argument(
+        "--ecc",
+        choices=["same", "L", "M", "Q", "H"],
+        default="same",
+        help="error correction for the exported code. Default: the level the original carried. "
+        "Raising it adds modules, so at a fixed printed size they get smaller",
     )
     solver.add_argument(
         "--zigbee",

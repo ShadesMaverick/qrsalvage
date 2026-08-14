@@ -32,12 +32,12 @@
   main { max-width: 64rem; margin: 0 auto; }
 
   /* --- identity ------------------------------------------------------------------- */
-  header { display: flex; align-items: center; gap: .85rem; margin-bottom: .3rem; }
-  header svg { flex: none; }
+  header { display: flex; align-items: center; gap: 1rem; margin-bottom: .2rem; }
+  header img { flex: none; height: 66px; image-rendering: pixelated; }
   h1 {
     font: 600 1.55rem/1 var(--mono); letter-spacing: .04em; margin: 0;
   }
-  .tagline { color: var(--muted); margin: 0 0 2rem 3.6rem; font-size: .95rem; }
+  .tagline { color: var(--muted); margin: 0 0 2rem 0; font-size: .95rem; }
 
   /* --- drop zone ------------------------------------------------------------------ */
   #drop {
@@ -54,9 +54,17 @@
   #drop.over { transform: scale(1.006); border-color: var(--pink); }
   #drop strong { font-size: 1.05rem; }
   #drop .hint { color: var(--muted); font-size: .87rem; margin: .45rem 0 0; }
+  /* Once an image is loaded the invitation has done its job and should stop taking a third of
+     the screen. It stays reachable, just out of the way. */
+  #drop.compact { padding: .8rem 1.2rem; }
+  #drop.compact strong { font-size: .92rem; font-weight: 500; }
+  #drop.compact .hint, #drop.compact::before { display: none; }
 
   /* --- layout --------------------------------------------------------------------- */
-  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 1.1rem; margin-top: 1.4rem; }
+  /* Panels size to their own content. Stretching the diagnostics to match the height of the
+     photograph left a column of empty panel under seven lines of numbers. */
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 1.1rem; margin-top: 1.4rem;
+         align-items: start; }
   @media (max-width: 46rem) { .row { grid-template-columns: 1fr; } }
   .panel {
     background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
@@ -115,6 +123,8 @@
   .hidden { display: none !important; }
   label.size { display: inline-flex; align-items: center; gap: .45rem; color: var(--muted);
                font-size: .87rem; }
+  label.size select { font: inherit; padding: .45rem .5rem; border-radius: 7px;
+                      border: 1px solid var(--line); background: var(--panel-in); color: var(--fg); }
   label.size input { width: 5rem; font: inherit; padding: .45rem .5rem; border-radius: 7px;
                      border: 1px solid var(--line); background: var(--panel-in);
                      color: var(--fg); font-variant-numeric: tabular-nums; }
@@ -125,20 +135,14 @@
 <body>
 <main>
   <header>
-    <!-- The mark: a finder pattern dissolving into loose modules. Same motif as the logo,
-         but legible at favicon size, where the axolotl is not. -->
-    <svg width="40" height="40" viewBox="0 0 16 16" aria-hidden="true">
-      <rect x="8" y="3" width="7" height="7" fill="none" stroke="#f2f4f5" stroke-width="1"/>
-      <rect x="10" y="5" width="3" height="3" fill="#f2f4f5"/>
-      <rect x="5" y="4" width="2" height="2" fill="#f07ea3"/>
-      <rect x="2" y="7" width="2" height="2" fill="#f07ea3"/>
-      <rect x="5" y="10" width="2" height="2" fill="#f2f4f5"/>
-      <rect x="1" y="12" width="1" height="1" fill="#93a3b0"/>
-      <rect x="7" y="1" width="1" height="1" fill="#93a3b0"/>
-    </svg>
-    <h1>qrsalvage</h1>
+    <!-- The axolotl has room here. The favicon keeps the abstract mark: at sixteen pixels the
+         creature is a smudge, while a finder pattern breaking apart still reads. -->
+    <img src="/axolotl.png" alt="" width="132">
+    <div>
+      <h1>qrsalvage</h1>
+      <p class="tagline">recover QR codes from what's left of them</p>
+    </div>
   </header>
-  <p class="tagline">recover QR codes from what's left of them</p>
 
   <div id="drop">
     <p><strong>Drop a photograph here</strong> &nbsp;or click to choose one</p>
@@ -173,10 +177,21 @@
       <p class="note" style="margin-top:0">
         Whether a printed code scans is decided by the width of a module, not by the pixel
         count. <em>SVG and PDF carry the size below for real</em>; the PNGs above are for sharing.
+        Raising the error correction is not free: the redundancy needs modules, so at a fixed
+        printed size a stronger level means <em>smaller</em> ones.
       </p>
       <div class="actions">
         <label class="size">edge length
           <input id="sizeMm" type="number" value="40" min="5" max="500" step="1"> mm
+        </label>
+        <label class="size">error correction
+          <select id="ecc">
+            <option value="">as the original</option>
+            <option value="L">L — 7 %</option>
+            <option value="M">M — 15 %</option>
+            <option value="Q">Q — 25 %</option>
+            <option value="H">H — 30 %</option>
+          </select>
         </label>
         <button data-format="svg">SVG</button>
         <button data-format="pdf">PDF</button>
@@ -223,6 +238,7 @@ function load(file) {
   reader.onload = async () => {
     imageDataUrl = reader.result;
     bitmap = await createImageBitmap(file);
+    drop.classList.add("compact");
     picked = []; picking = false;
     draw();
     solve();
@@ -344,6 +360,7 @@ async function download(format) {
       token,
       format,
       size_mm: parseFloat($("sizeMm").value) || 40,
+      ecc: $("ecc").value || null,
       zigbee: $("zigbee").checked,
     }),
   });
@@ -394,3 +411,4 @@ function escapeHtml(s) {
 </script>
 </body>
 </html>
+
