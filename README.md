@@ -86,6 +86,21 @@ The page shows the same diagnostics as the command line, and if the finder searc
 you can click the three corner squares yourself. Roughly is enough: the click picks which
 candidate to use, the position still comes from the image.
 
+Export the result:
+
+```
+qrsalvage solve photo.jpg --export svg pdf json html --size-mm 40
+```
+
+`--size-mm` is not decoration. Whether a printed code scans is decided by the physical width of
+a module, not by the pixel count of the file — the bulb this project started with had modules
+about 1.4 mm across. SVG and PDF carry that size for real; the PNG is for sharing. `json` gives
+the payload alongside the figures that say how much to trust it, and `html` is a self-contained
+report showing the photograph, the recovered matrix and the evidence between them.
+
+Zigbee payloads can be split into their fields with `--zigbee`, which is off by default: an
+install code is a pairing secret, not an identifier.
+
 Generate an artificially degraded test case with a known answer:
 
 ```
