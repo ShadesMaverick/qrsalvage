@@ -1,8 +1,8 @@
-"""Der Weg vom kuenstlich verdorbenen Bild zurueck zum Klartext.
+"""The route from an artificially degraded image back to the plain text.
 
-Diese Tests brauchen kein Foto: die Antwort ist bekannt, weil der Fall aus ihr erzeugt wurde.
-Genau das macht sie zum Werkzeug fuer die Entwicklung -- eine Aenderung am Verfahren ist hier
-sofort beziffert statt begruendet.
+These tests need no photograph: the answer is known because the case was generated from it.
+That is what makes them a development instrument -- a change to the method is quantified here
+rather than argued about.
 """
 
 from __future__ import annotations
@@ -16,64 +16,63 @@ from qrsalvage.core.pipeline import solve
 from qrsalvage.core.structure import structure_mask
 from qrsalvage.synth import Damage, render_photo
 
-# Bewusst durchgehend gross und nur aus dem alphanumerischen QR-Zeichenvorrat: ein einziger
-# Kleinbuchstabe zwingt den Encoder in den Byte-Modus, macht den Code dichter und verschiebt
-# damit still die Schwierigkeit aller Tests, die diese Nutzlast verwenden.
+# Deliberately all upper case and restricted to the QR alphanumeric character set: a single
+# lower-case letter forces the encoder into byte mode, makes the code denser and silently
+# shifts the difficulty of every test using this payload.
 TEXT = "QRSALVAGE-SELFTEST-0815"
 
 
-def test_leichter_schaden_wird_direkt_geloest():
+def test_mild_damage_is_solved_directly():
     photo = render_photo(reencode(TEXT), Damage(contrast=0.30, curvature=0.20), seed=3)
     result = solve(photo)
     assert result.solved
     assert result.text == TEXT
     assert result.wrong_known == 0
-    assert result.candidates_tried == 1, "leichter Fall darf kein Nachtasten brauchen"
+    assert result.candidates_tried == 1, "a mild case must not need probing"
 
 
-def test_erfolgsquote_bei_groesserem_code():
-    """Erfolgsquote bei mittlerem Schaden und einer Nutzlast ab Version 3.
+def test_success_rate_for_a_larger_code():
+    """Success rate at moderate damage with a payload of version 3 or above.
 
-    Bewusst nur eine Quote und keine Aussage darueber, *welcher* Mechanismus geholfen hat.
-    Gemessen greifen Tastsuche und Reed-Solomon-Reparatur auf synthetischen Bildern dieser
-    Schwierigkeit fast nie -- die Abtastung ist entweder gut genug oder zu schlecht, dazwischen
-    liegt wenig. Dass beide Mechanismen funktionieren, belegen die gezielten Tests
-    (test_tastsuche_probiert_billige_zweifel_zuerst und, in test_rs.py,
-    test_auslassungen_retten_was_fehler_allein_nicht_schaffen) an konstruierten Faellen. Hier
-    waere es eine Behauptung ueber eine Zufallsgroesse.
+    Deliberately only a rate, and no claim about *which* mechanism helped. Measured, the probe
+    and the Reed-Solomon repair almost never fire on synthetic images of this difficulty -- the
+    sampling is either good enough or hopeless, with little in between. That both mechanisms
+    work is established by the targeted tests (test_probe_tries_cheap_doubts_first here, and
+    test_erasures_rescue_what_errors_alone_cannot in test_rs.py) on constructed cases. Asserting
+    it here would be a claim about a random quantity.
     """
-    langer_text = "SALVAGE-REGRESSION-PAYLOAD-" + "0123456789" * 5
-    matrix = reencode(langer_text)
-    assert matrix.shape[0] >= 29, "Testvoraussetzung: mindestens Version 3"
+    long_text = "SALVAGE-REGRESSION-PAYLOAD-" + "0123456789" * 5
+    matrix = reencode(long_text)
+    assert matrix.shape[0] >= 29, "precondition: version 3 or larger"
 
     damage = Damage(contrast=0.14, curvature=0.40, module_px=7.0, stain=0.10)
-    geloest = sum(
-        solve(render_photo(matrix, damage, seed=seed), budget=4000).text == langer_text
+    solved = sum(
+        solve(render_photo(matrix, damage, seed=seed), budget=4000).text == long_text
         for seed in range(8)
     )
-    assert geloest >= 6, f"nur {geloest} von 8 geloest"
+    assert solved >= 6, f"only {solved} of 8 solved"
 
 
-def test_version_wird_nicht_geraten_sondern_gemessen():
+def test_version_is_measured_not_guessed():
     photo = render_photo(reencode(TEXT), Damage(contrast=0.25, curvature=0.25), seed=0)
     result = solve(photo)
-    gewaehlt = next(f for f in result.per_size if f.modules == result.modules)
-    andere = [f for f in result.per_size if f.modules != result.modules]
-    assert all(gewaehlt.wrong_known < f.wrong_known for f in andere), (
-        "die richtige Version muss sich an den bekannten Zellen klar abheben"
+    chosen = next(f for f in result.per_size if f.modules == result.modules)
+    others = [f for f in result.per_size if f.modules != result.modules]
+    assert all(chosen.wrong_known < f.wrong_known for f in others), (
+        "the correct version has to stand out clearly in the known cells"
     )
 
 
-def test_aussichtsloses_bild_meldet_sauberen_misserfolg():
-    """Kein Absturz, keine Fantasieantwort -- ein benannter Misserfolg."""
-    rauschen = np.random.default_rng(0).integers(0, 255, (200, 200, 3), dtype=np.uint8)
-    result = solve(rauschen, budget=50)
+def test_a_hopeless_image_reports_a_clean_failure():
+    """No crash, no invented answer -- a named failure."""
+    noise = np.random.default_rng(0).integers(0, 255, (200, 200, 3), dtype=np.uint8)
+    result = solve(noise, budget=50)
     assert not result.solved
     assert result.text is None
     assert result.failure
 
 
-def test_matrix_kennt_drei_zustaende():
+def test_matrix_knows_three_states():
     modules = 21
     known_dark, known_light = structure_mask(modules)
     posterior = np.full((modules, modules), 0.5)
@@ -84,42 +83,42 @@ def test_matrix_kennt_drei_zustaende():
     states = mm.states(band=0.15)
     assert states[10, 10] == DARK
     assert states[10, 12] == LIGHT
-    assert states[10, 11] == UNKNOWN, "eine Zelle bei P=0.5 muss unbekannt bleiben"
-    assert states[0, 0] == DARK, "Strukturzellen werden nie unbekannt"
+    assert states[10, 11] == UNKNOWN, "a cell at P=0.5 has to stay unknown"
+    assert states[0, 0] == DARK, "structure cells never become unknown"
 
     ascii_grid = mm.to_ascii(band=0.15)
     assert set(ascii_grid.replace("\n", "")) <= {"#", ".", "?"}
     assert ascii_grid.count("?") > 0
 
 
-def test_struktur_wird_beim_tasten_nicht_angetastet():
+def test_structure_is_never_touched_while_probing():
     modules = 21
     known_dark, known_light = structure_mask(modules)
     posterior = np.full((modules, modules), 0.5)
     mm = ModuleMatrix(posterior=posterior, known_dark=known_dark, known_light=known_light)
-    kosten = mm.flip_cost()
-    assert np.isinf(kosten[known_dark | known_light]).all()
-    assert np.isfinite(kosten[~(known_dark | known_light)]).all()
+    costs = mm.flip_cost()
+    assert np.isinf(costs[known_dark | known_light]).all()
+    assert np.isfinite(costs[~(known_dark | known_light)]).all()
 
 
-def test_tastsuche_probiert_billige_zweifel_zuerst():
-    """Die Reihenfolge ist der ganze Trick: erst die schwaechste Stelle, dann die naechste."""
+def test_probe_tries_cheap_doubts_first():
+    """The ordering is the whole trick: the weakest spot first, then the next."""
     matrix = reencode(TEXT)
     modules = matrix.shape[0]
     known_dark, known_light = structure_mask(modules)
 
     posterior = np.where(matrix, 0.99, 0.01)
-    # Zwei Datenzellen verdrehen und als unsicher markieren -- so muss die Suche sie finden.
-    frei = np.argwhere(~(known_dark | known_light))
-    for r, c in frei[:2]:
+    # Flip two data cells and mark them uncertain -- the search has to find exactly those.
+    free = np.argwhere(~(known_dark | known_light))
+    for r, c in free[:2]:
         posterior[r, c] = 0.55 if matrix[r, c] else 0.45
 
     mm = ModuleMatrix(posterior=posterior, known_dark=known_dark, known_light=known_light)
-    ergebnis = ordered_search(mm, budget=200)
-    assert ergebnis.text == TEXT
+    result = ordered_search(mm, budget=200)
+    assert result.text == TEXT
 
 
-def test_konsens_urteilt_je_lauf_getrennt():
+def test_consensus_judges_each_run_separately():
     photo = render_photo(reencode(TEXT), Damage(contrast=0.16, curvature=0.40), seed=2)
     result = solve(photo, ensemble="sampling")
     assert result.consensus is not None
@@ -127,50 +126,50 @@ def test_konsens_urteilt_je_lauf_getrennt():
     assert result.solved
 
 
-def test_konsens_ist_nicht_selbstsicherer_als_seine_teile():
-    """Der klassische Fehler beim Mitteln: streitende Messungen ergeben ein sicheres Urteil.
+def test_consensus_is_not_more_confident_than_its_parts():
+    """The classic averaging mistake: measurements that argue produce a confident verdict.
 
-    Wo die Laeufe im Vorzeichen uneins sind, muss die zusammengefuehrte Wahrscheinlichkeit
-    naeher an der Unentschiedenheit liegen als bei den einigen Zellen -- sonst frisst die
-    Mittelung genau die Information auf, wegen der mehrfach gemessen wurde.
+    Wherever the runs disagree in sign, the merged probability has to sit closer to undecided
+    than it does for the cells they agree on -- otherwise the pooling consumes exactly the
+    information that repeated measurement was for.
     """
     photo = render_photo(
         reencode(TEXT), Damage(contrast=0.13, curvature=0.45, module_px=7.0, stain=0.15), seed=0
     )
     result = solve(photo, ensemble="sampling")
-    c = result.consensus
-    assert c is not None
-    if not c.contested.any():
-        pytest.skip("bei diesem Bild waren sich alle Laeufe einig")
+    consensus = result.consensus
+    assert consensus is not None
+    if not consensus.contested.any():
+        pytest.skip("all runs agreed on this image")
 
-    abstand = np.abs(c.posterior - 0.5)
-    assert abstand[c.contested].mean() < abstand[~c.contested].mean()
+    distance = np.abs(consensus.posterior - 0.5)
+    assert distance[consensus.contested].mean() < distance[~consensus.contested].mean()
 
 
-def test_einzellauf_bleibt_abschaltbar():
+def test_the_single_run_stays_available():
     photo = render_photo(reencode(TEXT), Damage(contrast=0.24, curvature=0.30), seed=0)
-    ohne = solve(photo, ensemble="off")
-    assert ohne.consensus is None
-    assert ohne.solved
+    result = solve(photo, ensemble="off")
+    assert result.consensus is None
+    assert result.solved
 
 
-def test_erfolgsquote_bei_moderatem_schaden():
-    """Prueft eine Quote, nicht einen Einzelfall.
+def test_success_rate_at_moderate_damage():
+    """Checks a rate, not a single case.
 
-    Vorher stand hier eine Behauptung je Startwert -- und die war schlicht falsch formuliert:
-    ob ein bestimmtes Bild durchgeht, ist eine Zufallsgroesse. Gemessen laeuft dieser
-    Schadensgrad bei 19 von 20 Bildern durch; ein einzelner Ausreisser ist also erwartbar und
-    kein Fehler, ein Absacken unter 80 Prozent dagegen schon.
+    This used to assert one outcome per seed, which was simply the wrong claim: whether a
+    particular image gets through is a random quantity. Measured, this damage level succeeds on
+    19 out of 20 images, so a single outlier is expected and not a defect, while dropping below
+    80 percent is.
 
-    Der eine bekannte Ausreisser (Startwert 1) ist zugleich ein offener Befund: Gitter perfekt,
-    null falsche bekannte Zellen, null unsichere Zellen -- und trotzdem nicht lesbar. Die
-    bekannten Zellen liegen an den Raendern, ihre Sauberkeit sagt also wenig ueber die
-    Datenzellen in der Mitte. Solange die Streuung nur aus ihnen geschaetzt wird, kann das
-    Modell zuversichtlich danebenliegen und dem Solver nichts zum Antasten geben.
+    That one known outlier (seed 1) is also an open finding: grid perfect, zero wrong known
+    cells, zero uncertain cells -- and still unreadable. The known cells sit around the edges,
+    so their cleanliness says little about the data cells in the middle. As long as the spread
+    is estimated from them alone, the model can be confidently wrong and leave the solver
+    nothing to probe.
     """
     matrix = reencode(TEXT)
-    geloest = sum(
+    solved = sum(
         solve(render_photo(matrix, Damage(contrast=0.20, curvature=0.30), seed=seed)).text == TEXT
         for seed in range(10)
     )
-    assert geloest >= 8, f"nur {geloest} von 10 geloest"
+    assert solved >= 8, f"only {solved} of 10 solved"

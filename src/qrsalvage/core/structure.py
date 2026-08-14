@@ -1,15 +1,15 @@
-"""Was der QR-Standard festlegt, bevor ein einziges Datenbit gelesen wird.
+"""What the QR standard fixes before a single data bit is read.
 
-Diese Zellen sind das Eichmass des ganzen Verfahrens: ihr Wert ist bekannt, also laesst sich
-an ihnen messen, ob Gitter, Version und Helligkeitsmodell stimmen. Ohne sie muesste man raten
-und haette kein Mass dafuer, wie gut man geraten hat.
+These cells are the calibration reference for the entire method: their value is known, so they
+can tell you whether the grid, the version and the brightness model are right. Without them
+you would be guessing, and you would have no way to measure how well you guessed.
 """
 
 from __future__ import annotations
 
 import numpy as np
 
-# Zentren der Alignment-Patterns je Version (ISO/IEC 18004, Tabelle E.1).
+# Alignment pattern centres per version (ISO/IEC 18004, table E.1).
 ALIGNMENT_CENTERS: dict[int, tuple[int, ...]] = {
     1: (),
     2: (6, 18),
@@ -25,12 +25,12 @@ ALIGNMENT_CENTERS: dict[int, tuple[int, ...]] = {
 
 
 def modules_for_version(version: int) -> int:
-    """Kantenlaenge in Modulen."""
+    """Side length in modules."""
     return 4 * version + 17
 
 
 def version_for_modules(modules: int) -> int:
-    """Umkehrung von :func:`modules_for_version`."""
+    """Inverse of :func:`modules_for_version`."""
     return (modules - 17) // 4
 
 
@@ -40,11 +40,11 @@ def is_valid_size(modules: int) -> bool:
 
 
 def structure_mask(modules: int) -> tuple[np.ndarray, np.ndarray]:
-    """Liefert (bekannt_dunkel, bekannt_hell) fuer eine Codegroesse.
+    """Return (known_dark, known_light) for a code size.
 
-    Enthalten sind Finder, Separatoren, beide Timing-Reihen, die Alignment-Patterns und das
-    feste dunkle Modul. Format- und Versionsinformation bleiben aussen vor: die tragen Inhalt
-    und duerfen deshalb nicht als bekannt gelten.
+    Covers finders, separators, both timing rows, the alignment patterns and the always-dark
+    module. Format and version information are deliberately left out: they carry content, so
+    treating them as known would be circular.
     """
     n = modules
     dark = np.zeros((n, n), dtype=bool)
@@ -57,7 +57,7 @@ def structure_mask(modules: int) -> tuple[np.ndarray, np.ndarray]:
                 core = 2 <= i <= 4 and 2 <= j <= 4
                 target = dark if (ring or core) else light
                 target[r0 + i, c0 + j] = True
-        # Separator: der L-foermige helle Streifen rund um den Finder
+        # Separator: the L-shaped light border around the finder
         for r in range(r0 - 1, r0 + 8):
             for c in range(c0 - 1, c0 + 8):
                 if not (0 <= r < n and 0 <= c < n):
@@ -72,10 +72,9 @@ def structure_mask(modules: int) -> tuple[np.ndarray, np.ndarray]:
         target[idx, 6] = True
 
     version = version_for_modules(n)
-    centers = ALIGNMENT_CENTERS.get(version, ())
-    for ar in centers:
-        for ac in centers:
-            # Die drei Ecken liegen unter den Findern und werden nicht gezeichnet.
+    for ar in ALIGNMENT_CENTERS.get(version, ()):
+        for ac in ALIGNMENT_CENTERS.get(version, ()):
+            # The three corner positions sit under the finders and are never drawn.
             if (ar, ac) in ((6, 6), (6, n - 7), (n - 7, 6)):
                 continue
             for i in range(-2, 3):
@@ -84,15 +83,15 @@ def structure_mask(modules: int) -> tuple[np.ndarray, np.ndarray]:
                     target = dark if (edge or (i == 0 and j == 0)) else light
                     target[ar + i, ac + j] = True
 
-    dark[4 * version + 9, 8] = True  # das immer dunkle Modul
+    dark[4 * version + 9, 8] = True  # the module that is always dark
     return dark, light
 
 
 def timing_score(matrix: np.ndarray) -> float:
-    """Anteil korrekt alternierender Module in den beiden Timing-Reihen.
+    """Fraction of correctly alternating modules in the two timing rows.
 
-    Der ehrlichste Einzeltest fuer den Gittersitz: eine halbe Modulbreite Versatz laesst
-    diesen Wert sofort einbrechen, waehrend das Bild noch plausibel aussieht.
+    The most honest single test for grid alignment: half a module of drift makes this collapse
+    while the image still looks entirely plausible.
     """
     n = matrix.shape[0]
     hits = total = 0

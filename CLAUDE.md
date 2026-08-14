@@ -17,7 +17,7 @@ adressiert — so ist immer eindeutig, welcher Interpreter läuft.
 - Setup (einmalig): `py -3.11 -m venv .venv`, dann `.venv\Scripts\python.exe -m pip install -r requirements.txt`, dann `.venv\Scripts\python.exe -m pip install -e .`
 - Code lesen: `.venv\Scripts\python.exe -m qrsalvage solve <bild> [--crop X0 Y0 X1 Y1]`
 - Testfall erzeugen: `.venv\Scripts\python.exe -m qrsalvage synth "<text>" --contrast 0.14 --curvature 0.4`
-- Schwierigkeitskurve messen: `.venv\Scripts\python.exe scripts\schwierigkeit.py`
+- Schwierigkeitskurve messen: `.venv\Scripts\python.exe scripts\difficulty.py`
 - Test: `.venv\Scripts\python.exe -m pytest`
 - Test ohne Bildkorpus (schnell): `.venv\Scripts\python.exe -m pytest -m "not regression"`
 - Nur Bildregression: `.venv\Scripts\python.exe -m pytest -m regression`
@@ -42,17 +42,23 @@ Es gibt keinen Build-Schritt. Die Oberfläche ist eine statische HTML/JS-Datei, 
   - `geometry.py` Findersuche, Gitteraufbau, Nachjustieren der Eckpunkte
   - `sampling.py` Zellabtastung, Helligkeitsmodell, Wahrscheinlichkeit je Modul
   - `matrix.py` Modulraster mit drei Zuständen
+  - `galois.py` GF(256) und Reed-Solomon mit Erasure-Unterstützung
+  - `qrspec.py` Blocktabellen, Maskenmuster, Formatinformation
+  - `layout.py` Modulplatzierung, Verschachtelung, Format lesen und schreiben
+  - `repair.py` macht unsichere Zellen zu Auslassungen; steigert deren Zahl nur so weit,
+    wie eine äußere Prüfung das Ergebnis akzeptiert
   - `decoding.py` Zeichnen, Decodieren, geordnetes Nachtasten, Neukodieren
+  - `ensemble.py` Mehrfachmessung — beide Varianten standardmäßig aus, Messergebnisse im
+    Docstring
   - `pipeline.py` fügt zusammen, entscheidet nichts selbst
 - `src/qrsalvage/synth.py` — künstlich verdorbene Fälle mit bekannter Antwort
 - `src/qrsalvage/cli.py` — Textinterface, zugleich der Agentenweg. Alles Ausgeben und Schreiben
   passiert hier, nie im Kern.
-- `fixtures/` — Fotos mit bekanntem Klartext, Grundlage der Regressionssuite
+- `fixtures/` — synthetisches, öffentliches Korpus (`scripts/make_fixtures.py`)
+- `fixtures-local/` — echte Fotos, gitignoriert, verlassen den Rechner nicht
 - `tests/`, `scripts/` (Messwerkzeuge, kein Produktionscode)
 
-Noch offen: die Canvas-Oberfläche unter `web/` und ein eigener Reed-Solomon-Decoder mit
-Erasure-Unterstützung. Solange zxing als Orakel dient, kann der Solver Unsicherheit nur durch
-Umklappen ausdrücken, nicht durch echte Auslassung.
+Noch offen: die Canvas-Oberfläche unter `web/` und die Exportformate. Siehe `docs/ISSUES.md`.
 
 ## Rules
 
@@ -76,7 +82,11 @@ Umklappen ausdrücken, nicht durch echte Auslassung.
 
 ## Konventionen
 
-- Bezeichner, Dateinamen und Docstrings auf Englisch; Kommentare, Dokumentation und Antworten
-  auf Deutsch.
+- **Alles im Code auf Englisch** — Bezeichner, Dateinamen, Docstrings, Kommentare, Testnamen
+  und Programmausgaben. Das Projekt wird veröffentlicht, und die Begründungen in den Docstrings
+  sind sein wertvollster Teil; auf Deutsch wären sie für die meisten Leser wertlos.
+- Diese Datei, `docs/` und die Skills unter `.claude/` bleiben deutsch — sie richten sich an
+  dich, nicht an Beitragende.
+- Antworten an den Nutzer auf Deutsch.
 - Modulkoordinaten heißen durchgehend `(row, col)` mit Ursprung oben links, Pixelkoordinaten
   `(x, y)`. Verwechslung der beiden ist in diesem Projekt die wahrscheinlichste Fehlerquelle.

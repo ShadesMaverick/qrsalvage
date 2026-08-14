@@ -1,9 +1,9 @@
-"""Vorverarbeitung: aus dem Foto ein Bild machen, in dem Module Flaechen sind.
+"""Preprocessing: turn the photograph into an image where modules are areas, not dot clusters.
 
-Zwei Schritte tragen fast alles. Die Beleuchtungskorrektur nimmt Glanzverlauf und Schattierung
-der Woelbung heraus, bevor irgendeine Schwelle greift. Die Weichzeichnung verwandelt das
-Punktraster der Lasergravur in Graustufen -- ohne sie schwellt man die einzelnen Rasterpunkte
-statt der Module.
+Two steps carry almost all of the benefit. Flat-fielding removes the glare gradient and the
+shading of a curved surface before any threshold is applied. Blurring turns the dot raster of
+a laser engraving into grey levels -- without it you threshold the individual raster dots
+instead of the modules, and the result is salt-and-pepper noise that no decoder can use.
 """
 
 from __future__ import annotations
@@ -13,18 +13,18 @@ import numpy as np
 
 
 def flat_field(channel: np.ndarray) -> np.ndarray:
-    """Division durch eine stark weichgezeichnete Kopie."""
-    bg = cv2.GaussianBlur(channel, (0, 0), sigmaX=max(channel.shape) / 12.0)
-    return np.clip(cv2.divide(channel, bg, scale=192), 0, 255).astype(np.uint8)
+    """Divide by a heavily blurred copy of the image."""
+    background = cv2.GaussianBlur(channel, (0, 0), sigmaX=max(channel.shape) / 12.0)
+    return np.clip(cv2.divide(channel, background, scale=192), 0, 255).astype(np.uint8)
 
 
 def prepare(
     bgr: np.ndarray, channel: int = 0, clip_limit: float = 3.0, blur_sigma: float = 1.5
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Liefert (Graustufenbild zum Abtasten, Binaerbild zur Findersuche).
+    """Return (grayscale image for sampling, binary image for finder search).
 
-    Voreingestellt ist der Blaukanal: bei Lasergravur auf weissem Kunststoff traegt er
-    erfahrungsgemaess den meisten Kontrast, deutlich mehr als die Luminanz.
+    The blue channel is the default: on a laser engraving in white plastic it carries
+    noticeably more contrast than luminance does.
     """
     chan = bgr[:, :, channel] if bgr.ndim == 3 else bgr
     flat = flat_field(chan)

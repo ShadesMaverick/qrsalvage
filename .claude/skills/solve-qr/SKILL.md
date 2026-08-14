@@ -78,5 +78,5 @@ Bei Misserfolg: festhalten, welche Stufe woran gescheitert ist. Ein Foto, das ke
 ein Befund über das Werkzeug — und der wertvollste Kandidat fürs Korpus.
 
 Wenn ein Schadensbild neu ist, mit `qrsalvage synth` nachbauen und in
-`scripts/schwierigkeit.py` aufnehmen. Dann lässt sich die nächste Verbesserung beziffern, statt
+`scripts/difficulty.py` aufnehmen. Dann lässt sich die nächste Verbesserung beziffern, statt
 auf das nächste Foto zu warten.

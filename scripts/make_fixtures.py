@@ -1,16 +1,16 @@
-"""Erzeugt das oeffentliche Regressionskorpus aus synthetischen Faellen.
+"""Generate the public regression corpus from synthetic cases.
 
-Warum synthetisch: Echte Fotos beschaedigter QR-Codes sind fast immer persoenlich. Sie zeigen
-Haende, Wohnraeume oder Geraeteaufkleber, und der entschluesselte Inhalt ist haeufig ein
-Geheimnis -- bei Zigbee-Lampen etwa der Kopplungscode. Ein oeffentliches Projekt kann so ein
-Bild nicht mitliefern, auch nicht "nur zum Testen".
+Why synthetic: real photographs of damaged QR codes are almost always personal. They show
+hands, rooms or equipment labels, and the decoded content is frequently a secret -- on a Zigbee
+lamp, for instance, the pairing code. A public project cannot ship an image like that, not even
+"just for testing".
 
-Synthetische Faelle loesen das vollstaendig: Die Antwort ist bekannt, weil der Fall aus ihr
-erzeugt wurde, der Inhalt ist harmlos, und jeder kann das Korpus mit einem Befehl reproduzieren.
-Private Fotos gehoeren nach fixtures-local/ und bleiben dort.
+Synthetic cases solve this completely: the answer is known because the case was generated from
+it, the content is harmless, and anyone can reproduce the corpus with a single command. Private
+photographs belong in fixtures-local/ and stay there.
 
-Aufruf:
-    .venv\\Scripts\\python.exe scripts\\make_fixtures.py
+Usage:
+    python scripts/make_fixtures.py
 """
 
 from __future__ import annotations
@@ -25,10 +25,10 @@ import cv2
 from qrsalvage.core.decoding import reencode
 from qrsalvage.synth import Damage, render_photo
 
-ZIEL = Path(__file__).resolve().parents[1] / "fixtures"
+TARGET = Path(__file__).resolve().parents[1] / "fixtures"
 
-# Die Schadensbilder sind den echten Faellen nachempfunden, die Inhalte sind es nicht.
-FAELLE: tuple[tuple[str, str, Damage, int], ...] = (
+# The damage profiles are modelled on the real cases; the contents are not.
+CASES: tuple[tuple[str, str, Damage, int], ...] = (
     (
         "engraved-curved-easy",
         "QRSALVAGE-SYNTHETIC-CASE-001",
@@ -57,18 +57,18 @@ FAELLE: tuple[tuple[str, str, Damage, int], ...] = (
 
 
 def main() -> int:
-    ZIEL.mkdir(parents=True, exist_ok=True)
-    for name, text, damage, seed in FAELLE:
+    TARGET.mkdir(parents=True, exist_ok=True)
+    for name, text, damage, seed in CASES:
         matrix = reencode(text)
         photo = render_photo(matrix, damage, seed=seed)
-        cv2.imwrite(str(ZIEL / f"{name}.png"), photo)
+        cv2.imwrite(str(TARGET / f"{name}.png"), photo)
 
         meta = {
-            "source": "synthetisch erzeugt, siehe scripts/make_fixtures.py",
+            "source": "synthetically generated, see scripts/make_fixtures.py",
             "expected_sha256": hashlib.sha256(text.encode()).hexdigest(),
             "expected_length": len(text),
-            # Bei synthetischen Faellen ist der Klartext harmlos und darf mitstehen -- das
-            # erleichtert die Fehlersuche erheblich. Bei echten Fotos waere das ein Leck.
+            # For synthetic cases the plain text is harmless and may stay -- it makes debugging
+            # far easier. For a real photograph this field would be a leak.
             "expected_prefix": text,
             "crop": None,
             "qr_modules": int(matrix.shape[0]),
@@ -76,10 +76,10 @@ def main() -> int:
             "seed": seed,
             "synthetic": True,
         }
-        (ZIEL / f"{name}.json").write_text(
+        (TARGET / f"{name}.json").write_text(
             json.dumps(meta, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
         )
-        print(f"{name}: {photo.shape[1]}x{photo.shape[0]} px, {matrix.shape[0]} Module")
+        print(f"{name}: {photo.shape[1]}x{photo.shape[0]} px, {matrix.shape[0]} modules")
     return 0
 
 

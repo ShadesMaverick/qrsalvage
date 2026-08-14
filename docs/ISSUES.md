@@ -120,5 +120,5 @@ Ansatz: `sample_cells` berechnet bereits die Streuung *innerhalb* jeder Zelle un
 Sie ist von der Anpassung an die bekannten Zellen unabhängig und würde genau dort Unsicherheit
 melden, wo das aktuelle Modell blind ist.
 
-**Fertig, wenn:** die Erfolgsquote in `scripts/schwierigkeit.py` messbar steigt — nicht, wenn der
+**Fertig, wenn:** die Erfolgsquote in `scripts/difficulty.py` messbar steigt — nicht, wenn der
 Einzelfall durchgeht.

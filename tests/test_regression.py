@@ -1,10 +1,10 @@
-"""Regression gegen das Bildkorpus in fixtures/.
+"""Regression against the image corpus in fixtures/.
 
-Verglichen wird gegen den Hash, nicht gegen den Klartext: die Codes enthalten
-Geraete-Install-Codes, und ein Testfall ist kein Grund, ein Geheimnis ins Repo zu schreiben.
+Comparison is against a hash, not against the plain text: real codes carry device secrets, and
+a test case is no reason to write one into a repository.
 
-Faellt hier ein Fixture um, ist das ein Befund ueber das Verfahren -- kein Anlass, die
-Erwartung anzupassen.
+If a fixture stops passing, that is a finding about the method -- not a reason to adjust the
+expectation.
 """
 
 from __future__ import annotations
@@ -18,38 +18,38 @@ import pytest
 
 from qrsalvage.core.pipeline import solve
 
-WURZEL = Path(__file__).resolve().parents[1]
-# Oeffentlich und synthetisch; jeder kann es mit scripts/make_fixtures.py reproduzieren.
-FIXTURES = WURZEL / "fixtures"
-# Privat und gitignoriert: echte Fotos, deren Inhalt schuetzenswert ist. Laeuft nur mit,
-# wenn das Verzeichnis vorhanden ist -- ein geklontes Repo hat es nicht.
-LOKAL = WURZEL / "fixtures-local"
+ROOT = Path(__file__).resolve().parents[1]
+# Public and synthetic; anyone can reproduce it with scripts/make_fixtures.py.
+FIXTURES = ROOT / "fixtures"
+# Private and gitignored: real photographs whose content is sensitive. Only runs when the
+# directory exists -- a cloned repository does not have it.
+PRIVATE = ROOT / "fixtures-local"
 
 
-def _faelle():
-    treffer = []
-    for ordner in (FIXTURES, LOKAL):
-        if ordner.is_dir():
-            treffer.extend(sorted(ordner.glob("*.json")))
-    return treffer
+def _cases():
+    found = []
+    for folder in (FIXTURES, PRIVATE):
+        if folder.is_dir():
+            found.extend(sorted(folder.glob("*.json")))
+    return found
 
 
 @pytest.mark.regression
-@pytest.mark.parametrize("meta_path", _faelle(), ids=lambda p: p.stem)
-def test_fixture_wird_geloest(meta_path: Path):
+@pytest.mark.parametrize("meta_path", _cases(), ids=lambda p: p.stem)
+def test_fixture_is_solved(meta_path: Path):
     meta = json.loads(meta_path.read_text(encoding="utf-8"))
-    bild = meta_path.with_suffix(".png")
-    assert bild.is_file(), f"Bild zum Fixture fehlt: {bild.name}"
+    image_path = meta_path.with_suffix(".png")
+    assert image_path.is_file(), f"image for fixture missing: {image_path.name}"
 
-    img = cv2.imread(str(bild))
-    assert img is not None, f"Bild nicht lesbar: {bild.name}"
+    image = cv2.imread(str(image_path))
+    assert image is not None, f"cannot read image: {image_path.name}"
 
     crop = tuple(meta["crop"]) if meta.get("crop") else None
-    result = solve(img, crop=crop)
+    result = solve(image, crop=crop)
 
-    assert result.solved, f"nicht geloest ({result.failure})"
+    assert result.solved, f"not solved ({result.failure})"
     digest = hashlib.sha256(result.text.encode()).hexdigest()
-    assert digest == meta["expected_sha256"], "entschluesselt, aber mit falschem Inhalt"
+    assert digest == meta["expected_sha256"], "decoded, but with the wrong content"
 
     if meta.get("expected_length"):
         assert len(result.text) == meta["expected_length"]
@@ -58,6 +58,6 @@ def test_fixture_wird_geloest(meta_path: Path):
 
 
 @pytest.mark.regression
-def test_korpus_ist_nicht_leer():
-    """Eine gruene Suite ohne Faelle ist keine gruene Suite."""
-    assert _faelle(), "keine Fixtures vorhanden - Regression sagt nichts aus"
+def test_the_corpus_is_not_empty():
+    """A green suite with no cases in it is not a green suite."""
+    assert _cases(), "no fixtures present - the regression suite proves nothing"
