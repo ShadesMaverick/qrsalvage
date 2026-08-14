@@ -115,9 +115,19 @@ Ergebnis bekommen, ohne ein Venv aufzusetzen.
 
 ---
 
-## 6. Streuung innerhalb der Zelle als zweite Unsicherheitsquelle nutzen
+## 6. Streuung innerhalb der Zelle als zweite Unsicherheitsquelle — ERLEDIGT
 
 **Labels:** `bug`, `research`
+
+Gebaut in `estimate_levels`: `sigma` ist jetzt ein Feld statt einer Zahl. Zwei Beiträge — die
+Streuung der bekannten Zellen um ihr angepasstes Niveau, plus die interne Streuung jeder Zelle,
+wobei nur der Überschuss über die Grundstreuung zählt (die das Punktraster ohnehin jeder Zelle
+gibt).
+
+Der auslösende Fall löst jetzt: aus 0 unsicheren Zellen und keinem Ergebnis wurden 1 unsichere
+Zelle und ein Treffer, die Quote auf der Stufe stieg von 19/20 auf 20/20.
+
+<details><summary>ursprüngliche Beschreibung</summary>
 
 Beobachtet an einem synthetischen Fall (`QRSALVAGE-SELFTEST-0815`, Kontrast 0.20, Wölbung 0.30,
 Startwert 1): Gitter perfekt, **null** falsche bekannte Zellen, Timing 100 %, **null** unsichere
@@ -134,3 +144,19 @@ melden, wo das aktuelle Modell blind ist.
 
 **Fertig, wenn:** die Erfolgsquote in `scripts/difficulty.py` messbar steigt — nicht, wenn der
 Einzelfall durchgeht.
+
+</details>
+
+---
+
+## 7. Neu aufgekommen
+
+**Labels:** `enhancement`
+
+- **Mehrere Codes in einem Bild.** Ein Produktfoto mit zwei Etiketten liefert sechs oder mehr
+  Finder-Kandidaten; wir suchen daraus genau ein Tripel und ignorieren den Rest.
+- **Symbologie-Grenze dokumentieren.** `structure.py`, `layout.py` und `qrspec.py` sind die
+  einzigen QR-spezifischen Module. Wenn Data Matrix je dazukommt, ist das die Grenze — sie
+  gehört beschrieben, bevor jemand quer durchgreift.
+- **Reed-Solomon über Version 10 hinaus.** Die Blocktabellen enden dort; größere Codes werden
+  gelesen, aber nicht repariert.
