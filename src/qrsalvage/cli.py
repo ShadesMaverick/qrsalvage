@@ -14,6 +14,7 @@ import cv2
 
 from .core.decoding import reencode, render
 from .core.pipeline import DEFAULT_SIZES, solve
+from .export import to_html_report, to_json, to_pdf, to_svg
 from .synth import Damage, make_case
 
 
@@ -62,6 +63,48 @@ def _report(result, out: Path, band: float) -> None:
         print(f"\nfailed: {result.failure}")
 
 
+def _png_bytes(matrix, scale: int = 8) -> bytes:
+    ok, buffer = cv2.imencode(".png", render(matrix, scale=scale))
+    return buffer.tobytes() if ok else b""
+
+
+def _write_exports(args, result, image) -> None:
+    """Write whichever of the export formats were asked for."""
+    wanted = set(args.export or [])
+    if not wanted:
+        return
+
+    # The code that gets exported is the re-encoded one wherever possible: that is guaranteed
+    # to be a valid code, where the reconstruction is one that happened to pass.
+    matrix = reencode(result.text) if result.solved else result.decoded_matrix
+
+    if "svg" in wanted and matrix is not None:
+        path = args.out / "code.svg"
+        path.write_text(to_svg(matrix, size_mm=args.size_mm), encoding="utf-8")
+        print(f"svg  -> {path}  ({args.size_mm:g} mm square)")
+    if "pdf" in wanted and matrix is not None:
+        path = args.out / "code.pdf"
+        path.write_bytes(to_pdf(matrix, size_mm=args.size_mm))
+        print(f"pdf  -> {path}  ({args.size_mm:g} mm square)")
+    if "json" in wanted:
+        path = args.out / "result.json"
+        path.write_text(to_json(result, include_zigbee=args.zigbee), encoding="utf-8")
+        print(f"json -> {path}" + ("  (including the pairing secret)" if args.zigbee else ""))
+    if "html" in wanted:
+        ok, encoded = cv2.imencode(".png", image)
+        path = args.out / "report.html"
+        path.write_text(
+            to_html_report(
+                result,
+                encoded.tobytes() if ok else b"",
+                _png_bytes(result.decoded_matrix) if result.decoded_matrix is not None else b"",
+                _png_bytes(matrix, scale=10) if result.solved and matrix is not None else b"",
+            ),
+            encoding="utf-8",
+        )
+        print(f"html -> {path}")
+
+
 def cmd_solve(args: argparse.Namespace) -> int:
     image = cv2.imread(str(args.image))
     if image is None:
@@ -78,8 +121,8 @@ def cmd_solve(args: argparse.Namespace) -> int:
     if result.solved:
         cv2.imwrite(str(args.out / "clean.png"), render(reencode(result.text)))
         print(f"clean code -> {args.out / 'clean.png'}")
-        return 0
-    return 2
+    _write_exports(args, result, image)
+    return 0 if result.solved else 2
 
 
 def cmd_synth(args: argparse.Namespace) -> int:
@@ -112,6 +155,25 @@ def main(argv: list[str] | None = None) -> int:
     solver.add_argument("--budget", type=int, default=4000, help="max decode attempts when probing")
     solver.add_argument("--band", type=float, default=0.15, help="uncertainty band for the grid")
     solver.add_argument("--out", type=Path, default=Path("out"))
+    solver.add_argument(
+        "--export",
+        nargs="*",
+        choices=["svg", "pdf", "json", "html"],
+        help="extra formats to write; svg and pdf carry a real physical size",
+    )
+    solver.add_argument(
+        "--size-mm",
+        type=float,
+        default=40.0,
+        dest="size_mm",
+        help="edge length for svg and pdf, in millimetres (default 40)",
+    )
+    solver.add_argument(
+        "--zigbee",
+        action="store_true",
+        help="split a Zigbee payload into fields in the json export. Off by default: the "
+        "install code is a pairing secret, not an identifier",
+    )
     solver.set_defaults(func=cmd_solve)
 
     synth = sub.add_parser("synth", help="generate an artificially degraded test case")

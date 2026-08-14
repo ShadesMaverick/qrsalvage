@@ -1,6 +1,6 @@
 # Offene Aufgaben bis zur Veröffentlichung
 
-Sechs Einträge, fertig zum Anlegen als GitHub-Issues, sobald das öffentliche Repository steht.
+Einträge, fertig zum Anlegen als GitHub-Issues, sobald das öffentliche Repository steht.
 Anlegen jeweils mit:
 
 ```
@@ -50,22 +50,28 @@ offene und skriptbare Pipeline.
 
 ---
 
-## 3. CI: ruff und pytest auf Linux, macOS, Windows
+## 3. CI: ruff und pytest auf Linux, macOS, Windows — ERLEDIGT
 
 **Labels:** `infrastructure`
 
-GitHub Actions, Matrix über die drei Systeme und Python 3.11 bis 3.13.
+`.github/workflows/ci.yml`: Lint über den ganzen Baum, schnelle Suite auf Linux 3.11–3.13 plus
+macOS und Windows, Bildkorpus auf Linux, dazu ein Job, der ein Wheel baut und **außerhalb des
+Quellverzeichnisses** installiert. Der letzte hat beim Schreiben gleich einen echten Fehler
+aufgedeckt: Die Oberfläche wurde relativ zum Repo-Wurzelverzeichnis gesucht und war gar nicht
+als Paketdaten deklariert — ein Wheel hätte keine Seite enthalten.
 
-- `ruff check` und `ruff format --check`
-- `pytest -m "not regression"` überall
-- `pytest -m regression` mindestens auf Linux
-
-Das Regressionskorpus ist synthetisch und liegt im Repository, läuft also ohne weitere
-Vorbereitung. Laufzeit im Auge behalten: die Suite braucht derzeit rund 30 Sekunden.
+**Noch offen:** `<owner>` im CI-Badge des README ersetzen, sobald das Repository existiert.
 
 ---
 
-## 4. Exportformate
+## 4. Exportformate — ERLEDIGT
+
+Gebaut in `src/qrsalvage/export.py`, Aufruf `--export svg pdf json html --size-mm 40`.
+SVG und PDF tragen eine echte Millimeterangabe, das PDF ist von Hand geschrieben statt mit
+einer Bibliothek — ein QR-Code ist eine Seite schwarzer Rechtecke. Zigbee-Felder nur mit
+`--zigbee`.
+
+<details><summary>ursprüngliche Beschreibung</summary>
 
 **Labels:** `feature`
 
@@ -83,19 +89,21 @@ Modulgröße über die Lesbarkeit, nicht die Bildauflösung. Rasterformate allei
 - **Zigbee-Felder als JSON**, ausdrücklich opt-in: EUI-64, Install-Code, CRC-Prüfung. Schreibt
   ein Kopplungsgeheimnis in eine Datei, darf also nie Voreinstellung sein
 
+</details>
+
 ---
 
 ## 5. Grafische Oberfläche — ERLEDIGT
 
 **Labels:** `feature`
 
-Gebaut: `src/qrsalvage/server.py` und `web/index.html`, Aufruf `qrsalvage serve`. Nur auf
+Gebaut: `src/qrsalvage/server.py` und `src/qrsalvage/web/index.html`, Aufruf `qrsalvage serve`. Nur auf
 127.0.0.1, eine statische Datei, kein Build-Schritt. Drag-and-drop, Kennzahlen, Downloads,
 und der Notausgang mit drei Klicks — der verträgt 45 px Ungenauigkeit, weil der Klick nur
 den Kandidaten auswählt und die Position aus dem Bild kommt.
 
-Offen bleibt daraus nur: die Exporte aus Nr. 4 anbinden, sobald es sie gibt. Derzeit gibt es
-PNG-Downloads.
+**Noch offen:** die Exporte aus Nr. 4 in der Oberfläche anbieten. Dort gibt es derzeit nur
+PNG-Downloads, während die Kommandozeile SVG, PDF, JSON und HTML kann.
 
 <details><summary>ursprüngliche Beschreibung</summary>
 
@@ -160,3 +168,6 @@ Einzelfall durchgeht.
   gehört beschrieben, bevor jemand quer durchgreift.
 - **Reed-Solomon über Version 10 hinaus.** Die Blocktabellen enden dort; größere Codes werden
   gelesen, aber nicht repariert.
+
+
+
