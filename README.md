@@ -1,5 +1,7 @@
 # qrsalvage
 
+[![CI](https://github.com/<owner>/qrsalvage/actions/workflows/ci.yml/badge.svg)](https://github.com/<owner>/qrsalvage/actions/workflows/ci.yml)
+
 *recover QR codes from what's left of them*
 
 A QR code laser-engraved onto the curved dome of a light bulb. Grey on white, roughly nine

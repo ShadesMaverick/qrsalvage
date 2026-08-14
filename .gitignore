@@ -24,3 +24,7 @@ fixtures-local/
 # Logo-Entwuerfe: noch nicht final und mit Wasserzeichen des Generators.
 # Das fertige Logo kommt nach docs/, wenn es steht.
 idea_for_icon/
+
+# Build-Artefakte
+dist/
+build/
