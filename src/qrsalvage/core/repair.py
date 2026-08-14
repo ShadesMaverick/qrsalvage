@@ -1,10 +1,9 @@
-"""Unsichere Zellen als Auslassungen an Reed-Solomon uebergeben.
+"""Hand uncertain cells to Reed-Solomon as erasures.
 
-Hier schliesst sich die Kette, die in ensemble.py offen geblieben ist. Die Tastsuche kippt
-hoechstens gut zwanzig Zellen und probiert Kombinationen durch; Reed-Solomon dagegen bekommt
-gesagt, *wo* es unsicher ist, und rechnet die richtigen Werte in einem Schritt aus. Bei t
-Pruefzeichen sind t Auslassungen reparierbar gegenueber nur t/2 Fehlern -- die Verdopplung,
-wegen der die dreiwertige Matrix ueberhaupt existiert.
+This closes the chain that ensemble.py leaves open. The ordered probe flips at most a couple of
+dozen cells and tries combinations; Reed-Solomon instead is *told* where the doubt is and
+computes the right values in one step. With t check symbols it repairs t erasures against only
+t/2 errors -- the factor of two that the three-state matrix exists for.
 """
 
 from __future__ import annotations
@@ -30,7 +29,7 @@ from .structure import version_for_modules
 
 @dataclass
 class RepairResult:
-    """Was die Reparatur ergeben hat -- auch im Misserfolg auskunftsfaehig."""
+    """What the repair produced -- informative even when it failed."""
 
     matrix: np.ndarray | None
     ecc: str | None = None
@@ -49,14 +48,14 @@ class RepairResult:
 
 
 def _codeword_reliability(posterior: np.ndarray, positions: list[int]) -> float:
-    """Verlaesslichkeit eines Codeworts: sein schwaechstes Bit.
+    """Reliability of a codeword: its weakest bit.
 
-    Nicht der Mittelwert. Ein Codewort ist bereits falsch, wenn ein einziges seiner acht Bits
-    kippt -- ein Mittelwert wuerde sieben sichere Bits gegen ein wackeliges aufrechnen und das
-    Codewort faelschlich als solide ausweisen.
+    Not the average. A codeword is already wrong when a single one of its eight bits flips; an
+    average would offset seven solid bits against one shaky one and certify the codeword as
+    sound.
     """
-    flach = posterior.ravel()
-    return min(abs(float(flach[p]) - 0.5) for p in positions)
+    flat = posterior.ravel()
+    return min(abs(float(flat[p]) - 0.5) for p in positions)
 
 
 def repair(
@@ -64,21 +63,20 @@ def repair(
     posterior: np.ndarray | None = None,
     erasures_per_block: int = 0,
 ) -> RepairResult:
-    """Ein Reparaturversuch mit genau `erasures_per_block` Auslassungen je Block.
+    """One repair attempt with exactly `erasures_per_block` erasures per block.
 
-    Wichtig und nicht offensichtlich: Bei so vielen Auslassungen wie Pruefzeichen findet
-    Reed-Solomon *immer* eine gueltige Loesung. Gueltig heisst aber nicht richtig -- liegen
-    die echten Fehler ausserhalb der ausgelassenen Stellen, kommt ein sauber gerechnetes,
-    falsches Codewort heraus. Diese Funktion kann das nicht bemerken; dafuer gibt es
-    :func:`repair_progressive`, das jeden Versuch von aussen widerlegen laesst.
+    Important and not obvious: with as many erasures as check symbols, Reed-Solomon *always*
+    finds a valid solution. Valid does not mean correct -- if the real errors sit outside the
+    erased positions, out comes a cleanly computed wrong codeword. This function cannot notice
+    that; :func:`repair_progressive` exists to have every attempt refuted from outside.
     """
     n = int(matrix.shape[0])
     version = version_for_modules(n)
 
-    gelesen = read_format(matrix)
-    if gelesen is None:
-        return RepairResult(matrix=None, failure="Formatinformation nicht lesbar")
-    ecc, mask, abstand = gelesen
+    header = read_format(matrix)
+    if header is None:
+        return RepairResult(matrix=None, failure="format information unreadable")
+    ecc, mask, distance = header
 
     try:
         plan = block_plan(version, ecc)
@@ -87,67 +85,68 @@ def repair(
 
     codewords = extract_codewords(matrix, mask)[: plan.total_codewords]
     if len(codewords) < plan.total_codewords:
-        return RepairResult(matrix=None, ecc=ecc, mask=mask, failure="zu wenige Codewoerter")
+        return RepairResult(matrix=None, ecc=ecc, mask=mask, failure="too few codewords")
 
-    bloecke = deinterleave(codewords, version, ecc)
-    positionen = codeword_positions(n, version, ecc)
+    blocks = deinterleave(codewords, version, ecc)
+    positions = codeword_positions(n, version, ecc)
 
-    repariert: list[list[int]] = []
-    fehler_gesamt = 0
-    auslassungen_gesamt = 0
-    reparierte_bloecke = 0
-    bericht: list[str] = []
+    repaired: list[list[int]] = []
+    errors_total = 0
+    erasures_total = 0
+    blocks_touched = 0
+    report: list[str] = []
 
-    for b, block in enumerate(bloecke):
+    for index, block in enumerate(blocks):
         nsym = plan.ec_per_block
 
         erasures: list[int] = []
         if posterior is not None and erasures_per_block > 0:
-            bewertet = [
-                (_codeword_reliability(posterior, positionen[b][i]), i) for i in range(len(block))
+            scored = [
+                (_codeword_reliability(posterior, positions[index][i]), i)
+                for i in range(len(block))
             ]
-            erasures = [i for _, i in sorted(bewertet)[:erasures_per_block]]
+            erasures = [i for _, i in sorted(scored)[:erasures_per_block]]
 
         try:
-            ergebnis = correct_block(block, nsym, erasures)
+            outcome = correct_block(block, nsym, erasures)
         except (ReedSolomonError, ZeroDivisionError):
-            ergebnis = None
+            outcome = None
 
-        if ergebnis is None:
-            bericht.append(f"Block {b}: nicht reparierbar")
+        if outcome is None:
+            report.append(f"block {index}: not repairable")
             return RepairResult(
                 matrix=None,
                 ecc=ecc,
                 mask=mask,
-                format_distance=abstand,
-                blocks=len(bloecke),
-                per_block=bericht,
-                failure=f"Block {b} von {len(bloecke)} liess sich nicht reparieren",
+                format_distance=distance,
+                blocks=len(blocks),
+                per_block=report,
+                failure=f"block {index} of {len(blocks)} could not be repaired",
             )
 
-        block_neu, fehlerstellen, benutzte = ergebnis
-        repariert.append(block_neu)
-        fehler_gesamt += len(fehlerstellen)
-        auslassungen_gesamt += len(benutzte)
-        if fehlerstellen or benutzte:
-            reparierte_bloecke += 1
-        bericht.append(f"Block {b}: {len(fehlerstellen)} Fehler, {len(benutzte)} Auslassungen")
+        corrected, error_positions, used = outcome
+        repaired.append(corrected)
+        errors_total += len(error_positions)
+        erasures_total += len(used)
+        if error_positions or used:
+            blocks_touched += 1
+        report.append(f"block {index}: {len(error_positions)} errors, {len(used)} erasures")
 
-    strom = interleave(repariert, version, ecc)
-    neu = np.array(matrix, dtype=bool, copy=True)
-    place_codewords(neu, strom, mask)
-    write_format(neu, ecc, mask)
+    stream = interleave(repaired, version, ecc)
+    rebuilt = np.array(matrix, dtype=bool, copy=True)
+    place_codewords(rebuilt, stream, mask)
+    write_format(rebuilt, ecc, mask)
 
     return RepairResult(
-        matrix=neu,
+        matrix=rebuilt,
         ecc=ecc,
         mask=mask,
-        format_distance=abstand,
-        blocks=len(bloecke),
-        blocks_repaired=reparierte_bloecke,
-        errors_corrected=fehler_gesamt,
-        erasures_used=auslassungen_gesamt,
-        per_block=bericht,
+        format_distance=distance,
+        blocks=len(blocks),
+        blocks_repaired=blocks_touched,
+        errors_corrected=errors_total,
+        erasures_used=erasures_total,
+        per_block=report,
     )
 
 
@@ -157,41 +156,41 @@ def repair_progressive(
     verify: Callable[[np.ndarray], bool] | None = None,
     max_erasure_fraction: float = 1.0,
 ) -> RepairResult:
-    """Steigert die Zahl der Auslassungen, bis eine Loesung entsteht, die standhaelt.
+    """Raise the erasure count until a solution appears that survives scrutiny.
 
-    Das Aufsteigen ist nicht Bequemlichkeit, sondern notwendig: mehr Auslassungen erkaufen
-    Reichweite mit Eindeutigkeit. Bei wenigen ist eine gefundene Loesung fast sicher die
-    richtige, bei so vielen wie Pruefzeichen ist sie beliebig. Deshalb wird die sparsamste
-    genommen, die `verify` uebersteht -- ohne diesen Widerspruch von aussen liefert das
-    Verfahren am Ende immer etwas und meistens Unsinn.
+    Climbing is not laziness, it is necessary: more erasures buy reach at the cost of
+    uniqueness. With few of them a solution found is almost certainly the right one; with as
+    many as there are check symbols it is arbitrary. So the most frugal one that survives
+    `verify` wins -- without that contradiction from outside, the method always returns
+    something, and usually nonsense.
     """
-    kopf = read_format(matrix)
-    if kopf is None:
-        return RepairResult(matrix=None, failure="Formatinformation nicht lesbar")
-    ecc, _, _ = kopf
+    header = read_format(matrix)
+    if header is None:
+        return RepairResult(matrix=None, failure="format information unreadable")
+    ecc, _, _ = header
     try:
         plan = block_plan(version_for_modules(int(matrix.shape[0])), ecc)
     except KeyError as exc:
         return RepairResult(matrix=None, ecc=ecc, failure=str(exc))
 
-    grenze = int(plan.ec_per_block * max_erasure_fraction)
-    letzte = RepairResult(matrix=None, ecc=ecc, failure="kein Versuch unternommen")
+    limit = int(plan.ec_per_block * max_erasure_fraction)
+    last = RepairResult(matrix=None, ecc=ecc, failure="no attempt made")
 
-    for anzahl in range(0, grenze + 1):
-        ergebnis = repair(matrix, posterior=posterior, erasures_per_block=anzahl)
-        if not ergebnis.ok:
-            letzte = ergebnis
+    for count in range(0, limit + 1):
+        outcome = repair(matrix, posterior=posterior, erasures_per_block=count)
+        if not outcome.ok:
+            last = outcome
             continue
-        if verify is None or verify(ergebnis.matrix):
-            return ergebnis
-        letzte = RepairResult(
+        if verify is None or verify(outcome.matrix):
+            return outcome
+        last = RepairResult(
             matrix=None,
-            ecc=ergebnis.ecc,
-            mask=ergebnis.mask,
-            format_distance=ergebnis.format_distance,
-            blocks=ergebnis.blocks,
-            failure=f"{anzahl} Auslassungen ergaben ein gueltiges, aber nicht lesbares Ergebnis",
+            ecc=outcome.ecc,
+            mask=outcome.mask,
+            format_distance=outcome.format_distance,
+            blocks=outcome.blocks,
+            failure=f"{count} erasures produced a valid but unreadable result",
         )
         if posterior is None:
-            break  # ohne Unsicherheitsangabe bringt mehr Auslassen nichts Neues
-    return letzte
+            break  # without an uncertainty map, erasing more adds nothing new
+    return last

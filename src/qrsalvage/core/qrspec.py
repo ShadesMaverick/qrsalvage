@@ -1,17 +1,17 @@
-"""Die Tabellen und Regeln aus ISO/IEC 18004, soweit wir sie zum Reparieren brauchen.
+"""The tables and rules from ISO/IEC 18004 that the repair path needs.
 
-Tabellen sind die fehleranfaelligste Art von Code: ein vertauschter Zahlenwert erzeugt keinen
-Absturz, sondern stille Falschheit. Deshalb ist jede Tabelle hier durch eine Konsistenzregel
-abgesichert, die sich pruefen laesst -- die Summe aus Daten- und Pruefzeichen aller Bloecke
-muss die Gesamtzahl der Codewoerter einer Version ergeben. test_rs.py prueft das fuer alle
-Eintraege, und zusaetzlich wird der ganze Weg gegen einen echten Encoder gefahren.
+Tables are the most dangerous kind of code: a transposed value does not crash, it quietly
+produces something wrong. Every table here is therefore backed by a consistency rule you can
+check -- the data and check symbols of all blocks must add up to the total codeword count of
+the version. test_rs.py verifies that for every entry, and additionally drives the whole chain
+against a real encoder.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-# Gesamtzahl der Codewoerter (Daten + Pruefzeichen) je Version.
+# Total number of codewords (data plus check symbols) per version.
 TOTAL_CODEWORDS: dict[int, int] = {
     1: 26,
     2: 44,
@@ -25,22 +25,22 @@ TOTAL_CODEWORDS: dict[int, int] = {
     10: 346,
 }
 
-# Restbits nach den Codewoertern, die beim Platzieren mitlaufen und nichts bedeuten.
+# Remainder bits placed after the codewords; they carry no meaning.
 REMAINDER_BITS: dict[int, int] = {1: 0, 2: 7, 3: 7, 4: 7, 5: 7, 6: 7, 7: 0, 8: 0, 9: 0, 10: 0}
 
 ECC_LEVELS = ("L", "M", "Q", "H")
 
-# Bitmuster der Fehlerkorrekturstufe in der Formatinformation.
+# Bit pattern of the error correction level inside the format information.
 ECC_BITS: dict[str, int] = {"L": 0b01, "M": 0b00, "Q": 0b11, "H": 0b10}
 BITS_TO_ECC: dict[int, str] = {v: k for k, v in ECC_BITS.items()}
 
 
 @dataclass(frozen=True)
 class BlockPlan:
-    """Blockaufteilung einer Version-Stufen-Kombination."""
+    """Block layout for one version and error correction level."""
 
     ec_per_block: int
-    groups: tuple[tuple[int, int], ...]  # (Anzahl Bloecke, Datencodewoerter je Block)
+    groups: tuple[tuple[int, int], ...]  # (number of blocks, data codewords per block)
 
     @property
     def blocks(self) -> int:
@@ -61,7 +61,7 @@ class BlockPlan:
         return sizes
 
 
-# ISO/IEC 18004 Tabelle 9. Aufbau: (Pruefzeichen je Block, ((Bloecke, Datenzeichen), ...))
+# ISO/IEC 18004 table 9. Shape: (check symbols per block, ((blocks, data symbols), ...))
 BLOCK_PLANS: dict[tuple[int, str], BlockPlan] = {
     (1, "L"): BlockPlan(7, ((1, 19),)),
     (1, "M"): BlockPlan(10, ((1, 16),)),
@@ -110,16 +110,16 @@ def block_plan(version: int, ecc: str) -> BlockPlan:
     try:
         return BLOCK_PLANS[(version, ecc)]
     except KeyError as exc:
-        raise KeyError(f"keine Blockaufteilung fuer Version {version}, Stufe {ecc}") from exc
+        raise KeyError(f"no block layout for version {version}, level {ecc}") from exc
 
 
-# --- Maskierung -----------------------------------------------------------------------
+# --- Masking ---------------------------------------------------------------------------
 
 MASK_COUNT = 8
 
 
 def mask_bit(pattern: int, row: int, col: int) -> bool:
-    """Liefert True, wenn die Maske dieses Modul umkehrt."""
+    """True when the mask inverts this module."""
     if pattern == 0:
         return (row + col) % 2 == 0
     if pattern == 1:
@@ -136,17 +136,17 @@ def mask_bit(pattern: int, row: int, col: int) -> bool:
         return ((row * col) % 2 + (row * col) % 3) % 2 == 0
     if pattern == 7:
         return ((row + col) % 2 + (row * col) % 3) % 2 == 0
-    raise ValueError(f"unbekanntes Maskenmuster: {pattern}")
+    raise ValueError(f"unknown mask pattern: {pattern}")
 
 
-# --- Formatinformation ----------------------------------------------------------------
+# --- Format information ----------------------------------------------------------------
 
 FORMAT_GENERATOR = 0b101_0011_0111
 FORMAT_MASK = 0b101_0100_0001_0010
 
 
 def format_bits(ecc: str, mask: int) -> int:
-    """Erzeugt die 15 Bit Formatinformation samt BCH-Pruefteil und Maskierung."""
+    """Build the 15 format bits including the BCH remainder and the mask."""
     data = (ECC_BITS[ecc] << 3) | mask
     value = data << 10
     for i in range(4, -1, -1):
@@ -161,17 +161,17 @@ ALL_FORMATS: dict[int, tuple[str, int]] = {
 
 
 def decode_format(raw: int) -> tuple[str, int, int] | None:
-    """Findet zu 15 gelesenen Bits die naechstliegende gueltige Formatinformation.
+    """Find the valid format information closest to 15 bits as read.
 
-    Liefert (Stufe, Maske, Hamming-Abstand) oder None, wenn der Abstand zu gross ist. Der
-    BCH-Code der Formatinformation korrigiert bis zu drei Bitfehler -- er ist damit die erste
-    Stelle im ganzen Verfahren, an der sich eine Lesung unabhaengig pruefen laesst.
+    Returns (level, mask, Hamming distance), or None when the distance is too large. The BCH
+    code of the format block corrects up to three bit errors, which makes this the first point
+    in the whole pipeline where a reading can be checked independently.
     """
-    beste: tuple[str, int, int] | None = None
-    for gueltig, (ecc, mask) in ALL_FORMATS.items():
-        abstand = bin(gueltig ^ raw).count("1")
-        if beste is None or abstand < beste[2]:
-            beste = (ecc, mask, abstand)
-    if beste is None or beste[2] > 3:
+    best: tuple[str, int, int] | None = None
+    for valid, (ecc, mask) in ALL_FORMATS.items():
+        distance = bin(valid ^ raw).count("1")
+        if best is None or distance < best[2]:
+            best = (ecc, mask, distance)
+    if best is None or best[2] > 3:
         return None
-    return beste
+    return best

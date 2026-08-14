@@ -1,8 +1,8 @@
-"""Matrix zeichnen, decodieren, und an den unsichersten Stellen nachtasten.
+"""Render the matrix, decode it, and probe where the doubt is greatest.
 
-Der Decoder ist hier kein Ratgeber, sondern ein exaktes Orakel: er sagt nicht "waermer",
-sondern "gueltig" oder "nicht gueltig". Deshalb braucht es keine gelernte Bewertungsfunktion,
-sondern eine kluge Reihenfolge, in der man ihn befragt -- billigste Zweifel zuerst.
+The decoder here is not an advisor but an exact oracle: it does not say "warmer", it says
+"valid" or "not valid". That is why no learned value function is needed -- only a sensible
+order in which to question it, cheapest doubts first.
 """
 
 from __future__ import annotations
@@ -19,18 +19,18 @@ QR = zxingcpp.BarcodeFormat.QRCode
 
 
 def render(matrix: np.ndarray, scale: int = 10, quiet: int = 4) -> np.ndarray:
-    """Zeichnet eine Modulmatrix als ideales Schwarzweissbild mit Ruhezone.
+    """Draw a module matrix as an ideal black-and-white image with a quiet zone.
 
-    Die Ruhezone ist Pflicht: ein bis an die Codekante beschnittenes Bild weisen die Decoder
-    zurueck, egal wie sauber der Code darin ist.
+    The quiet zone is mandatory: an image cropped flush to the code edge is rejected by every
+    decoder, no matter how clean the code inside it is.
     """
     cells = np.where(matrix, np.uint8(0), np.uint8(255))
-    big = np.kron(cells, np.ones((scale, scale), dtype=np.uint8))
-    return np.pad(big, quiet * scale, constant_values=255)
+    enlarged = np.kron(cells, np.ones((scale, scale), dtype=np.uint8))
+    return np.pad(enlarged, quiet * scale, constant_values=255)
 
 
 def decode_matrix(matrix: np.ndarray, scale: int = 4) -> str | None:
-    """Ein Decodier-Versuch auf der gerenderten Matrix."""
+    """A single decode attempt on the rendered matrix."""
     try:
         hits = zxingcpp.read_barcodes(render(matrix, scale=scale), formats=QR, try_invert=False)
     except Exception:
@@ -43,7 +43,7 @@ def decode_matrix(matrix: np.ndarray, scale: int = 4) -> str | None:
 
 @dataclass
 class SearchResult:
-    """Ergebnis des Nachtastens."""
+    """Outcome of the probing search."""
 
     text: str | None
     candidates_tried: int
@@ -52,11 +52,11 @@ class SearchResult:
 
 
 def _subsets_by_cost(costs: np.ndarray, budget: int):
-    """Zaehlt Teilmengen in aufsteigender Gesamtkostenreihenfolge auf.
+    """Enumerate subsets in ascending order of total cost.
 
-    Bestensuche ueber einen Halden-Speicher: aus einer bereits ausgegebenen Menge entstehen
-    genau zwei Nachfolger -- Element erweitern oder letztes Element weiterschieben. Damit
-    kommt jede Teilmenge genau einmal und in der richtigen Reihenfolge heraus.
+    Best-first search over a heap: each subset already emitted spawns exactly two successors --
+    extend it, or advance its last element. That way every subset comes out exactly once and in
+    the right order.
     """
     m = len(costs)
     if m == 0:
@@ -79,10 +79,10 @@ def _subsets_by_cost(costs: np.ndarray, budget: int):
 def ordered_search(
     mm: ModuleMatrix, max_cells: int = 22, budget: int = 4000, scale: int = 4
 ) -> SearchResult:
-    """Tastet die Matrix an den unsichersten Zellen ab, billigste Zweifel zuerst.
+    """Probe the matrix at its least certain cells, cheapest doubts first.
 
-    Entspricht dem Schlossknacken: nicht alle Stifte gleichzeitig, sondern der schwaechste
-    zuerst, und nach jedem Versuch fragt man das Schloss, ob es aufgeht.
+    The lock-picking analogy is literal: not all pins at once, but the weakest one first, and
+    after every attempt you ask the lock whether it opens.
     """
     base = mm.hard()
     text = decode_matrix(base, scale=scale)
@@ -100,24 +100,26 @@ def ordered_search(
     tried = 1
 
     for subset in _subsets_by_cost(costs, budget):
-        cand = base.copy()
-        for pos in subset:
-            flat = order[pos]
-            cand.flat[flat] = not cand.flat[flat]
+        candidate = base.copy()
+        for position in subset:
+            flat = order[position]
+            candidate.flat[flat] = not candidate.flat[flat]
         tried += 1
-        text = decode_matrix(cand, scale=scale)
+        text = decode_matrix(candidate, scale=scale)
         if text:
             flipped = [(order[p] // n, order[p] % n) for p in subset]
-            return SearchResult(text=text, candidates_tried=tried, flipped=flipped, matrix=cand)
+            return SearchResult(
+                text=text, candidates_tried=tried, flipped=flipped, matrix=candidate
+            )
 
     return SearchResult(text=None, candidates_tried=tried)
 
 
 def reencode(text: str) -> np.ndarray:
-    """Kodiert den gefundenen Inhalt neu und liefert eine normgerechte Modulmatrix.
+    """Encode the recovered content afresh and return a standards-compliant module matrix.
 
-    Besser als die Rekonstruktion zu zeichnen: das Ergebnis ist dann garantiert ein gueltiger
-    Code und nicht blosse Rekonstruktion, die zufaellig durchgegangen ist.
+    Better than drawing the reconstruction: the result is then guaranteed to be a valid code
+    rather than a reconstruction that happened to pass.
     """
     barcode = zxingcpp.create_barcode(text, QR)
     image = np.asarray(zxingcpp.write_barcode_to_image(barcode, scale=1, add_quiet_zones=False))

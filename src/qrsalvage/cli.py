@@ -1,7 +1,7 @@
-"""Textinterface. Alles Ausgeben und Schreiben passiert hier, nie im Kern.
+"""Text interface. All printing and file writing happens here, never in the core.
 
-Das ist zugleich der Agentenweg: `solve` schreibt das ASCII-Grid und die Kennzahlen, an denen
-sich ablesen laesst, ob nachgetastet werden muss und wo.
+This is also the agent-facing path: `solve` writes the ASCII grid and the figures that tell you
+whether probing is needed and where.
 """
 
 from __future__ import annotations
@@ -18,56 +18,64 @@ from .synth import Damage, make_case
 
 
 def _report(result, out: Path, band: float) -> None:
-    print(f"Finder-Kandidaten: {len(result.finders)}")
+    print(f"finder candidates: {len(result.finders)}")
     for fit in result.per_size:
         marker = "<-" if fit.modules == result.modules else "  "
         print(
-            f"  Version {fit.modules:2d}: {fit.wrong_known:3d}/{fit.known_total} "
-            f"bekannte Zellen falsch, Guete {fit.quality:.3f} {marker}"
+            f"  version {fit.modules:2d}: {fit.wrong_known:3d}/{fit.known_total} "
+            f"known cells wrong, quality {fit.quality:.3f} {marker}"
         )
     if result.modules is None:
-        print(f"Gescheitert: {result.failure}")
+        print(f"failed: {result.failure}")
         return
 
-    print(f"\nGewaehlt: Version {result.version} ({result.modules} Module)")
-    print(f"Bekannte Zellen falsch: {result.wrong_known} von {result.known_total} (Gitter)")
+    print(f"\nchosen: version {result.version} ({result.modules} modules)")
+    print(f"known cells wrong: {result.wrong_known} of {result.known_total} (grid fit)")
     if result.wrong_sampled != result.wrong_known:
-        print(f"                        {result.wrong_sampled} nach der Abtastung")
-    print(f"Timing-Guete: {result.timing * 100:.1f} %")
-    print(f"Unsichere Zellen (Band {band}): {result.uncertain} von {result.modules**2}")
-    print(f"Decodier-Versuche: {result.candidates_tried}")
+        print(f"                   {result.wrong_sampled} after sampling")
+    print(f"timing pattern:    {result.timing * 100:.1f} %")
+    print(f"uncertain cells:   {result.uncertain} of {result.modules**2} (band {band})")
+    print(f"decode attempts:   {result.candidates_tried}")
+
+    if result.repair is not None:
+        detail = result.repair.failure or (
+            f"{result.repair.errors_corrected} errors, "
+            f"{result.repair.erasures_used} erasures across "
+            f"{result.repair.blocks} blocks"
+        )
+        print(f"reed-solomon:      {detail}")
 
     if result.matrix is not None:
         (out / "grid.txt").write_text(result.matrix.to_ascii(band), encoding="utf-8")
-        print(f"ASCII-Grid -> {out / 'grid.txt'}")
+        print(f"ascii grid -> {out / 'grid.txt'}")
 
     if result.solved:
         if result.flipped:
             cells = ", ".join(f"({r},{c})" for r, c in result.flipped)
-            print(f"Nachgetastet: {len(result.flipped)} Zelle(n) gekippt -> {cells}")
+            print(f"probed: flipped {len(result.flipped)} cell(s) -> {cells}")
         digest = hashlib.sha256(result.text.encode()).hexdigest()
-        print(f"\nTREFFER ({len(result.text)} Zeichen, sha256 {digest[:16]}...)")
+        print(f"\nRECOVERED ({len(result.text)} characters, sha256 {digest[:16]}...)")
         print(result.text)
     else:
-        print(f"\nGescheitert: {result.failure}")
+        print(f"\nfailed: {result.failure}")
 
 
 def cmd_solve(args: argparse.Namespace) -> int:
-    img = cv2.imread(str(args.image))
-    if img is None:
-        print(f"Bild nicht lesbar: {args.image}")
+    image = cv2.imread(str(args.image))
+    if image is None:
+        print(f"cannot read image: {args.image}")
         return 1
     args.out.mkdir(parents=True, exist_ok=True)
 
     crop = tuple(args.crop) if args.crop else None
-    result = solve(img, crop=crop, sizes=args.sizes or DEFAULT_SIZES, budget=args.budget)
+    result = solve(image, crop=crop, sizes=args.sizes or DEFAULT_SIZES, budget=args.budget)
     _report(result, args.out, args.band)
 
     if result.decoded_matrix is not None:
-        cv2.imwrite(str(args.out / "rekonstruiert.png"), render(result.decoded_matrix))
+        cv2.imwrite(str(args.out / "reconstructed.png"), render(result.decoded_matrix))
     if result.solved:
-        cv2.imwrite(str(args.out / "sauber.png"), render(reencode(result.text)))
-        print(f"Sauberer Code -> {args.out / 'sauber.png'}")
+        cv2.imwrite(str(args.out / "clean.png"), render(reencode(result.text)))
+        print(f"clean code -> {args.out / 'clean.png'}")
         return 0
     return 2
 
@@ -86,26 +94,26 @@ def cmd_synth(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="qrsalvage", description=__doc__)
-    sub = ap.add_subparsers(dest="command", required=True)
+    parser = argparse.ArgumentParser(prog="qrsalvage", description=__doc__)
+    sub = parser.add_subparsers(dest="command", required=True)
 
-    s = sub.add_parser("solve", help="QR-Code aus einem Foto lesen")
-    s.add_argument("image", type=Path)
-    s.add_argument("--crop", nargs=4, type=int, metavar=("X0", "Y0", "X1", "Y1"))
-    s.add_argument("--sizes", nargs="*", type=int, help="Kandidatengroessen in Modulen")
-    s.add_argument("--budget", type=int, default=4000, help="max. Decodier-Versuche beim Tasten")
-    s.add_argument("--band", type=float, default=0.15, help="Unsicherheitsband fuers ASCII-Grid")
-    s.add_argument("--out", type=Path, default=Path("out"))
-    s.set_defaults(func=cmd_solve)
+    solver = sub.add_parser("solve", help="recover a QR code from a photograph")
+    solver.add_argument("image", type=Path)
+    solver.add_argument("--crop", nargs=4, type=int, metavar=("X0", "Y0", "X1", "Y1"))
+    solver.add_argument("--sizes", nargs="*", type=int, help="candidate sizes in modules")
+    solver.add_argument("--budget", type=int, default=4000, help="max decode attempts when probing")
+    solver.add_argument("--band", type=float, default=0.15, help="uncertainty band for the grid")
+    solver.add_argument("--out", type=Path, default=Path("out"))
+    solver.set_defaults(func=cmd_solve)
 
-    y = sub.add_parser("synth", help="kuenstlich verdorbenen Testfall erzeugen")
-    y.add_argument("text")
-    y.add_argument("--curvature", type=float, default=0.25)
-    y.add_argument("--contrast", type=float, default=0.28)
-    y.add_argument("--stain", type=float, default=0.0)
-    y.add_argument("--seed", type=int, default=0)
-    y.add_argument("--out", type=Path, default=Path("out"))
-    y.set_defaults(func=cmd_synth)
+    synth = sub.add_parser("synth", help="generate an artificially degraded test case")
+    synth.add_argument("text")
+    synth.add_argument("--curvature", type=float, default=0.25)
+    synth.add_argument("--contrast", type=float, default=0.28)
+    synth.add_argument("--stain", type=float, default=0.0)
+    synth.add_argument("--seed", type=int, default=0)
+    synth.add_argument("--out", type=Path, default=Path("out"))
+    synth.set_defaults(func=cmd_synth)
 
-    args = ap.parse_args(argv)
+    args = parser.parse_args(argv)
     return int(args.func(args))

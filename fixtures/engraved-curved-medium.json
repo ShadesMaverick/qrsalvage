@@ -1,5 +1,5 @@
 {
-  "source": "synthetisch erzeugt, siehe scripts/make_fixtures.py",
+  "source": "synthetically generated, see scripts/make_fixtures.py",
   "expected_sha256": "1e18ca15bd9e797985658c8ab8a034a123b3751347e071bd642dcbea9c1259c6",
   "expected_length": 43,
   "expected_prefix": "QRSALVAGE-SYNTHETIC-CASE-002-LONGER-PAYLOAD",

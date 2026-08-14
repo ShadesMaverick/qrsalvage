@@ -1,8 +1,9 @@
-"""Das Modulraster mit drei Zustaenden: dunkel, hell, unbekannt.
+"""The module grid with three states: dark, light, unknown.
 
-Die dritte Moeglichkeit ist keine Bequemlichkeit, sondern der Kern des Verfahrens. Wer eine
-unsichere Zelle zu einer Entscheidung zwingt, verbraucht doppelt so viel Korrekturbudget wie
-jemand, der sich ehrlich enthaelt -- und verliert die Information, wo nachzutasten waere.
+The third state is not a convenience, it is the core of the method. Forcing an uncertain cell
+into a decision costs twice as much correction budget as an honest abstention -- Reed-Solomon
+repairs twice as many erasures as errors -- and it throws away the very information that tells
+the solver where to look.
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ DARK, LIGHT, UNKNOWN = 1, 0, -1
 
 @dataclass
 class ModuleMatrix:
-    """Wahrscheinlichkeiten je Modul plus die vom Standard festgelegten Zellen."""
+    """Per-module probabilities plus the cells the standard fixes."""
 
     posterior: np.ndarray
     known_dark: np.ndarray
@@ -31,26 +32,26 @@ class ModuleMatrix:
         return self.known_dark | self.known_light
 
     def hard(self) -> np.ndarray:
-        """Beste Einzelschaetzung: Struktur gesetzt, Rest nach Wahrscheinlichkeit."""
+        """Best single estimate: structure fixed, everything else by probability."""
         out = self.posterior >= 0.5
         locked = self.locked
         out[locked] = self.known_dark[locked]
         return out
 
     def confidence(self) -> np.ndarray:
-        """Abstand zur Unentschiedenheit, 0 = auf der Kippe, 0.5 = eindeutig."""
+        """Distance from undecided: 0 means on the fence, 0.5 means unambiguous."""
         conf = np.abs(self.posterior - 0.5)
         conf[self.locked] = 0.5
         return conf
 
     def uncertain_cells(self, band: float = 0.15) -> np.ndarray:
-        """Indizes der Zellen, deren Wert offen ist -- nach Unsicherheit sortiert."""
+        """Indices of the cells still in doubt, least confident first."""
         conf = self.confidence()
-        flat = np.argsort(conf, axis=None)
-        return np.array([i for i in flat if conf.flat[i] < band], dtype=int)
+        order = np.argsort(conf, axis=None)
+        return np.array([i for i in order if conf.flat[i] < band], dtype=int)
 
     def states(self, band: float = 0.15) -> np.ndarray:
-        """Dreiwertige Sicht: DARK, LIGHT oder UNKNOWN je Zelle."""
+        """Three-valued view: DARK, LIGHT or UNKNOWN per cell."""
         conf = self.confidence()
         out = np.where(self.posterior >= 0.5, DARK, LIGHT).astype(np.int8)
         out[conf < band] = UNKNOWN
@@ -59,20 +60,19 @@ class ModuleMatrix:
         return out
 
     def to_ascii(self, band: float = 0.15) -> str:
-        """Textdarstellung fuer das Agenteninterface: '#' dunkel, '.' hell, '?' unbekannt."""
+        """Text rendering for the agent interface: '#' dark, '.' light, '?' unknown."""
         symbols = {DARK: "#", LIGHT: ".", UNKNOWN: "?"}
-        rows = self.states(band)
-        return "\n".join("".join(symbols[int(v)] for v in row) for row in rows)
+        return "\n".join("".join(symbols[int(v)] for v in row) for row in self.states(band))
 
     def flip_cost(self) -> np.ndarray:
-        """Kosten, eine Zelle gegen ihre wahrscheinlichere Deutung zu kippen.
+        """Cost of flipping a cell against its more likely reading.
 
-        Das ist das Log-Wahrscheinlichkeitsverhaeltnis: eine Zelle bei P=0.5 kostet nichts,
-        eine eindeutige kostet viel. Genau diese Reihenfolge tastet der Solver ab.
+        This is the log-likelihood ratio: a cell at P=0.5 is free to flip, an unambiguous one
+        is expensive. That ordering is exactly what the solver probes along.
         """
         p = np.clip(self.posterior, 1e-9, 1 - 1e-9)
         kept = np.maximum(p, 1 - p)
         flipped = np.minimum(p, 1 - p)
         cost = np.log(kept / flipped)
-        cost[self.locked] = np.inf  # Struktur wird nicht angetastet
+        cost[self.locked] = np.inf  # structure is never touched
         return cost

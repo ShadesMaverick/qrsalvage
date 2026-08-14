@@ -1,8 +1,8 @@
-"""Die Strukturmaske ist das Eichmass des ganzen Verfahrens.
+"""The structure mask is the calibration reference of the whole method.
 
-Ist sie falsch, misst sich alles andere an einer falschen Wahrheit -- und zwar lautlos, weil
-ein falsches Eichmass zu plausiblen Zahlen fuehrt. Deshalb wird sie gegen einen unabhaengigen
-Encoder geprueft und nicht gegen sich selbst.
+If it is wrong, everything else calibrates itself against a false truth -- silently, because a
+wrong reference still produces plausible numbers. So it is checked against an independent
+encoder rather than against itself.
 """
 
 from __future__ import annotations
@@ -21,64 +21,64 @@ from qrsalvage.core.structure import (
 
 
 @pytest.mark.parametrize("version", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
-def test_groesse_und_version_sind_umkehrbar(version):
+def test_size_and_version_round_trip(version):
     modules = modules_for_version(version)
     assert version_for_modules(modules) == version
     assert is_valid_size(modules)
 
 
-def test_ungueltige_groessen_werden_erkannt():
+def test_invalid_sizes_are_rejected():
     assert not is_valid_size(28)
     assert not is_valid_size(17)
 
 
-def _beispiel_je_version(hoechste: int = 7) -> dict[int, np.ndarray]:
-    """Sucht zu jeder Version einen wirklich kodierten Code.
+def _sample_per_version(highest: int = 7) -> dict[int, np.ndarray]:
+    """Find one genuinely encoded code for each version.
 
-    Die Nutzlastlaenge laesst sich nicht auf die Version zurueckrechnen -- der Encoder waehlt
-    Modus und Version selbst. Also wird gesucht statt gerechnet.
+    Payload length cannot be mapped back to a version -- the encoder picks mode and version
+    itself. So we search rather than calculate.
     """
-    gefunden: dict[int, np.ndarray] = {}
-    for laenge in range(1, 400, 3):
-        matrix = reencode("X" * laenge)
+    found: dict[int, np.ndarray] = {}
+    for length in range(1, 400, 3):
+        matrix = reencode("X" * length)
         version = version_for_modules(matrix.shape[0])
-        if 1 <= version <= hoechste:
-            gefunden.setdefault(version, matrix)
-        if len(gefunden) == hoechste:
+        if 1 <= version <= highest:
+            found.setdefault(version, matrix)
+        if len(found) == highest:
             break
-    return gefunden
+    return found
 
 
-BEISPIELE = _beispiel_je_version()
+SAMPLES = _sample_per_version()
 
 
-@pytest.mark.parametrize("version", sorted(BEISPIELE))
-def test_maske_stimmt_mit_echtem_encoder_ueberein(version):
-    """Der harte Test: ein wirklich kodierter Code muss die Maske exakt erfuellen.
+@pytest.mark.parametrize("version", sorted(SAMPLES))
+def test_mask_agrees_with_a_real_encoder(version):
+    """The hard test: a genuinely encoded code has to satisfy the mask exactly.
 
-    Deckt Fehler in der Alignment-Tabelle, den Separatoren und der Lage des festen dunklen
-    Moduls auf -- alles Stellen, an denen ein Vorzeichenfehler sonst unbemerkt bliebe.
+    Catches errors in the alignment table, the separators and the position of the always-dark
+    module -- all places where a sign error would otherwise go unnoticed.
     """
-    matrix = BEISPIELE[version]
+    matrix = SAMPLES[version]
     known_dark, known_light = structure_mask(matrix.shape[0])
-    assert matrix[known_dark].all(), "als dunkel bekannte Zelle ist im echten Code hell"
-    assert not matrix[known_light].any(), "als hell bekannte Zelle ist im echten Code dunkel"
+    assert matrix[known_dark].all(), "a cell known to be dark is light in the real code"
+    assert not matrix[known_light].any(), "a cell known to be light is dark in the real code"
 
 
-def test_dunkel_und_hell_ueberschneiden_sich_nicht():
+def test_dark_and_light_never_overlap():
     for modules in (21, 25, 29, 33, 37, 41, 45):
         known_dark, known_light = structure_mask(modules)
         assert not (known_dark & known_light).any()
 
 
-def test_maske_deckt_ein_viertel_des_codes_ab():
+def test_mask_covers_about_a_quarter_of_the_code():
     known_dark, known_light = structure_mask(29)
-    anteil = (known_dark | known_light).sum() / 29**2
-    assert 0.25 < anteil < 0.35
+    fraction = (known_dark | known_light).sum() / 29**2
+    assert 0.25 < fraction < 0.35
 
 
-def test_timing_erkennt_verschobenes_gitter():
+def test_timing_detects_a_shifted_grid():
     matrix = reencode("TIMING-PROBE")
     assert timing_score(matrix) == 1.0
-    verschoben = np.roll(matrix, 1, axis=1)
-    assert timing_score(verschoben) < 0.6
+    shifted = np.roll(matrix, 1, axis=1)
+    assert timing_score(shifted) < 0.6
