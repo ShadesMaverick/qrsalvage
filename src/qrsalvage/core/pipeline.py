@@ -54,6 +54,7 @@ class SolveResult:
     consensus: Consensus | None = None
     geometry: GeometryConsensus | None = None
     repair: RepairResult | None = None
+    inverted: bool = False
     failure: str | None = None
 
     @property
@@ -83,7 +84,7 @@ def detect_finders(binary: np.ndarray) -> list[tuple[float, float, float]]:
     return merge_finders(find_finders(binary), find_finders_scan(binary))
 
 
-def _search_scales(bgr: np.ndarray, scales=SCALES):
+def _search_scales(bgr: np.ndarray, scales=SCALES, invert: bool = False):
     """Look for the finders across a small scale pyramid and keep the best resolution.
 
     `prepare` is tuned for roughly nine pixels per module -- the adaptive threshold block is
@@ -107,7 +108,7 @@ def _search_scales(bgr: np.ndarray, scales=SCALES):
             candidate = cv2.resize(bgr, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
         if min(candidate.shape[:2]) < 80:
             continue
-        gray, binary = prepare(candidate)
+        gray, binary = prepare(candidate, invert=invert)
         finders = detect_finders(binary)
 
         spread = 1.0
@@ -121,7 +122,7 @@ def _search_scales(bgr: np.ndarray, scales=SCALES):
             break
 
     if not attempts:
-        gray, binary = prepare(bgr)
+        gray, binary = prepare(bgr, invert=invert)
         return bgr, gray, binary, detect_finders(binary)
 
     # Ranking, in this order: having three finders at all beats everything, because without
@@ -134,10 +135,49 @@ def _search_scales(bgr: np.ndarray, scales=SCALES):
         return (count < 3, round(spread, 2), index)
 
     _, _, _, candidate, gray, binary, finders = min(attempts, key=rank)
-    return _rescale_to_working_range(bgr, candidate, gray, binary, finders)
+    return _rescale_to_working_range(bgr, candidate, gray, binary, finders, invert)
 
 
-def _rescale_to_working_range(original, candidate, gray, binary, finders):
+def _attempt(bgr: np.ndarray, sizes, invert: bool, finder_points):
+    """One complete pass at one polarity: find the code, then fit every candidate grid."""
+    if finder_points is not None:
+        used = bgr
+        gray, binary = prepare(bgr, invert=invert)
+        finders = snap_to_finders(binary, finder_points)
+    else:
+        used, gray, binary, finders = _search_scales(bgr, invert=invert)
+
+    # Hand-placed centres are only ever approximate -- nobody clicks a module centre to the
+    # pixel. The refinement therefore starts with a much coarser step so it can walk back a
+    # misplaced click; with the automatic centres a fine step converges faster and better.
+    delta = 12.0 if finder_points else 3.0
+
+    fits: list[GridFit] = []
+    if len(finders) >= 3:
+        fits = fit_grid(gray, finders, sizes, start_delta=delta)
+    elif len(finders) == 2:
+        # One finder may be worn away entirely, or merely faded enough that neither detector
+        # recognises it -- both happen on real damage. The geometry is still determined up to
+        # six discrete choices, so all of them are fitted and the known cells decide. This path
+        # costs six times a normal fit, which is why it is a fallback.
+        for third in third_finder_candidates(finders[0], finders[1]):
+            if not (0 <= third[0] < gray.shape[1] and 0 <= third[1] < gray.shape[0]):
+                continue
+            fits.extend(fit_grid(gray, [*finders[:2], third], sizes, start_delta=max(delta, 8.0)))
+
+    return used, gray, binary, finders, fits, invert
+
+
+def _error_rate(attempt) -> float:
+    """Fraction of known cells the best grid of an attempt gets wrong. 1.0 if it found none."""
+    fits = attempt[4]
+    if not fits:
+        return 1.0
+    best = min(fits, key=lambda f: (f.wrong_known, -f.quality))
+    return best.wrong_known / max(best.known_total, 1)
+
+
+def _rescale_to_working_range(original, candidate, gray, binary, finders, invert=False):
     """Once the finders are found, redo the work at a resolution the preprocessing suits.
 
     The pyramid above searches blindly, because before the finders are found there is no way to
@@ -191,7 +231,7 @@ def _rescale_to_working_range(original, candidate, gray, binary, finders):
         fy=factor,
         interpolation=cv2.INTER_CUBIC if factor > 1 else cv2.INTER_AREA,
     )
-    retry_gray, retry_binary = prepare(resized)
+    retry_gray, retry_binary = prepare(resized, invert=invert)
     retry_finders = detect_finders(retry_binary)
     if len(retry_finders) < 3:
         return candidate, gray, binary, finders
@@ -259,6 +299,7 @@ def solve(
     band: float = 0.15,
     ensemble: str = "off",
     finder_points: list[tuple[float, float]] | None = None,
+    invert: bool | None = None,
 ) -> SolveResult:
     """Recover a QR code from a photograph. Never raises, always reports.
 
@@ -281,34 +322,24 @@ def solve(
         x0, y0, x1, y1 = crop
         bgr = bgr[y0:y1, x0:x1]
 
-    if finder_points is not None:
-        if len(finder_points) != 3:
-            raise ValueError("finder_points needs exactly three centre coordinates")
-        gray, binary = prepare(bgr)
-        finders = snap_to_finders(binary, finder_points)
-    else:
-        bgr, gray, binary, finders = _search_scales(bgr)
+    attempt = _attempt(bgr, sizes, bool(invert), finder_points)
+
+    # The polarity cannot be settled at the finder stage, which is where a first version of
+    # this tried to settle it. A finder pattern is nested squares, and its inverse is nested
+    # squares too, so the detector finds it in either polarity, at the same place, and looks
+    # equally convinced. What separates the two is what the cells then say: read at the wrong
+    # polarity, a perfectly placed grid gets a fifth of the known cells wrong. So the decision
+    # happens here, on the same evidence as the version and the scale.
+    if invert is None and _error_rate(attempt) > 0.05:
+        flipped = _attempt(bgr, sizes, True, finder_points)
+        if _error_rate(flipped) < _error_rate(attempt):
+            attempt = flipped
+
+    bgr, gray, binary, finders, fits, inverted = attempt
     if len(finders) < 2:
         return SolveResult(
             text=None, finders=finders, failure=f"only {len(finders)} finder candidates found"
         )
-
-    # Hand-placed centres are only ever approximate -- nobody clicks a module centre to the
-    # pixel. The refinement therefore starts with a much coarser step so it can walk back a
-    # misplaced click; with the automatic centres a fine step converges faster and better.
-    delta = 12.0 if finder_points else 3.0
-    if len(finders) >= 3:
-        fits = fit_grid(gray, finders, sizes, start_delta=delta)
-    else:
-        # Only two finders. One of them may be worn away entirely, or merely faded enough that
-        # neither detector recognises it -- both happen on real damage. The geometry is still
-        # determined up to six discrete choices, so all of them are fitted and the known cells
-        # decide. This path costs six times a normal fit, which is why it is a fallback.
-        fits = []
-        for third in third_finder_candidates(finders[0], finders[1]):
-            if not (0 <= third[0] < gray.shape[1] and 0 <= third[1] < gray.shape[0]):
-                continue
-            fits.extend(fit_grid(gray, [*finders[:2], third], sizes, start_delta=max(delta, 8.0)))
     if not fits:
         return SolveResult(text=None, finders=finders, failure="no grid could be fitted")
 
@@ -378,5 +409,6 @@ def solve(
         consensus=consensus,
         geometry=geometry,
         repair=repair_result,
+        inverted=inverted,
         failure=None if search.text else "no valid code in the searched space",
     )

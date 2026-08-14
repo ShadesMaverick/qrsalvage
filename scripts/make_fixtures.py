@@ -64,6 +64,15 @@ CASES: tuple[tuple[str, str, Damage, int], ...] = (
         Damage(contrast=0.18, curvature=0.30, module_px=22.0),
         5,
     ),
+    (
+        # Light modules on a dark ground, as on a laser-etched metal part or dark plastic.
+        # Everything downstream assumes dark modules, so before polarity was handled this
+        # case was not merely hard, it was invisible.
+        "inverted-polarity",
+        "QRSALVAGE-SYNTHETIC-CASE-006-INVERTED",
+        Damage(contrast=0.18, curvature=0.35, stain=0.10, inverted=True),
+        6,
+    ),
 )
 
 

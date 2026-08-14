@@ -34,6 +34,8 @@ def _report(result, out: Path, band: float) -> None:
     if result.wrong_sampled != result.wrong_known:
         print(f"                   {result.wrong_sampled} after sampling")
     print(f"timing pattern:    {result.timing * 100:.1f} %")
+    if result.inverted:
+        print("polarity:          inverted (light modules on a dark ground)")
     print(f"uncertain cells:   {result.uncertain} of {result.modules**2} (band {band})")
     print(f"decode attempts:   {result.candidates_tried}")
 

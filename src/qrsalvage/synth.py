@@ -33,6 +33,10 @@ class Damage:
     blur: float = 1.2
     noise: float = 4.0
     rotation_deg: float = 0.0
+    # Light modules on a dark ground: etched into dark plastic, lasered onto metal, printed
+    # white on black. Common enough on hardware labels, and invisible to a pipeline that
+    # assumes dark modules.
+    inverted: bool = False
 
 
 def _cylinder_map(shape: tuple[int, int], curvature: float):
@@ -93,6 +97,11 @@ def render_photo(matrix: np.ndarray, damage: Damage, seed: int = 0) -> np.ndarra
 
     if damage.blur > 0:
         img = cv2.GaussianBlur(img, (0, 0), damage.blur)
+
+    if damage.inverted:
+        # Inverted at the end, after glare and stains, so those keep behaving like light
+        # falling on a surface rather than like a second, negated illumination.
+        img = 1.0 - img
 
     out = np.clip(img * 255.0 + rng.normal(0, damage.noise, img.shape), 0, 255).astype(np.uint8)
     return cv2.cvtColor(out, cv2.COLOR_GRAY2BGR)
