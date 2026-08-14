@@ -63,6 +63,13 @@ class SolveResult:
 
 SCALES = (1.0, 0.6, 0.4, 0.25)
 
+# The band of pixels-per-module that prepare() is built for, and the value to aim at when a
+# rescale is needed. Below the band a fixed 1.5 px blur smears neighbouring modules together;
+# above it the adaptive threshold block covers too few modules to follow the illumination.
+GOOD_MODULE_PX = (7.0, 16.0)
+TARGET_MODULE_PX = 11.0
+MAX_DIMENSION = 4000
+
 
 def detect_finders(binary: np.ndarray) -> list[tuple[float, float, float]]:
     """Both detectors, merged.
@@ -84,7 +91,11 @@ def _search_scales(bgr: np.ndarray, scales=SCALES):
     the code. On a photograph taken closer, or with a better camera, a module can span twenty
     pixels; the block is then two modules wide and starts thresholding the modules themselves,
     and the finder search collapses. Downscaling puts the ratio back where the parameters
-    assume it. The image is not scaled *up*, because that invents no detail.
+    assume it.
+
+    This pass searches blind and only downwards, because a code too small to read is still
+    findable while one whose modules are too large is not. Once something is found,
+    :func:`_rescale_to_working_range` corrects the resolution in either direction.
 
     Returns the image actually used, so every coordinate downstream refers to it.
     """
@@ -123,7 +134,68 @@ def _search_scales(bgr: np.ndarray, scales=SCALES):
         return (count < 3, round(spread, 2), index)
 
     _, _, _, candidate, gray, binary, finders = min(attempts, key=rank)
-    return candidate, gray, binary, finders
+    return _rescale_to_working_range(bgr, candidate, gray, binary, finders)
+
+
+def _rescale_to_working_range(original, candidate, gray, binary, finders):
+    """Once the finders are found, redo the work at a resolution the preprocessing suits.
+
+    The pyramid above searches blindly, because before the finders are found there is no way to
+    know how large a module is. Afterwards there is: a finder is seven modules wide. If that
+    puts the module outside the band prepare() is built for, one more pass at the right scale
+    is worth far more than any amount of parameter fiddling.
+
+    Both directions matter, and the upward one is easy to talk yourself out of. Enlarging adds
+    no information -- but it changes the ratio between the fixed 1.5 px blur and the module,
+    and at five pixels per module that blur spans a third of a module and merges neighbours. On
+    a Matter label photographed from a normal distance this step is the difference between four
+    wrong known cells and none, between no result and the payload.
+    """
+    if len(finders) < 3:
+        return candidate, gray, binary, finders
+
+    widths = [w for _, _, w in select_finder_triple(finders) if w > 0]
+    if not widths:
+        return candidate, gray, binary, finders
+    module_px = (sum(widths) / len(widths)) / 7.0
+    if GOOD_MODULE_PX[0] <= module_px <= GOOD_MODULE_PX[1]:
+        return candidate, gray, binary, finders
+
+    # Crop to the code before rescaling. The finders say where it is, and enlarging a whole
+    # photograph to reach the right module size is both slow and pointless -- on a label
+    # photographed at arm's length the code is a fiftieth of the frame. Cropping first took
+    # this path from 63 seconds to a few.
+    ratio = original.shape[1] / candidate.shape[1]
+    triple = select_finder_triple(finders)
+    margin = 2.0 * max(w for _, _, w in triple)
+    xs = [x for x, _, _ in triple]
+    ys = [y for _, y, _ in triple]
+    x0 = max(0, int((min(xs) - margin) * ratio))
+    y0 = max(0, int((min(ys) - margin) * ratio))
+    x1 = min(original.shape[1], int((max(xs) + margin) * ratio))
+    y1 = min(original.shape[0], int((max(ys) + margin) * ratio))
+    if x1 - x0 < 40 or y1 - y0 < 40:
+        return candidate, gray, binary, finders
+    region = original[y0:y1, x0:x1]
+
+    factor = TARGET_MODULE_PX / (module_px * ratio)
+    if max(region.shape[:2]) * factor > MAX_DIMENSION:
+        factor = MAX_DIMENSION / max(region.shape[:2])
+    if not 0.05 < factor < 8.0:
+        return candidate, gray, binary, finders
+
+    resized = cv2.resize(
+        region,
+        None,
+        fx=factor,
+        fy=factor,
+        interpolation=cv2.INTER_CUBIC if factor > 1 else cv2.INTER_AREA,
+    )
+    retry_gray, retry_binary = prepare(resized)
+    retry_finders = detect_finders(retry_binary)
+    if len(retry_finders) < 3:
+        return candidate, gray, binary, finders
+    return resized, retry_gray, retry_binary, retry_finders
 
 
 def snap_to_finders(binary: np.ndarray, points, radius: float = 60.0):
