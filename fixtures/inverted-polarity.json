@@ -1,0 +1,23 @@
+{
+  "source": "synthetically generated, see scripts/make_fixtures.py",
+  "expected_sha256": "0f6ad554ff0113d5e9e04fe38646f1c5c4a4c8f57930c0eb09835d76aed2ec0a",
+  "expected_length": 37,
+  "expected_prefix": "QRSALVAGE-SYNTHETIC-CASE-006-INVERTED",
+  "crop": null,
+  "qr_modules": 25,
+  "damage": {
+    "module_px": 9.0,
+    "curvature": 0.35,
+    "raster_period": 3.0,
+    "raster_depth": 0.55,
+    "contrast": 0.18,
+    "glare": 0.35,
+    "stain": 0.1,
+    "blur": 1.2,
+    "noise": 4.0,
+    "rotation_deg": 0.0,
+    "inverted": true
+  },
+  "seed": 6,
+  "synthetic": true
+}

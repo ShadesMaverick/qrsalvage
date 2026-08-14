@@ -53,6 +53,36 @@ def test_success_rate_for_a_larger_code():
     assert solved >= 6, f"only {solved} of 8 solved"
 
 
+def test_inverted_polarity_is_found_not_assumed():
+    """Light modules on a dark ground, as on an etched metal part.
+
+    The polarity deliberately cannot be settled at the finder stage, and an earlier version
+    that tried failed on the *easiest* inverted cases: a finder pattern is nested squares and
+    so is its inverse, so the detector finds it in either polarity, at the same place, looking
+    equally sure. Only the known cells separate the two -- read at the wrong polarity, a
+    perfectly placed grid gets about a fifth of them wrong.
+    """
+    damage = Damage(contrast=0.20, curvature=0.30, inverted=True)
+    photo = render_photo(reencode(TEXT), damage, seed=0)
+
+    result = solve(photo)
+    assert result.text == TEXT
+    assert result.inverted is True
+    assert result.wrong_known == 0
+
+    # Forcing the wrong polarity has to fail loudly rather than quietly return nonsense.
+    forced = solve(photo, invert=False)
+    assert forced.text != TEXT
+    assert forced.wrong_known > result.known_total * 0.1
+
+
+def test_ordinary_codes_are_not_mistaken_for_inverted():
+    photo = render_photo(reencode(TEXT), Damage(contrast=0.20, curvature=0.30), seed=0)
+    result = solve(photo)
+    assert result.solved
+    assert result.inverted is False
+
+
 def test_version_is_measured_not_guessed():
     photo = render_photo(reencode(TEXT), Damage(contrast=0.25, curvature=0.25), seed=0)
     result = solve(photo)

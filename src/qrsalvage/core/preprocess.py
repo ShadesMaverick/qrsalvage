@@ -19,14 +19,24 @@ def flat_field(channel: np.ndarray) -> np.ndarray:
 
 
 def prepare(
-    bgr: np.ndarray, channel: int = 0, clip_limit: float = 3.0, blur_sigma: float = 1.5
+    bgr: np.ndarray,
+    channel: int = 0,
+    clip_limit: float = 3.0,
+    blur_sigma: float = 1.5,
+    invert: bool = False,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Return (grayscale image for sampling, binary image for finder search).
 
     The blue channel is the default: on a laser engraving in white plastic it carries
     noticeably more contrast than luminance does.
+
+    `invert` handles codes that are light on a dark ground -- etched into dark plastic, lasered
+    onto metal, printed white on black. Everything downstream assumes dark modules, so the
+    inversion happens here, once, and the rest of the pipeline never learns about it.
     """
     chan = bgr[:, :, channel] if bgr.ndim == 3 else bgr
+    if invert:
+        chan = 255 - chan
     flat = flat_field(chan)
     tonal = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=(8, 8)).apply(flat)
     gray = cv2.GaussianBlur(tonal, (0, 0), blur_sigma)

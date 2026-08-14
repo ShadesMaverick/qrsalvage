@@ -15,7 +15,8 @@
     "stain": 0.0,
     "blur": 1.2,
     "noise": 4.0,
-    "rotation_deg": 0.0
+    "rotation_deg": 0.0,
+    "inverted": false
   },
   "seed": 0,
   "synthetic": true
