@@ -38,6 +38,8 @@
     font: 600 1.55rem/1 var(--mono); letter-spacing: .04em; margin: 0;
   }
   .tagline { color: var(--muted); margin: 0 0 2rem 0; font-size: .95rem; }
+  .tagline a { color: var(--pink-soft); border-bottom: 1px solid transparent; }
+  .tagline a:hover { border-bottom-color: var(--pink-soft); }
 
   /* --- drop zone ------------------------------------------------------------------ */
   #drop {
@@ -140,7 +142,8 @@
     <img src="/axolotl.png" alt="" width="132">
     <div>
       <h1>qrsalvage</h1>
-      <p class="tagline">recover QR codes from what's left of them</p>
+      <p class="tagline">recover QR codes from what's left of them
+        &nbsp;·&nbsp; <a href="/method">how it works</a></p>
     </div>
   </header>
 
@@ -411,4 +414,5 @@ function escapeHtml(s) {
 </script>
 </body>
 </html>
+
 
