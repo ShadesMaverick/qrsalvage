@@ -112,6 +112,39 @@ def select_finder_triple(candidates, limit: int = 10):
     return best if best is not None else list(pool[:3])
 
 
+def third_finder_candidates(a, b) -> list[tuple[float, float, float]]:
+    """Where the missing third finder could be, given two that were found.
+
+    A QR code is square, so two finder centres already fix the geometry up to a small number of
+    discrete choices. Either the two are adjacent -- then the third sits perpendicular to their
+    line, at the same distance, from one end or the other, on one side or the other. Or they are
+    the diagonal pair, and the third completes a right isoceles triangle on one side or the
+    other. Six candidates in total.
+
+    They are not distinguished here. That is deliberate: the grid fit already scores every
+    candidate against the cells the standard fixes, and a wrong corner produces an obviously
+    worse score than the right one. Guessing badly is cheap; guessing silently is not.
+    """
+    pa = np.array([a[0], a[1]], dtype=np.float64)
+    pb = np.array([b[0], b[1]], dtype=np.float64)
+    width = (a[2] + b[2]) / 2.0
+    delta = pb - pa
+    distance = float(np.linalg.norm(delta))
+    if distance < 1e-6:
+        return []
+    perpendicular = np.array([-delta[1], delta[0]]) / distance
+
+    candidates: list[np.ndarray] = []
+    for sign in (1.0, -1.0):
+        offset = perpendicular * distance * sign
+        candidates.append(pa + offset)
+        candidates.append(pb + offset)
+        # The diagonal reading: a and b are opposite corners, the third completes the square.
+        candidates.append((pa + pb) / 2.0 + perpendicular * (distance / 2.0) * sign)
+
+    return [(float(p[0]), float(p[1]), width) for p in candidates]
+
+
 def order_finders(finders):
     """Order three finders into (top-left, top-right, bottom-left).
 
