@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>qrsalvage</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23232f3a'/%3E%3Crect x='8' y='3' width='7' height='7' fill='none' stroke='%23f2f4f5' stroke-width='1'/%3E%3Crect x='10' y='5' width='3' height='3' fill='%23f2f4f5'/%3E%3Crect x='5' y='4' width='2' height='2' fill='%23f07ea3'/%3E%3Crect x='2' y='7' width='2' height='2' fill='%23f07ea3'/%3E%3Crect x='5' y='10' width='2' height='2' fill='%23f2f4f5'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg:        #1b252e;
+    --bg-lift:   #232f3a;
+    --panel:     #26333f;
+    --panel-in:  #1f2a34;
+    --line:      #37485a;
+    --fg:        #f2f4f5;
+    --muted:     #93a3b0;
+    --pink:      #f07ea3;
+    --pink-soft: #f7b3c8;
+    --ok:        #8fd3b0;
+    --warn:      #e0b356;
+    --bad:       #e0644a;
+    --mono: ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { color-scheme: dark; }
+  body {
+    margin: 0; padding: 2.5rem 1.25rem 5rem; color: var(--fg);
+    background: radial-gradient(120% 90% at 50% 0%, var(--bg-lift) 0%, var(--bg) 62%) fixed;
+    min-height: 100vh;
+    font: 15px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { max-width: 64rem; margin: 0 auto; }
+
+  /* --- identity ------------------------------------------------------------------- */
+  header { display: flex; align-items: center; gap: .85rem; margin-bottom: .3rem; }
+  header svg { flex: none; }
+  h1 {
+    font: 600 1.55rem/1 var(--mono); letter-spacing: .04em; margin: 0;
+  }
+  .tagline { color: var(--muted); margin: 0 0 2rem 3.6rem; font-size: .95rem; }
+
+  /* --- drop zone ------------------------------------------------------------------ */
+  #drop {
+    position: relative; border-radius: 14px; padding: 3.25rem 1.5rem; text-align: center;
+    cursor: pointer; background: var(--panel); border: 1px solid var(--line);
+    transition: border-color .18s, background .18s, transform .18s;
+  }
+  #drop::before {
+    content: ""; position: absolute; inset: 9px; border-radius: 8px; pointer-events: none;
+    border: 2px dashed var(--line); transition: border-color .18s;
+  }
+  #drop:hover, #drop.over { background: #2b3844; }
+  #drop:hover::before, #drop.over::before { border-color: var(--pink); }
+  #drop.over { transform: scale(1.006); border-color: var(--pink); }
+  #drop strong { font-size: 1.05rem; }
+  #drop .hint { color: var(--muted); font-size: .87rem; margin: .45rem 0 0; }
+
+  /* --- layout --------------------------------------------------------------------- */
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 1.1rem; margin-top: 1.4rem; }
+  @media (max-width: 46rem) { .row { grid-template-columns: 1fr; } }
+  .panel {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 1.1rem;
+  }
+  .panel h2 {
+    display: flex; align-items: center; gap: .5rem;
+    font: 600 .72rem/1 var(--mono); text-transform: uppercase; letter-spacing: .12em;
+    color: var(--muted); margin: 0 0 .9rem;
+  }
+  .panel h2::before {
+    content: ""; width: 7px; height: 7px; background: var(--pink); flex: none;
+  }
+  canvas, .panel img {
+    max-width: 100%; display: block; border-radius: 8px; background: var(--panel-in);
+  }
+  canvas { cursor: crosshair; }
+
+  dl { display: grid; grid-template-columns: auto 1fr; gap: .42rem 1rem; margin: 0; }
+  dt { color: var(--muted); }
+  dd { margin: 0; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .ok { color: var(--ok); } .warn { color: var(--warn); } .bad { color: var(--bad); }
+
+  /* --- payload -------------------------------------------------------------------- */
+  .payload {
+    margin-top: 1.4rem; padding: 1.15rem 1.25rem; border-radius: 12px;
+    background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--pink);
+  }
+  .payload.miss { border-left-color: var(--bad); }
+  .payload .label { font: 600 .72rem/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; }
+  .payload code {
+    display: block; margin-top: .7rem; padding: .7rem .85rem; border-radius: 8px;
+    background: var(--panel-in); font: 14px/1.55 var(--mono); word-break: break-all;
+    user-select: all;
+  }
+
+  /* --- controls ------------------------------------------------------------------- */
+  .actions { display: flex; gap: .55rem; flex-wrap: wrap; margin-top: 1rem; }
+  button {
+    font: 500 .88rem/1 inherit; padding: .55rem 1rem; border-radius: 8px;
+    border: 1px solid var(--line); background: var(--panel-in); color: var(--fg);
+    cursor: pointer; transition: border-color .15s, color .15s;
+  }
+  button:hover { border-color: var(--pink); color: var(--pink-soft); }
+  a { color: inherit; text-decoration: none; }
+  .note { color: var(--muted); font-size: .85rem; margin-top: .65rem; min-height: 1.2em; }
+  .note em { color: var(--pink-soft); font-style: normal; }
+
+  details.panel { margin-top: 1.4rem; }
+  summary { cursor: pointer; color: var(--muted); font: 600 .72rem/1 var(--mono);
+            letter-spacing: .12em; text-transform: uppercase; }
+  pre.grid {
+    font: 10px/1 var(--mono); overflow-x: auto; margin: .9rem 0 0; letter-spacing: .55px;
+    color: var(--muted);
+  }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <!-- The mark: a finder pattern dissolving into loose modules. Same motif as the logo,
+         but legible at favicon size, where the axolotl is not. -->
+    <svg width="40" height="40" viewBox="0 0 16 16" aria-hidden="true">
+      <rect x="8" y="3" width="7" height="7" fill="none" stroke="#f2f4f5" stroke-width="1"/>
+      <rect x="10" y="5" width="3" height="3" fill="#f2f4f5"/>
+      <rect x="5" y="4" width="2" height="2" fill="#f07ea3"/>
+      <rect x="2" y="7" width="2" height="2" fill="#f07ea3"/>
+      <rect x="5" y="10" width="2" height="2" fill="#f2f4f5"/>
+      <rect x="1" y="12" width="1" height="1" fill="#93a3b0"/>
+      <rect x="7" y="1" width="1" height="1" fill="#93a3b0"/>
+    </svg>
+    <h1>qrsalvage</h1>
+  </header>
+  <p class="tagline">recover QR codes from what's left of them</p>
+
+  <div id="drop">
+    <p><strong>Drop a photograph here</strong> &nbsp;or click to choose one</p>
+    <p class="hint">Processed on this machine. Nothing is uploaded, nothing leaves it.</p>
+    <input id="file" type="file" accept="image/*" class="hidden">
+  </div>
+
+  <div id="status" class="note"></div>
+
+  <div id="results" class="hidden">
+    <div class="row">
+      <div class="panel">
+        <h2>Input</h2>
+        <canvas id="photo"></canvas>
+        <div class="note" id="canvasNote"></div>
+        <div class="actions">
+          <button id="retry" class="hidden">Mark the three finders by hand</button>
+          <button id="cancel" class="hidden">Cancel</button>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>Diagnostics</h2>
+        <dl id="metrics"></dl>
+      </div>
+    </div>
+
+    <div class="payload" id="payload"></div>
+    <div class="row" id="images"></div>
+
+    <details class="panel">
+      <summary>Sampled matrix &mdash; # dark, . light, ? unknown</summary>
+      <pre class="grid" id="grid"></pre>
+    </details>
+  </div>
+</main>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const drop = $("drop"), fileInput = $("file"), status = $("status");
+const canvas = $("photo"), ctx = canvas.getContext("2d");
+
+let imageDataUrl = null;
+let bitmap = null;
+let picking = false;
+let picked = [];
+
+drop.addEventListener("click", () => fileInput.click());
+drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
+drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+drop.addEventListener("drop", (e) => {
+  e.preventDefault(); drop.classList.remove("over");
+  if (e.dataTransfer.files[0]) load(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener("change", () => { if (fileInput.files[0]) load(fileInput.files[0]); });
+
+function load(file) {
+  const reader = new FileReader();
+  reader.onload = async () => {
+    imageDataUrl = reader.result;
+    bitmap = await createImageBitmap(file);
+    picked = []; picking = false;
+    draw();
+    solve();
+  };
+  reader.readAsDataURL(file);
+}
+
+function draw(detected) {
+  if (!bitmap) return;
+  const width = Math.min(bitmap.width, 520);
+  const scale = width / bitmap.width;
+  canvas.width = width;
+  canvas.height = Math.round(bitmap.height * scale);
+  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  canvas.dataset.scale = scale;
+
+  // What the detector found, quietly; what the user clicked, loudly.
+  for (const p of detected || []) ring(p.x * scale, p.y * scale, 11, "#93a3b0", 1.5);
+  picked.forEach((p, i) => {
+    ring(p.x * scale, p.y * scale, 11, "#f07ea3", 2.5);
+    ctx.fillStyle = "#f07ea3";
+    ctx.font = "600 13px ui-monospace, monospace";
+    ctx.fillText(String(i + 1), p.x * scale + 15, p.y * scale + 5);
+  });
+}
+
+function ring(x, y, r, colour, width) {
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.strokeStyle = colour; ctx.lineWidth = width; ctx.stroke();
+}
+
+canvas.addEventListener("click", (e) => {
+  if (!picking) return;
+  const rect = canvas.getBoundingClientRect();
+  const scale = parseFloat(canvas.dataset.scale);
+  const x = ((e.clientX - rect.left) * (canvas.width / rect.width)) / scale;
+  const y = ((e.clientY - rect.top) * (canvas.height / rect.height)) / scale;
+  picked.push({ x, y });
+  draw();
+  $("canvasNote").innerHTML = picked.length < 3
+    ? `<em>${picked.length} of 3</em> marked — click the centre of the next corner square.`
+    : "Three marked, recovering…";
+  if (picked.length === 3) { picking = false; solve(picked); }
+});
+
+async function solve(points) {
+  status.textContent = "recovering…";
+  let answer;
+  try {
+    const response = await fetch("/api/solve", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image: imageDataUrl, finder_points: points || null }),
+    });
+    answer = await response.json();
+  } catch (err) {
+    status.textContent = "the local server did not answer: " + err;
+    return;
+  }
+  status.textContent = "";
+  render(answer);
+}
+
+function render(a) {
+  $("results").classList.remove("hidden");
+  draw(picked.length ? null : a.finders);
+
+  const rows = [];
+  const push = (k, v, cls) =>
+    rows.push(`<dt>${k}</dt><dd${cls ? ` class="${cls}"` : ""}>${v}</dd>`);
+
+  push("image", `${a.width} × ${a.height} px`);
+  push("finders", a.finders.length, a.finders.length >= 3 ? "" : "bad");
+  if (a.modules) {
+    push("version", `${a.version} · ${a.modules} modules`);
+    const rate = a.wrong_known / a.known_total;
+    push("known cells wrong", `${a.wrong_known} / ${a.known_total}`,
+         rate > 0.05 ? "bad" : rate > 0.01 ? "warn" : "ok");
+    push("timing pattern", `${a.timing} %`, a.timing < 100 ? "warn" : "ok");
+    push("uncertain", `${a.uncertain} / ${a.modules * a.modules}`);
+    push("decode attempts", a.candidates_tried);
+    if (a.repair) push("reed-solomon", a.repair);
+  }
+  $("metrics").innerHTML = rows.join("");
+
+  const payload = $("payload");
+  payload.classList.toggle("miss", !a.ok);
+  payload.innerHTML = a.ok
+    ? `<div class="label" style="color:var(--pink)">recovered · ${a.text.length} characters</div>
+       <code>${escapeHtml(a.text)}</code>`
+    : `<div class="label" style="color:var(--bad)">not recovered</div>
+       <div class="note">${escapeHtml(a.failure || "unknown reason")}</div>`;
+
+  const offerManual = !a.ok || a.finders.length < 3;
+  $("retry").classList.toggle("hidden", !offerManual || picking);
+  $("cancel").classList.add("hidden");
+
+  const images = $("images");
+  images.innerHTML = "";
+  if (a.reconstructed_png)
+    images.appendChild(panel("Recovered matrix", a.reconstructed_png, "reconstructed.png"));
+  if (a.clean_png)
+    images.appendChild(panel("Re-encoded · standards clean", a.clean_png, "qrsalvage.png"));
+
+  $("grid").textContent = a.grid || "(no grid sampled)";
+}
+
+function panel(title, dataUrl, filename) {
+  const div = document.createElement("div");
+  div.className = "panel";
+  div.innerHTML = `<h2>${title}</h2><img src="${dataUrl}" alt="${title}">
+    <div class="actions"><a download="${filename}" href="${dataUrl}"><button>Download PNG</button></a></div>`;
+  return div;
+}
+
+$("retry").addEventListener("click", () => {
+  picked = []; picking = true; draw();
+  $("retry").classList.add("hidden");
+  $("cancel").classList.remove("hidden");
+  $("canvasNote").innerHTML =
+    "Click the centre of each of the three large corner squares, <em>in any order</em>. " +
+    "Roughly is enough — the click only picks the candidate, the position comes from the image.";
+});
+$("cancel").addEventListener("click", () => {
+  picked = []; picking = false; draw();
+  $("cancel").classList.add("hidden");
+  $("retry").classList.remove("hidden");
+  $("canvasNote").textContent = "";
+});
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"]/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+}
+</script>
+</body>
+</html>
