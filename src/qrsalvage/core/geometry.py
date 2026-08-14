@@ -60,6 +60,58 @@ def find_finders(binary: np.ndarray, min_size: int = 20) -> list[tuple[float, fl
     return merged
 
 
+def select_finder_triple(candidates, limit: int = 10):
+    """Pick the three candidates that actually look like one code's finders.
+
+    Taking the three largest is wrong, and it fails on exactly the photographs people bring:
+    a bulb rim, a label edge or a reflection produces a large false candidate that outranks the
+    real ones. The three genuine finders always share two properties instead -- nearly identical
+    width, and an arrangement of two equal, perpendicular sides. Both are scored here, and the
+    best-scoring triple wins.
+    """
+    pool = candidates[:limit]
+    if len(pool) < 3:
+        return list(candidates[:3])
+
+    best, best_score = None, np.inf
+    for i in range(len(pool)):
+        for j in range(i + 1, len(pool)):
+            for k in range(j + 1, len(pool)):
+                triple = [pool[i], pool[j], pool[k]]
+                widths = [w for _, _, w in triple]
+                if min(widths) <= 0:
+                    continue
+                width_spread = (max(widths) - min(widths)) / max(widths)
+
+                points = [np.array([x, y], dtype=np.float64) for x, y, _ in triple]
+                corner_scores = []
+                for c in range(3):
+                    a, b = (points[m] for m in range(3) if m != c)
+                    v1, v2 = a - points[c], b - points[c]
+                    n1, n2 = float(np.linalg.norm(v1)), float(np.linalg.norm(v2))
+                    if n1 < 1e-6 or n2 < 1e-6:
+                        continue
+                    right_angle = abs(float(np.dot(v1, v2))) / (n1 * n2)
+                    equal_sides = abs(n1 - n2) / max(n1, n2)
+                    corner_scores.append(right_angle + equal_sides)
+                if not corner_scores:
+                    continue
+
+                # A code smaller than a few finder widths across is a coincidence, not a code.
+                span = min(
+                    float(np.linalg.norm(points[a] - points[b]))
+                    for a, b in ((0, 1), (0, 2), (1, 2))
+                )
+                if span < 2.0 * max(widths):
+                    continue
+
+                score = min(corner_scores) + 2.0 * width_spread
+                if score < best_score:
+                    best_score, best = score, triple
+
+    return best if best is not None else list(pool[:3])
+
+
 def order_finders(finders):
     """Order three finders into (top-left, top-right, bottom-left).
 

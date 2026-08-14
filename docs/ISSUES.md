@@ -85,9 +85,19 @@ Modulgröße über die Lesbarkeit, nicht die Bildauflösung. Rasterformate allei
 
 ---
 
-## 5. Grafische Oberfläche
+## 5. Grafische Oberfläche — ERLEDIGT
 
 **Labels:** `feature`
+
+Gebaut: `src/qrsalvage/server.py` und `web/index.html`, Aufruf `qrsalvage serve`. Nur auf
+127.0.0.1, eine statische Datei, kein Build-Schritt. Drag-and-drop, Kennzahlen, Downloads,
+und der Notausgang mit drei Klicks — der verträgt 45 px Ungenauigkeit, weil der Klick nur
+den Kandidaten auswählt und die Position aus dem Bild kommt.
+
+Offen bleibt daraus nur: die Exporte aus Nr. 4 anbinden, sobald es sie gibt. Derzeit gibt es
+PNG-Downloads.
+
+<details><summary>ursprüngliche Beschreibung</summary>
 
 Eine einzelne HTML-Datei mit Canvas, ausgeliefert von einem lokalen Python-Server. Kein npm,
 kein Build-Schritt.
@@ -100,6 +110,8 @@ Ergebnis bekommen, ohne ein Venv aufzusetzen.
 - Manuelle Gitterkorrektur als Notausgang, wenn die Findersuche versagt (drei Finderzentren
   plus vierter Punkt anklicken)
 - Downloads der Exporte aus Nr. 4
+
+</details>
 
 ---
 

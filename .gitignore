@@ -20,3 +20,7 @@ CLAUDE.local.md
 # Private Testfaelle: echte Fotos und ihre Ergebnisse verlassen den Rechner nicht.
 # Das oeffentliche Korpus in fixtures/ ist synthetisch, siehe scripts/make_fixtures.py
 fixtures-local/
+
+# Logo-Entwuerfe: noch nicht final und mit Wasserzeichen des Generators.
+# Das fertige Logo kommt nach docs/, wenn es steht.
+idea_for_icon/

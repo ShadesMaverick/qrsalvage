@@ -54,6 +54,8 @@ Es gibt keinen Build-Schritt. Die Oberfläche ist eine statische HTML/JS-Datei, 
 - `src/qrsalvage/synth.py` — künstlich verdorbene Fälle mit bekannter Antwort
 - `src/qrsalvage/cli.py` — Textinterface, zugleich der Agentenweg. Alles Ausgeben und Schreiben
   passiert hier, nie im Kern.
+- `src/qrsalvage/server.py` + `web/index.html` — lokale Oberfläche, nur auf 127.0.0.1,
+  eine statische Datei ohne Build-Schritt
 - `fixtures/` — synthetisches, öffentliches Korpus (`scripts/make_fixtures.py`)
 - `fixtures-local/` — echte Fotos, gitignoriert, verlassen den Rechner nicht
 - `tests/`, `scripts/` (Messwerkzeuge, kein Produktionscode)

@@ -93,6 +93,12 @@ def cmd_synth(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_serve(args: argparse.Namespace) -> int:
+    from .server import serve
+
+    return serve(port=args.port, open_browser=not args.no_browser)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="qrsalvage", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -114,6 +120,11 @@ def main(argv: list[str] | None = None) -> int:
     synth.add_argument("--seed", type=int, default=0)
     synth.add_argument("--out", type=Path, default=Path("out"))
     synth.set_defaults(func=cmd_synth)
+
+    ui = sub.add_parser("serve", help="open the local web interface")
+    ui.add_argument("--port", type=int, default=8765)
+    ui.add_argument("--no-browser", action="store_true", help="do not open a browser window")
+    ui.set_defaults(func=cmd_serve)
 
     args = parser.parse_args(argv)
     return int(args.func(args))

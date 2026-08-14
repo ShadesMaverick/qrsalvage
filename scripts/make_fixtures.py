@@ -53,6 +53,17 @@ CASES: tuple[tuple[str, str, Damage, int], ...] = (
         Damage(contrast=0.20, curvature=0.20, module_px=5.5, blur=0.9),
         3,
     ),
+    (
+        # Regression for a failure that is easy to miss because it looks like the opposite of a
+        # problem: a photograph that is too *good*. At 22 px per module the adaptive threshold
+        # block spans barely two modules and starts thresholding the code instead of the
+        # illumination. Before the scale pyramid, the finder search found one finder here and
+        # none at 26 px, while the same code at 9 px solved without trouble.
+        "high-resolution",
+        "QRSALVAGE-SYNTHETIC-CASE-005-HIGH-RESOLUTION",
+        Damage(contrast=0.18, curvature=0.30, module_px=22.0),
+        5,
+    ),
 )
 
 
