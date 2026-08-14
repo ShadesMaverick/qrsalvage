@@ -21,6 +21,7 @@ from .geometry import (
     order_finders,
     refine_corners,
     select_finder_triple,
+    third_finder_candidates,
 )
 from .matrix import ModuleMatrix
 from .preprocess import prepare
@@ -215,7 +216,7 @@ def solve(
         finders = snap_to_finders(binary, finder_points)
     else:
         bgr, gray, binary, finders = _search_scales(bgr)
-    if len(finders) < 3:
+    if len(finders) < 2:
         return SolveResult(
             text=None, finders=finders, failure=f"only {len(finders)} finder candidates found"
         )
@@ -223,7 +224,19 @@ def solve(
     # Hand-placed centres are only ever approximate -- nobody clicks a module centre to the
     # pixel. The refinement therefore starts with a much coarser step so it can walk back a
     # misplaced click; with the automatic centres a fine step converges faster and better.
-    fits = fit_grid(gray, finders, sizes, start_delta=12.0 if finder_points else 3.0)
+    delta = 12.0 if finder_points else 3.0
+    if len(finders) >= 3:
+        fits = fit_grid(gray, finders, sizes, start_delta=delta)
+    else:
+        # Only two finders. One of them may be worn away entirely, or merely faded enough that
+        # neither detector recognises it -- both happen on real damage. The geometry is still
+        # determined up to six discrete choices, so all of them are fitted and the known cells
+        # decide. This path costs six times a normal fit, which is why it is a fallback.
+        fits = []
+        for third in third_finder_candidates(finders[0], finders[1]):
+            if not (0 <= third[0] < gray.shape[1] and 0 <= third[1] < gray.shape[0]):
+                continue
+            fits.extend(fit_grid(gray, [*finders[:2], third], sizes, start_delta=max(delta, 8.0)))
     if not fits:
         return SolveResult(text=None, finders=finders, failure="no grid could be fitted")
 
