@@ -27,6 +27,14 @@ frequently a secret, such as a device pairing code. If you have a photograph tha
 fails on, describe the damage and reproduce it with `qrsalvage synth` and the `Damage`
 parameters. That makes it a test case everyone can run.
 
+**A recovered payload is not yours to publish, and least of all when the photograph was not
+yours either.** People post pictures of unreadable codes asking for help, which makes them
+excellent test material and does not make the device yours. A Zigbee install code or a Matter
+onboarding payload is a pairing secret, not an identifier: whoever has it and is within radio
+range can join or impersonate that device. If you recover someone's code, give them the device
+address they asked for and send the secret privately. `scripts/add_private_fixture.py` takes
+`--third-party` and `--provenance` so a local fixture carries that warning with it.
+
 **A cell has three states.** Dark, light, and unknown. Never reduce that to two, not even "for
 simplicity" in an intermediate layer. Reed-Solomon repairs twice as many erasures as errors, so
 discarding uncertainty throws away half the leverage of the whole project.
