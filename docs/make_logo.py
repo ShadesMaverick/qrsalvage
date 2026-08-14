@@ -136,6 +136,54 @@ def extract_axolotl(source: Path, target: Path, height: int = 132) -> bool:
     return True
 
 
+# Where the drawn code sits inside the cropped artwork, as fractions of it. Measured off the
+# draft once; if the artwork is ever redrawn these move.
+FAKE_CODE_BOX = (0.585, 0.030, 0.975, 0.560)
+
+
+def prepare_for_compositing(source: Path, out: Path, canvas: np.ndarray, height: int = 560):
+    """Render the real code at the exact size and position the drawn one occupies.
+
+    Deliberately no automatic replacement. The creature overlaps the code in the draft, so
+    clearing that rectangle takes its head off -- which is what happened on the first attempt.
+    Separating the two by colour is not reliable either: the drawn code is white on dark and
+    so is most of the animal.
+
+    What a script can do honestly is the measuring. The fragment comes out at the exact pixel
+    size of the drawn one and with a transparent background, so the remaining work is to drop
+    it on a layer beneath the creature at the printed coordinates and erase whatever of the old
+    one still shows around the edges.
+    """
+    art = cv2.imread(str(source), cv2.IMREAD_UNCHANGED)
+    if art is None:
+        return None
+
+    h, w = art.shape[:2]
+    crop = art[int(h * 0.12) : int(h * 0.64), int(w * 0.31) : int(w * 0.69)]
+    scale = height / crop.shape[0]
+    artwork = cv2.resize(crop, None, fx=scale, fy=scale, interpolation=cv2.INTER_NEAREST)
+    cv2.imwrite(str(out / "logo-artwork.png"), artwork)
+
+    ah, aw = artwork.shape[:2]
+    x0, y0 = int(FAKE_CODE_BOX[0] * aw), int(FAKE_CODE_BOX[1] * ah)
+    x1, y1 = int(FAKE_CODE_BOX[2] * aw), int(FAKE_CODE_BOX[3] * ah)
+
+    # Nearest-neighbour so the modules stay square-edged and match the pixel art around them.
+    side = min(x1 - x0, y1 - y0)
+    fragment = render(canvas, scale=1, quiet=0).astype(np.uint8)
+    fragment = cv2.resize(fragment, (side, side), interpolation=cv2.INTER_NEAREST)
+    rgba = np.dstack(
+        [
+            np.full((side, side), 245, np.uint8),
+            np.full((side, side), 244, np.uint8),
+            np.full((side, side), 242, np.uint8),
+            255 - fragment,  # dark modules opaque, the rest transparent
+        ]
+    )
+    cv2.imwrite(str(out / "logo-fragment.png"), rgba)
+    return (x0, y0, x1 - x0, y1 - y0), side, artwork.shape[:2]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -171,6 +219,15 @@ def main() -> int:
         print(f"  -> {web / 'axolotl.png'}  (cut from {draft.name}, background keyed out)")
     else:
         print(f"  !! {draft.name} not found, the interface keeps the abstract mark")
+
+    placement = prepare_for_compositing(draft, args.out, canvas)
+    if placement:
+        (x, y, bw, bh), side, (ah, aw) = placement
+        print(f"  -> {args.out / 'logo-artwork.png'}  ({aw}x{ah} px, the draft at working size)")
+        print(f"  -> {args.out / 'logo-fragment.png'}  (the real code, {side}x{side} px)")
+        print(f"     the drawn code occupies {bw}x{bh} px at x={x}, y={y}")
+        print("     put the fragment on a layer BENEATH the creature; it overlaps the code, so")
+        print("     a rectangular swap would cut into it")
 
     print(f"encodes: {args.text!r}")
     print(f"code    : version {(matrix.shape[0] - 17) // 4}, {matrix.shape[0]} modules")

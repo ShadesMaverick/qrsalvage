@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>qrsalvage — how it works</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23232f3a'/%3E%3Crect x='8' y='3' width='7' height='7' fill='none' stroke='%23f2f4f5' stroke-width='1'/%3E%3Crect x='10' y='5' width='3' height='3' fill='%23f2f4f5'/%3E%3Crect x='5' y='4' width='2' height='2' fill='%23f07ea3'/%3E%3Crect x='2' y='7' width='2' height='2' fill='%23f07ea3'/%3E%3Crect x='5' y='10' width='2' height='2' fill='%23f2f4f5'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #1b252e; --bg-lift: #232f3a; --panel: #26333f; --panel-in: #1f2a34;
+    --line: #37485a; --fg: #f2f4f5; --muted: #93a3b0; --pink: #f07ea3;
+    --pink-soft: #f7b3c8; --ok: #8fd3b0;
+    --mono: ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { color-scheme: dark; scroll-behavior: smooth; }
+  body {
+    margin: 0; padding: 2.5rem 1.25rem 6rem; color: var(--fg);
+    background: radial-gradient(120% 60% at 50% 0%, var(--bg-lift) 0%, var(--bg) 60%) fixed;
+    font: 16px/1.7 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { max-width: 46rem; margin: 0 auto; }
+  header { display: flex; align-items: center; gap: 1rem; margin-bottom: 2.5rem; }
+  header img { height: 58px; image-rendering: pixelated; }
+  h1 { font: 600 1.5rem/1 var(--mono); letter-spacing: .04em; margin: 0; }
+  .back { color: var(--muted); font-size: .9rem; text-decoration: none; }
+  .back:hover { color: var(--pink-soft); }
+
+  h2 {
+    font: 600 1.15rem/1.3 inherit; margin: 3rem 0 .3rem; letter-spacing: -.01em;
+    padding-top: .6rem; border-top: 1px solid var(--line);
+  }
+  h2 .num { color: var(--pink); font: 600 .8rem/1 var(--mono); display: block;
+            margin-bottom: .5rem; letter-spacing: .12em; }
+  h3 { font: 600 .95rem/1.4 inherit; margin: 1.8rem 0 .2rem; color: var(--pink-soft); }
+  p { margin: .8rem 0; }
+  em { color: var(--pink-soft); font-style: normal; font-weight: 500; }
+  code { font: .92em var(--mono); background: var(--panel-in); padding: .1em .35em;
+         border-radius: 4px; }
+  .formula {
+    background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--pink);
+    border-radius: 8px; padding: 1rem 1.2rem; margin: 1.2rem 0; overflow-x: auto;
+    font: 15px/1.9 var(--mono);
+  }
+  .formula .where { color: var(--muted); font-size: .85em; display: block; margin-top: .6rem;
+                    line-height: 1.6; }
+  table { border-collapse: collapse; margin: 1.2rem 0; font-size: .93rem; width: 100%; }
+  th, td { text-align: left; padding: .4rem .9rem .4rem 0; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 500; font-size: .85rem; }
+  td { font-variant-numeric: tabular-nums; }
+  td.num { font-family: var(--mono); }
+  .aside {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: .9rem 1.1rem; margin: 1.4rem 0; font-size: .93rem; color: var(--muted);
+  }
+  .aside b { color: var(--fg); font-weight: 600; }
+  ul { padding-left: 1.2rem; } li { margin: .35rem 0; }
+  .toc { columns: 2; column-gap: 2rem; font-size: .93rem; margin: 0 0 1rem; padding-left: 1.1rem; }
+  .toc a { color: var(--muted); text-decoration: none; }
+  .toc a:hover { color: var(--pink-soft); }
+  @media (max-width: 34rem) { .toc { columns: 1; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <img src="/axolotl.png" alt="">
+    <div>
+      <h1>how it works</h1>
+      <a class="back" href="/">&larr; back to the tool</a>
+    </div>
+  </header>
+
+  <p>
+    An ordinary decoder binarises the image, samples a grid and either returns a string or
+    nothing. qrsalvage takes the same problem apart into steps that can each be
+    <em>measured</em> — because a QR code carries, inside itself, a few hundred cells whose
+    correct value is fixed by the specification. Everything below is scored against those.
+  </p>
+
+  <ol class="toc">
+    <li><a href="#known">The known cells</a></li>
+    <li><a href="#levels">Two brightness fields</a></li>
+    <li><a href="#posterior">A probability per module</a></li>
+    <li><a href="#grid">Fitting the grid</a></li>
+    <li><a href="#search">What is searched, not guessed</a></li>
+    <li><a href="#probe">Ordered probing</a></li>
+    <li><a href="#rs">Reed-Solomon and erasures</a></li>
+    <li><a href="#limits">Where it stops</a></li>
+  </ol>
+
+  <h2 id="known"><span class="num">01</span>The known cells</h2>
+  <p>
+    Finder patterns, separators, timing rows, alignment patterns and one always-dark module are
+    not data. The standard fixes them, so their true values are known before anything is read.
+    In a version 3 code that is <em>244 of 841 cells</em> — about 29 %.
+  </p>
+  <table>
+    <tr><th>version</th><th>modules</th><th>known cells</th><th>share</th></tr>
+    <tr><td class="num">1</td><td class="num">21 × 21</td><td class="num">203</td><td class="num">46 %</td></tr>
+    <tr><td class="num">3</td><td class="num">29 × 29</td><td class="num">244</td><td class="num">29 %</td></tr>
+    <tr><td class="num">6</td><td class="num">41 × 41</td><td class="num">268</td><td class="num">16 %</td></tr>
+  </table>
+  <p>
+    That is the whole idea. Every later step — the brightness model, the grid, the version, the
+    polarity — produces a number that can be checked against cells whose answer is already
+    settled. Nothing has to be believed.
+  </p>
+  <div class="aside">
+    <b>Deliberately excluded:</b> the format and version information. They are protected by
+    their own BCH code, but they carry content, so treating them as known would be circular.
+  </div>
+
+  <h2 id="levels"><span class="num">02</span>Two brightness fields</h2>
+  <p>
+    On a curved, unevenly lit surface there is no single threshold that separates dark from
+    light. Worse, the dark level and the light level drift by <em>different</em> amounts: a
+    glare highlight lifts white paper far more than it lifts black ink.
+  </p>
+  <p>
+    So two independent quadratic fields are fitted by ordinary least squares, one through the
+    known-dark cells and one through the known-light ones:
+  </p>
+  <div class="formula">
+    D(r,c) = a₀ + a₁r + a₂c + a₃r² + a₄c² + a₅rc<br>
+    L(r,c) = b₀ + b₁r + b₂c + b₃r² + b₄c² + b₅rc<br><br>
+    a = argmin Σ<sub>known dark</sub> ( D(r,c) − mean(r,c) )²
+    <span class="where">
+      r, c — module row and column · mean(r,c) — measured grey value of that cell<br>
+      six coefficients each, solved from roughly 120 known cells, so heavily overdetermined
+    </span>
+  </div>
+  <p>
+    The threshold is their midpoint and the contrast their difference, both varying across the
+    code:
+  </p>
+  <div class="formula">
+    T(r,c) = ( D + L ) / 2 &nbsp;&nbsp;&nbsp; C(r,c) = max( L − D , ε )
+  </div>
+
+  <h2 id="posterior"><span class="num">03</span>A probability per module</h2>
+  <p>
+    A cell is not classified, it is scored. Two Gaussians of equal width, one centred on the
+    dark level and one on the light, give a log-odds that is linear in the measurement:
+  </p>
+  <div class="formula">
+    ℓ(r,c) = [ (x − L̂)² − (x − D̂)² ] / ( 2σ(r,c)² )<br><br>
+    P(dark) = 1 / ( 1 + e<sup>−ℓ</sup> )
+    <span class="where">
+      x = mean / C, D̂ = D / C, L̂ = L / C — all normalised by the local contrast<br>
+      so a faint code and a crisp one are measured on the same scale
+    </span>
+  </div>
+
+  <h3>Why σ is a field and not a number</h3>
+  <p>
+    The obvious estimate of σ is the scatter of the known cells around their own fitted level.
+    It is also not enough, and the failure is instructive: the known cells all sit around the
+    <em>border</em> of the code. When they happen to be clean, σ comes out small and the model
+    becomes confident about the data cells in the middle with no grounds for it.
+  </p>
+  <p>
+    This was observed on a synthetic case that placed the grid perfectly, reported zero wrong
+    known cells and zero uncertain cells — and would not decode. The solver had nothing to probe
+    because nothing looked doubtful.
+  </p>
+  <p>
+    So a second, independent term is added: each cell's own internal spread. A module whose
+    interior is uniform is trustworthy; one that is half dark and half light is not, and that
+    holds in the middle where no known cell reaches.
+  </p>
+  <div class="formula">
+    σ(r,c) = √( σ₀² + ( k · max(0, s(r,c) − s̄) / C )² )
+    <span class="where">
+      σ₀ — scatter of the known cells about their fitted level<br>
+      s(r,c) — standard deviation of the pixels inside that one cell<br>
+      s̄ — median of s over the known cells, the baseline a dot-raster engraving gives everything<br>
+      k = 1.5 · only the <em>excess</em> over the baseline counts, or the signal is flattened
+    </span>
+  </div>
+
+  <h2 id="grid"><span class="num">04</span>Fitting the grid</h2>
+  <p>
+    A homography maps four corners onto a square. It cannot represent a cylinder — and a QR code
+    on a light bulb is on a cylinder. The best available approximation is not analytically
+    available, but it is findable.
+  </p>
+  <p>
+    Eight parameters, the four corner coordinates. The objective is the mean contrast-normalised
+    margin over the known cells, squashed so that one badly-placed cell cannot dominate:
+  </p>
+  <div class="formula">
+    m(r,c) = ± ( T(r,c) − mean(r,c) ) / C(r,c) &nbsp;&nbsp; ( + for known dark, − for known light )<br><br>
+    Q = mean<sub>known</sub> tanh( 4 · m )
+    <span class="where">
+      maximised by coordinate descent: each coordinate is nudged by ±δ, improvements are kept,<br>
+      and δ halves when a full sweep finds nothing. δ starts at 3 px and stops below 0.05 px
+    </span>
+  </div>
+  <div class="aside">
+    <b>Why the smooth objective.</b> The number that actually matters is how many known cells
+    come out wrong, but that is an integer that stays flat under small movements and then jumps.
+    There is nothing to descend. The margin is continuous and moves for every fraction of a
+    pixel, so it is what the search follows — while the integer count is what the result is
+    judged by.
+  </div>
+  <p>
+    On the photograph this project started with, that descent took the sampling error from
+    <em>18 wrong known cells to 2</em>, and only then did the code decode.
+  </p>
+
+  <h2 id="search"><span class="num">05</span>What is searched, not guessed</h2>
+  <p>
+    Four things could be estimated from the image and are instead enumerated, because a wrong
+    guess is invisible while a wrong candidate is obvious in the known cells.
+  </p>
+  <ul>
+    <li>
+      <b>The version.</b> Every candidate size gets its own grid fit. On the bulb the winner had
+      2 of 244 cells wrong and the runner-up 69 — the estimate from the finder width had landed
+      between two candidates.
+    </li>
+    <li>
+      <b>The resolution.</b> A finder is seven modules wide, so the module size follows from it.
+      The preprocessing assumes roughly nine pixels per module; outside that band the image is
+      rescaled — <em>in both directions</em>. A code can fail for being photographed too well.
+    </li>
+    <li>
+      <b>The polarity.</b> Light-on-dark cannot be settled by looking at the finders: a finder
+      is nested squares and so is its inverse. It is settled after the fit, on the error count.
+    </li>
+    <li>
+      <b>A missing finder.</b> Two are enough. A QR code is square, which leaves six discrete
+      possibilities for the third — perpendicular from either end on either side, or the two
+      being the diagonal pair. All six are fitted.
+    </li>
+  </ul>
+
+  <h2 id="probe"><span class="num">06</span>Ordered probing</h2>
+  <p>
+    When the matrix does not decode, the least certain cells are flipped — but in an order, and
+    the order is the whole trick. Flipping a cell against its more likely reading costs its
+    log-likelihood ratio:
+  </p>
+  <div class="formula">
+    cost(r,c) = log( max(p, 1−p) / min(p, 1−p) ) &nbsp;&nbsp; p = P(dark)
+    <span class="where">
+      a cell at p = 0.5 is free to flip · an unambiguous one is expensive<br>
+      structure cells get cost ∞ and are never touched
+    </span>
+  </div>
+  <p>
+    Subsets of the cheapest cells are then enumerated in ascending total cost by a best-first
+    search over a heap. Each subset already emitted spawns exactly two successors — extend it,
+    or advance its last element — which yields every subset exactly once, in order.
+  </p>
+  <div class="aside">
+    <b>Why no learned scoring.</b> The decoder is an exact oracle: it does not say "warmer", it
+    says valid or not valid. Reinforcement learning exists to approximate a reward function you
+    cannot compute. Here it is known in closed form and evaluates in microseconds — what is
+    needed is a good order in which to ask, not a model of the answer.
+  </div>
+
+  <h2 id="rs"><span class="num">07</span>Reed-Solomon and erasures</h2>
+  <p>
+    Codewords are bytes in GF(2⁸) with primitive polynomial <code>0x11D</code>. A block of n
+    codewords carries t check symbols, and the decoder can repair
+  </p>
+  <div class="formula">
+    2·e<sub>unknown</sub> + e<sub>located</sub> ≤ t
+    <span class="where">
+      an error costs two check symbols — one to find it, one to fix it<br>
+      an erasure costs one, because its position is already known
+    </span>
+  </div>
+  <p>
+    That factor of two is why the module matrix has three states rather than two. An honest
+    "I don't know, but I know where" is worth twice a guess.
+  </p>
+  <p>
+    The chain: syndromes S<sub>i</sub> = r(α<sup>i</sup>) tell whether the block is intact.
+    Forney syndromes remove the known erasures first — without that step Berlekamp-Massey goes
+    looking for them again as unknown errors and fails. What is left is located by
+    Berlekamp-Massey and Chien search, and the magnitudes come from Forney's formula.
+  </p>
+  <h3>Valid is not the same as correct</h3>
+  <p>
+    With as many erasures as check symbols, Reed-Solomon <em>always</em> finds a valid solution.
+    If the real errors lie outside the erased positions, that solution is cleanly computed and
+    wrong. So the erasure count is raised one step at a time and the sparsest result that an
+    outside check accepts is taken. Without that contradiction from outside, the method returns
+    something every time, and usually nonsense.
+  </p>
+
+  <h2 id="limits"><span class="num">08</span>Where it stops</h2>
+  <p>
+    Measured on synthetic cases with known answers, under otherwise ideal conditions, the limit
+    is resolution:
+  </p>
+  <table>
+    <tr><th>pixels per module</th><th>recovered</th></tr>
+    <tr><td class="num">6.0</td><td class="num">5 / 5</td></tr>
+    <tr><td class="num">5.0</td><td class="num">5 / 5</td></tr>
+    <tr><td class="num">4.0</td><td class="num">1 / 5</td></tr>
+    <tr><td class="num">3.0</td><td class="num">0 / 5</td></tr>
+  </table>
+  <p>
+    Below about five pixels per module the information is not in the image, and no amount of
+    modelling puts it back. Real damage moves that threshold upward, never down.
+  </p>
+  <p>
+    On thirteen genuinely damaged codes, of which a plain decoder reads one, qrsalvage recovers
+    six and places the grid cleanly on nine. The ones it does not recover mostly fail because
+    too many data modules are physically gone — the method can find and place a code well past
+    the point where it can read one.
+  </p>
+
+  <p style="margin-top:3rem"><a class="back" href="/">&larr; back to the tool</a></p>
+</main>
+</body>
+</html>
