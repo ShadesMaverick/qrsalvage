@@ -182,6 +182,19 @@ Einzelfall durchgeht.
   (90 Sekunden Rechnen in ein falsches Gitter, jetzt 7 Sekunden ins richtige), und die
   Finder-Koordinaten wurden im Arbeitsbild statt im Originalbild gemeldet — die Ringe auf dem
   Foto saßen daneben, sobald intern skaliert wurde.
+- **Kamera-Modus mit Bewegungs-Serie.** Der stärkste gemessene Hebel des Werkzeugs ist die
+  Fusion mehrerer Fotos aus verschiedenen Winkeln — und niemand macht von Hand drei Fotos.
+  `getUserMedia` (läuft auf 127.0.0.1 und später HTTPS), Live-Vorschau, automatisch 3–5 Frames
+  greifen, während der Nutzer das Telefon langsam um die Lampe bewegt, direkt in `solve_many`.
+  Aus dem Feature, das Erklärung braucht, wird eine Geste. Kein anderer QR-Reader kann das.
+- **Payload-Intelligenz für die Smart-Home-Nische.** `zigbee_fields` existiert; Matter
+  (`MT:...`) und WLAN (`WIFI:S:...;P:...`) fehlen. Nach der Rettung erklären, *was* der Code
+  ist und was man jetzt damit tut („Setup-PIN für Matter-Kopplung, in Home Assistant unter …")
+  — Klartext bleibt lokal, Aufschlüsselung opt-in wie bei Zigbee.
+- **Der Spendenmoment.** Der Ask gehört auf die Erfolgskarte, klein und ehrlich („Lief
+  komplett auf deinem Gerät. Lampe gerettet? 5 € halten das Werkzeug am Leben.") — nicht auf
+  die Startseite. Für Einmalspenden Ko-fi/LiberaPay statt nur Patreon (Abo-Logik passt nicht
+  zu einem Werkzeug, das man einmal im Jahr braucht).
 - **Statische Browser-Version (Codeberg Pages + eigene Domain).** Kein Server: Pyodide
   (CPython/WASM, MPL-2.0) mit NumPy- und OpenCV-Paketen, zxing-cpp als WASM-Orakel hinter
   einer kleinen Naht in `decoding.py` (einzige native Abhängigkeit, vier Aufrufe). Der
