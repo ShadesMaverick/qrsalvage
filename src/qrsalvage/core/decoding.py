@@ -11,11 +11,9 @@ import heapq
 from dataclasses import dataclass, field
 
 import numpy as np
-import zxingcpp
 
+from . import oracle
 from .matrix import ModuleMatrix
-
-QR = zxingcpp.BarcodeFormat.QRCode
 
 
 def render(matrix: np.ndarray, scale: int = 10, quiet: int = 4) -> np.ndarray:
@@ -31,14 +29,7 @@ def render(matrix: np.ndarray, scale: int = 10, quiet: int = 4) -> np.ndarray:
 
 def decode_matrix(matrix: np.ndarray, scale: int = 4) -> str | None:
     """A single decode attempt on the rendered matrix."""
-    try:
-        hits = zxingcpp.read_barcodes(render(matrix, scale=scale), formats=QR, try_invert=False)
-    except Exception:
-        return None
-    for hit in hits:
-        if hit.text:
-            return hit.text
-    return None
+    return oracle.decode(render(matrix, scale=scale))
 
 
 @dataclass
@@ -119,9 +110,6 @@ def ordered_search(
     return SearchResult(text=None, candidates_tried=tried)
 
 
-ECC_ARGUMENT = {"L": "1", "M": "2", "Q": "3", "H": "4"}
-
-
 def reencode(text: str, ecc: str | None = None) -> np.ndarray:
     """Encode the recovered content afresh and return a standards-compliant module matrix.
 
@@ -134,15 +122,7 @@ def reencode(text: str, ecc: str | None = None) -> np.ndarray:
     somewhere, so a higher level means more modules and, at a fixed printed size, smaller ones.
     """
     if ecc is not None:
-        level = ECC_ARGUMENT.get(ecc.upper())
-        if level is None:
+        ecc = ecc.upper()
+        if ecc not in ("L", "M", "Q", "H"):
             raise ValueError(f"unknown error correction level: {ecc!r}")
-        barcode = zxingcpp.create_barcode(text, QR, ec_level=level)
-        image = np.asarray(zxingcpp.write_barcode_to_image(barcode, scale=1, add_quiet_zones=False))
-        return (image[:, :, 0] if image.ndim == 3 else image) < 128
-
-    barcode = zxingcpp.create_barcode(text, QR)
-    image = np.asarray(zxingcpp.write_barcode_to_image(barcode, scale=1, add_quiet_zones=False))
-    if image.ndim == 3:
-        image = image[:, :, 0]
-    return image < 128
+    return oracle.encode(text, ecc)

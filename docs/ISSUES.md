@@ -200,15 +200,17 @@ Einzelfall durchgeht.
   unsichtbar, solange keine URLs eingetragen sind. **Eintragen in `index.html`, Konstante
   `DONATE` ganz oben im Skript**, sobald die Konten existieren — PayPal.me zuerst (in Deutschland der vertrauteste Knopf; Ko-fi wickelt intern ohnehin über PayPal ab), dazu Ko-fi und LiberaPay. Bewusst nicht auf
   der Startseite: Reziprozität hat einen Moment.
-- **Statische Browser-Version (Codeberg Pages + eigene Domain).** Kein Server: Pyodide
-  (CPython/WASM, MPL-2.0) mit NumPy- und OpenCV-Paketen, zxing-cpp als WASM-Orakel hinter
-  einer kleinen Naht in `decoding.py` (einzige native Abhängigkeit, vier Aufrufe). Der
-  Ereigniskanal (`progress` in `solve`/`solve_many`) ist transportneutral gebaut und speist
-  den Web Worker unverändert. Erst der Spike: pures Wheel + Minimalseite, eine Fixture im
-  Browser lösen, Zeit messen. Ehrliche Kosten: ~40–60 MB Erstladung, 2–5× langsamer,
-  single-threaded (Pages kann keine COOP/COEP-Header setzen). Lizenzseitig geklärt, siehe
-  `THIRD-PARTY-NOTICES.md`. Domain: `.domains`-Datei im Pages-Repo, DNS CNAME auf
-  `<user>.codeberg.page`.
+- **Statische Browser-Version (Codeberg Pages + eigene Domain) — SPIKE ERLEDIGT.** Die Naht
+  ist gebaut (`core/oracle.py`: zxing-cpp lazy, per `oracle.use()` austauschbar; der Kern
+  importiert nachweislich ohne die Bindung — Test in test_solver.py). Der Spike
+  (`spike/pyodide/index.html`, Anleitung im Dateikopf) löst die harte Fixture im Browser:
+  **12,4 s solve** (nativ ~4 s), ~4 s Ladezeit für CPython+NumPy+OpenCV vom CDN, zxing-cpp-WASM
+  0,2 s, Progress-Events laufen unverändert. Sync/Async-Brücke über JSPI (`run_sync`,
+  Chrome 137+; Fallback für Browser ohne JSPI: der synchrone Emscripten-Build von zxing-cpp).
+  **Restarbeit zur Seite:** Web Worker statt Main-Thread (Seite friert derzeit während des
+  Lösens), Assets selbst hosten statt CDN, Encode-Richtung bridgen (writeBarcode), Pages-Repo
+  mit `.domains`, DNS CNAME auf `<user>.codeberg.page`. Lizenzseitig geklärt
+  (`THIRD-PARTY-NOTICES.md`).
 - **Mehrere Codes in einem Bild.** Ein Produktfoto mit zwei Etiketten liefert sechs oder mehr
   Finder-Kandidaten; wir suchen daraus genau ein Tripel und ignorieren den Rest.
 - **Symbologie-Grenze dokumentieren.** `structure.py`, `layout.py` und `qrspec.py` sind die

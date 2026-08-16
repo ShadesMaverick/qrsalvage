@@ -55,9 +55,13 @@ In dieser Reihenfolge, jede Stufe für sich nutzbar:
 - [x] **3. Die Spendenkarte** *(Moment; URLs nachtragen, siehe ISSUES)* — der Ask auf der Erfolgskarte, klein, unter dem
   Klartext, zusammen mit der Privacy-Aussage: „Lief komplett auf deinem Gerät. Lampe
   gerettet? 5 € halten das Werkzeug am Leben." Nicht auf der Startseite.
-- [ ] **4. Pyodide-Spike, dann statische Seite** *(Reichweite)* — erst die eine Unbekannte
-  klären: pures Wheel + Minimalseite, eine Fixture im Browser lösen, Zeit messen. Dann
-  Worker, Pages-Repo, `.domains`, DNS. Details in `ISSUES.md`.
+- [ ] **4. Pyodide-Spike, dann statische Seite** *(Reichweite)* — **Spike gelungen**
+  (`spike/pyodide/index.html`): der unveränderte Kern löst die harte Fixture im Browser in
+  **12,4 s** (nativ ~4 s, Faktor ~3 — im prognostizierten Band), Ladezeit CPython+NumPy+OpenCV
+  ~4 s vom CDN, alle 225 Progress-Events flossen durch. Die Orakel-Naht (`core/oracle.py`)
+  macht zxing-cpp austauschbar; die Sync/Async-Brücke läuft über JSPI (`run_sync`,
+  Chrome 137+). Noch offen: Worker statt Main-Thread, Assets selbst hosten statt CDN,
+  Encode-Richtung des WASM-Orakels, Pages-Repo, `.domains`, DNS.
 - [ ] **5. Veröffentlichung auf Codeberg** — Übersetzung der Docstrings (ISSUES 1), README
   final, `CONTRIBUTING`, die echte EUI64 in `tests/test_export.py` durch eine erfundene
   ersetzen, Impressum + Datenschutzerklärung für die öffentliche Seite (trivial: „keine
