@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 294" width="700" height="294" role="img">
+<line x1="46.0" y1="173.8" x2="660.0" y2="173.8" stroke="#2e3d4c" stroke-width="1"/>
+<text x="39.0" y="177.3" font-family="ui-monospace, 'Cascadia Code', 'SF Mono', Consolas, monospace" font-size="10" font-weight="400" fill="#93a3b0" text-anchor="end">170</text>
+<line x1="46.0" y1="125.3" x2="660.0" y2="125.3" stroke="#2e3d4c" stroke-width="1"/>
+<text x="39.0" y="128.8" font-family="ui-monospace, 'Cascadia Code', 'SF Mono', Consolas, monospace" font-size="10" font-weight="400" fill="#93a3b0" text-anchor="end">180</text>
+<line x1="46.0" y1="76.8" x2="660.0" y2="76.8" stroke="#2e3d4c" stroke-width="1"/>
+<text x="39.0" y="80.3" font-family="ui-monospace, 'Cascadia Code', 'SF Mono', Consolas, monospace" font-size="10" font-weight="400" fill="#93a3b0" text-anchor="end">190</text>
+<line x1="46.0" y1="28.3" x2="660.0" y2="28.3" stroke="#2e3d4c" stroke-width="1"/>
+<text x="39.0" y="31.8" font-family="ui-monospace, 'Cascadia Code', 'SF Mono', Consolas, monospace" font-size="10" font-weight="400" fill="#93a3b0" text-anchor="end">200</text>
+<polygon points="46.00,62.54 67.93,61.76 89.86,60.99 111.79,60.23 133.71,59.47 155.64,58.71 177.57,57.97 199.50,57.23 221.43,56.49 243.36,55.76 265.29,55.04 287.21,54.33 309.14,53.62 331.07,52.91 353.00,52.22 374.93,51.53 396.86,50.84 418.79,50.17 440.71,49.49 462.64,48.83 484.57,48.17 506.50,47.52 528.43,46.87 550.36,46.23 572.29,45.60 594.21,44.97 616.14,44.35 638.07,43.73 660.00,43.13 660.00,126.45 638.07,126.71 616.14,126.99 594.21,127.30 572.29,127.63 550.36,127.99 528.43,128.37 506.50,128.77 484.57,129.20 462.64,129.66 440.71,130.13 418.79,130.64 396.86,131.16 374.93,131.72 353.00,132.29 331.07,132.89 309.14,133.52 287.21,134.17 265.29,134.85 243.36,135.54 221.43,136.27 199.50,137.02 177.57,137.79 155.64,138.59 133.71,139.41 111.79,140.26 89.86,141.13 67.93,142.02 46.00,142.94" fill="#3f9ad8" opacity="0.1"/>
+<polyline points="46.00,102.74 67.93,101.89 89.86,101.06 111.79,100.24 133.71,99.44 155.64,98.65 177.57,97.88 199.50,97.12 221.43,96.38 243.36,95.65 265.29,94.94 287.21,94.25 309.14,93.57 331.07,92.90 353.00,92.26 374.93,91.62 396.86,91.00 418.79,90.40 440.71,89.81 462.64,89.24 484.57,88.69 506.50,88.14 528.43,87.62 550.36,87.11 572.29,86.61 594.21,86.13 616.14,85.67 638.07,85.22 660.00,84.79" fill="none" stroke="#93a3b0" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="5 4"/>
+<polyline points="46.00,62.54 67.93,61.76 89.86,60.99 111.79,60.23 133.71,59.47 155.64,58.71 177.57,57.97 199.50,57.23 221.43,56.49 243.36,55.76 265.29,55.04 287.21,54.33 309.14,53.62 331.07,52.91 353.00,52.22 374.93,51.53 396.86,50.84 418.79,50.17 440.71,49.49 462.64,48.83 484.57,48.17 506.50,47.52 528.43,46.87 550.36,46.23 572.29,45.60 594.21,44.97 616.14,44.35 638.07,43.73 660.00,43.13" fill="none" stroke="#3f9ad8" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="46.00,142.94 67.93,142.02 89.86,141.13 111.79,140.26 133.71,139.41 155.64,138.59 177.57,137.79 199.50,137.02 221.43,136.27 243.36,135.54 265.29,134.85 287.21,134.17 309.14,133.52 331.07,132.89 353.00,132.29 374.93,131.72 396.86,131.16 418.79,130.64 440.71,130.13 462.64,129.66 484.57,129.20 506.50,128.77 528.43,128.37 550.36,127.99 572.29,127.63 594.21,127.30 616.14,126.99 638.07,126.71 660.00,126.45" fill="none" stroke="#e05a86" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="46.00" cy="143.73" r="2.6" fill="#e05a86" stroke="#26333f" stroke-width="1"/>
+<circle cx="67.93" cy="152.89" r="2.6" fill="#e05a86" stroke="#26333f" stroke-width="1"/>
+<circle cx="89.86" cy="148.58" r="2.6" fill="#e05a86" stroke="#26333f" stroke-width="1"/>
+<circle cx="111.79" cy="157.33" r="2.6" fill="#e05a86" stroke="#26333f" stroke-width="1"/>
+<circle cx="133.71" cy="152.48" r="2.6" fill="#e05a86" stroke="#26333f" stroke-width="1"/>
+<circle cx="155.64" cy="154.64" r="2.6" fill="#e05a86" stroke="#26333f" stroke-width="1"/>
+<circle cx="177.57" cy="147.09" r="2.6" fill="#e05a86" stroke="#26333f" stroke-width="1"/>
+<circle cx="199.50" cy="56.16" r="2.6" fill="#3f9ad8" stroke="#26333f" stroke-width="1"/>
+<circle cx="221.43" cy="136.86" r="2.6" fill="#e05a86" stroke="#26333f" stroke-width="1"/>
+<circle cx="243.36" cy="50.23" r="2.6" fill="#3f9ad8" stroke="#26333f" stroke-width="1"/>
+<circle cx="265.29" cy="153.83" r="2.6" fill="#e05a86" stroke="#26333f" stroke-width="1"/>
+<circle cx="287.21" cy="69.63" r="2.6" fill="#3f9ad8" stroke="#26333f" stroke-width="1"/>
+<circle cx="309.14" cy="110.59" r="2.6" fill="#e05a86" stroke="#26333f" stroke-width="1"/>
+<circle cx="331.07" cy="40.67" r="2.6" fill="#3f9ad8" stroke="#26333f" stroke-width="1"/>
+<circle cx="353.00" cy="146.02" r="2.6" fill="#e05a86" stroke="#26333f" stroke-width="1"/>
+<circle cx="374.93" cy="51.31" r="2.6" fill="#3f9ad8" stroke="#26333f" stroke-width="1"/>
+<circle cx="396.86" cy="136.99" r="2.6" fill="#e05a86" stroke="#26333f" stroke-width="1"/>
+<circle cx="418.79" cy="60.47" r="2.6" fill="#3f9ad8" stroke="#26333f" stroke-width="1"/>
+<circle cx="440.71" cy="127.16" r="2.6" fill="#e05a86" stroke="#26333f" stroke-width="1"/>
+<circle cx="462.64" cy="61.68" r="2.6" fill="#3f9ad8" stroke="#26333f" stroke-width="1"/>
+<circle cx="484.57" cy="122.44" r="2.6" fill="#e05a86" stroke="#26333f" stroke-width="1"/>
+<circle cx="506.50" cy="62.49" r="2.6" fill="#3f9ad8" stroke="#26333f" stroke-width="1"/>
+<circle cx="528.43" cy="115.57" r="2.6" fill="#e05a86" stroke="#26333f" stroke-width="1"/>
+<circle cx="550.36" cy="129.31" r="2.6" fill="#e05a86" stroke="#26333f" stroke-width="1"/>
+<circle cx="572.29" cy="134.16" r="2.6" fill="#e05a86" stroke="#26333f" stroke-width="1"/>
+<circle cx="594.21" cy="109.78" r="2.6" fill="#e05a86" stroke="#26333f" stroke-width="1"/>
+<circle cx="616.14" cy="125.54" r="2.6" fill="#e05a86" stroke="#26333f" stroke-width="1"/>
+<circle cx="638.07" cy="117.59" r="2.6" fill="#e05a86" stroke="#26333f" stroke-width="1"/>
+<circle cx="660.00" cy="124.73" r="2.6" fill="#e05a86" stroke="#26333f" stroke-width="1"/>
+<line x1="221.4" y1="136.3" x2="221.4" y2="56.5" stroke="#f2f4f5" stroke-width="1.5"/>
+<line x1="217.4" y1="56.5" x2="225.4" y2="56.5" stroke="#f2f4f5" stroke-width="1.5"/>
+<line x1="217.4" y1="136.3" x2="225.4" y2="136.3" stroke="#f2f4f5" stroke-width="1.5"/>
+<text x="221.4" y="156.3" font-family="ui-monospace, 'Cascadia Code', 'SF Mono', Consolas, monospace" font-size="11" font-weight="400" fill="#f2f4f5" text-anchor="middle">C = 16</text>
+<line x1="46.0" y1="182.0" x2="660.0" y2="182.0" stroke="#37485a" stroke-width="1"/>
+<line x1="46.0" y1="182.0" x2="46.0" y2="186.0" stroke="#37485a" stroke-width="1"/>
+<text x="46.0" y="198.0" font-family="ui-monospace, 'Cascadia Code', 'SF Mono', Consolas, monospace" font-size="10" font-weight="400" fill="#93a3b0" text-anchor="middle">0</text>
+<line x1="133.7" y1="182.0" x2="133.7" y2="186.0" stroke="#37485a" stroke-width="1"/>
+<text x="133.7" y="198.0" font-family="ui-monospace, 'Cascadia Code', 'SF Mono', Consolas, monospace" font-size="10" font-weight="400" fill="#93a3b0" text-anchor="middle">4</text>
+<line x1="221.4" y1="182.0" x2="221.4" y2="186.0" stroke="#37485a" stroke-width="1"/>
+<text x="221.4" y="198.0" font-family="ui-monospace, 'Cascadia Code', 'SF Mono', Consolas, monospace" font-size="10" font-weight="400" fill="#93a3b0" text-anchor="middle">8</text>
+<line x1="309.1" y1="182.0" x2="309.1" y2="186.0" stroke="#37485a" stroke-width="1"/>
+<text x="309.1" y="198.0" font-family="ui-monospace, 'Cascadia Code', 'SF Mono', Consolas, monospace" font-size="10" font-weight="400" fill="#93a3b0" text-anchor="middle">12</text>
+<line x1="396.9" y1="182.0" x2="396.9" y2="186.0" stroke="#37485a" stroke-width="1"/>
+<text x="396.9" y="198.0" font-family="ui-monospace, 'Cascadia Code', 'SF Mono', Consolas, monospace" font-size="10" font-weight="400" fill="#93a3b0" text-anchor="middle">16</text>
+<line x1="484.6" y1="182.0" x2="484.6" y2="186.0" stroke="#37485a" stroke-width="1"/>
+<text x="484.6" y="198.0" font-family="ui-monospace, 'Cascadia Code', 'SF Mono', Consolas, monospace" font-size="10" font-weight="400" fill="#93a3b0" text-anchor="middle">20</text>
+<line x1="572.3" y1="182.0" x2="572.3" y2="186.0" stroke="#37485a" stroke-width="1"/>
+<text x="572.3" y="198.0" font-family="ui-monospace, 'Cascadia Code', 'SF Mono', Consolas, monospace" font-size="10" font-weight="400" fill="#93a3b0" text-anchor="middle">24</text>
+<line x1="660.0" y1="182.0" x2="660.0" y2="186.0" stroke="#37485a" stroke-width="1"/>
+<text x="660.0" y="198.0" font-family="ui-monospace, 'Cascadia Code', 'SF Mono', Consolas, monospace" font-size="10" font-weight="400" fill="#93a3b0" text-anchor="middle">28</text>
+<text x="353.0" y="212.0" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="400" fill="#93a3b0" text-anchor="middle">module column</text>
+<text x="8.0" y="14.0" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="400" fill="#93a3b0" text-anchor="start">grey value</text>
+<text x="666.0" y="47.1" font-family="ui-monospace, 'Cascadia Code', 'SF Mono', Consolas, monospace" font-size="13" font-weight="600" fill="#3f9ad8" text-anchor="start">L</text>
+<text x="666.0" y="130.5" font-family="ui-monospace, 'Cascadia Code', 'SF Mono', Consolas, monospace" font-size="13" font-weight="600" fill="#e05a86" text-anchor="start">D</text>
+<text x="666.0" y="88.8" font-family="ui-monospace, 'Cascadia Code', 'SF Mono', Consolas, monospace" font-size="13" font-weight="600" fill="#93a3b0" text-anchor="start">T</text>
+<rect x="46.00" y="230.00" width="11.00" height="11.00" rx="2" fill="#e05a86" opacity="1.0"/><text x="63.0" y="239.0" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="400" fill="#93a3b0" text-anchor="start">known-dark cells, and D fitted through them</text>
+<rect x="46.00" y="250.00" width="11.00" height="11.00" rx="2" fill="#3f9ad8" opacity="1.0"/><text x="63.0" y="259.0" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="400" fill="#93a3b0" text-anchor="start">known-light cells, and L fitted through them</text>
+<rect x="46.00" y="270.00" width="11.00" height="11.00" rx="2" fill="#93a3b0" opacity="1.0"/><text x="63.0" y="279.0" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="400" fill="#93a3b0" text-anchor="start">T, their midpoint</text>
+</svg>

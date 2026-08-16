@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 690 218" width="690" height="218" role="img">
+<line x1="46.0" y1="176.0" x2="320.0" y2="176.0" stroke="#2e3d4c" stroke-width="1"/>
+<text x="39.0" y="179.5" font-family="ui-monospace, 'Cascadia Code', 'SF Mono', Consolas, monospace" font-size="10" font-weight="400" fill="#93a3b0" text-anchor="end">0</text>
+<line x1="46.0" y1="108.1" x2="320.0" y2="108.1" stroke="#2e3d4c" stroke-width="1"/>
+<text x="39.0" y="111.6" font-family="ui-monospace, 'Cascadia Code', 'SF Mono', Consolas, monospace" font-size="10" font-weight="400" fill="#93a3b0" text-anchor="end">2.8</text>
+<line x1="46.0" y1="40.3" x2="320.0" y2="40.3" stroke="#2e3d4c" stroke-width="1"/>
+<text x="39.0" y="43.8" font-family="ui-monospace, 'Cascadia Code', 'SF Mono', Consolas, monospace" font-size="10" font-weight="400" fill="#93a3b0" text-anchor="end">5.6</text>
+<rect x="47.00" y="170.66" width="10.45" height="5.34" rx="2" fill="#e05a86" opacity="1.0"/>
+<rect x="59.45" y="168.86" width="10.45" height="7.14" rx="2" fill="#e05a86" opacity="1.0"/>
+<rect x="71.91" y="161.29" width="10.45" height="14.71" rx="2" fill="#e05a86" opacity="1.0"/>
+<rect x="84.36" y="160.42" width="10.45" height="15.58" rx="2" fill="#e05a86" opacity="1.0"/>
+<rect x="96.82" y="155.28" width="10.45" height="20.72" rx="2" fill="#e05a86" opacity="1.0"/>
+<rect x="109.27" y="145.89" width="10.45" height="30.11" rx="2" fill="#e05a86" opacity="1.0"/>
+<rect x="121.73" y="142.67" width="10.45" height="33.33" rx="2" fill="#e05a86" opacity="1.0"/>
+<rect x="134.18" y="140.93" width="10.45" height="35.07" rx="2" fill="#e05a86" opacity="1.0"/>
+<rect x="146.64" y="139.38" width="10.45" height="36.62" rx="2" fill="#e05a86" opacity="1.0"/>
+<rect x="159.09" y="135.79" width="10.45" height="40.21" rx="2" fill="#e05a86" opacity="1.0"/>
+<rect x="171.55" y="132.30" width="10.45" height="43.70" rx="2" fill="#e05a86" opacity="1.0"/>
+<rect x="184.00" y="124.44" width="10.45" height="51.56" rx="2" fill="#e05a86" opacity="1.0"/>
+<rect x="196.45" y="116.90" width="10.45" height="59.10" rx="2" fill="#e05a86" opacity="1.0"/>
+<rect x="208.91" y="81.66" width="10.45" height="94.34" rx="2" fill="#e05a86" opacity="1.0"/>
+<rect x="221.36" y="76.02" width="10.45" height="99.98" rx="2" fill="#e05a86" opacity="1.0"/>
+<rect x="233.82" y="73.42" width="10.45" height="102.58" rx="2" fill="#e05a86" opacity="1.0"/>
+<rect x="246.27" y="69.12" width="10.45" height="106.88" rx="2" fill="#e05a86" opacity="1.0"/>
+<rect x="258.73" y="64.34" width="10.45" height="111.66" rx="2" fill="#e05a86" opacity="1.0"/>
+<rect x="271.18" y="63.27" width="10.45" height="112.73" rx="2" fill="#e05a86" opacity="1.0"/>
+<rect x="283.64" y="57.42" width="10.45" height="118.58" rx="2" fill="#e05a86" opacity="1.0"/>
+<rect x="296.09" y="45.18" width="10.45" height="130.82" rx="2" fill="#e05a86" opacity="1.0"/>
+<rect x="308.55" y="39.64" width="10.45" height="136.36" rx="2" fill="#e05a86" opacity="1.0"/>
+<line x1="46.0" y1="176.0" x2="320.0" y2="176.0" stroke="#37485a" stroke-width="1"/>
+<text x="46.0" y="16.0" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="400" fill="#f2f4f5" text-anchor="start">flip cost per cell, cheapest first</text>
+<text x="52.2" y="162.7" font-family="ui-monospace, 'Cascadia Code', 'SF Mono', Consolas, monospace" font-size="10" font-weight="400" fill="#f2f4f5" text-anchor="middle">0.22</text>
+<text x="313.8" y="31.6" font-family="ui-monospace, 'Cascadia Code', 'SF Mono', Consolas, monospace" font-size="10" font-weight="400" fill="#f2f4f5" text-anchor="middle">5.6</text>
+<text x="183.0" y="202.0" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" font-weight="400" fill="#93a3b0" text-anchor="middle">the 22 least certain cells</text>
+<line x1="400.0" y1="176.0" x2="674.0" y2="176.0" stroke="#2e3d4c" stroke-width="1"/>
+<text x="393.0" y="179.5" font-family="ui-monospace, 'Cascadia Code', 'SF Mono', Consolas, monospace" font-size="10" font-weight="400" fill="#93a3b0" text-anchor="end">0</text>
+<line x1="400.0" y1="105.2" x2="674.0" y2="105.2" stroke="#2e3d4c" stroke-width="1"/>
+<text x="393.0" y="108.7" font-family="ui-monospace, 'Cascadia Code', 'SF Mono', Consolas, monospace" font-size="10" font-weight="400" fill="#93a3b0" text-anchor="end">1.1</text>
+<line x1="400.0" y1="40.8" x2="674.0" y2="40.8" stroke="#2e3d4c" stroke-width="1"/>
+<text x="393.0" y="44.3" font-family="ui-monospace, 'Cascadia Code', 'SF Mono', Consolas, monospace" font-size="10" font-weight="400" fill="#93a3b0" text-anchor="end">2.1</text>
+<polyline points="400.00,161.81 404.64,157.03 409.29,142.84 413.93,136.93 418.58,134.60 423.22,122.74 427.86,120.96 432.51,120.41 437.15,117.95 441.80,115.63 446.44,106.77 451.08,103.77 455.73,101.99 460.37,101.44 465.02,96.00 469.66,95.53 474.31,87.80 478.95,87.45 483.59,82.83 488.24,81.89 492.88,81.81 497.53,81.34 502.17,79.57 506.81,78.71 511.46,77.03 516.10,76.56 520.75,73.26 525.39,69.17 530.03,68.65 534.68,68.47 539.32,67.70 543.97,65.38 548.61,64.52 553.25,63.86 557.90,62.92 562.54,62.84 567.19,62.37 571.83,60.59 576.47,59.89 581.12,59.74 585.76,56.93 590.41,54.98 595.05,54.60 599.69,54.28 604.34,50.20 608.98,49.67 613.63,48.73 618.27,48.37 622.92,46.40 627.56,46.05 632.20,45.71 636.85,45.55 641.49,43.76 646.14,42.74 650.78,41.44 655.42,40.96 660.07,40.92 664.71,40.49 669.36,40.41 674.00,39.64" fill="none" stroke="#3f9ad8" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<line x1="400.0" y1="176.0" x2="674.0" y2="176.0" stroke="#37485a" stroke-width="1"/>
+<text x="400.0" y="16.0" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="11" font-weight="400" fill="#f2f4f5" text-anchor="start">total cost of each subset, as emitted</text>
+<circle cx="400.00" cy="161.81" r="2.8" fill="#3f9ad8" stroke="#26333f" stroke-width="1"/>
+<circle cx="404.64" cy="157.03" r="2.8" fill="#3f9ad8" stroke="#26333f" stroke-width="1"/>
+<circle cx="409.29" cy="142.84" r="2.8" fill="#3f9ad8" stroke="#26333f" stroke-width="1"/>
+<circle cx="413.93" cy="136.93" r="2.8" fill="#3f9ad8" stroke="#26333f" stroke-width="1"/>
+<circle cx="418.58" cy="134.60" r="2.8" fill="#3f9ad8" stroke="#26333f" stroke-width="1"/>
+<text x="400.0" y="38.0" font-family="ui-monospace, 'Cascadia Code', 'SF Mono', Consolas, monospace" font-size="10" font-weight="400" fill="#f2f4f5" text-anchor="start">first out: {1} {2} {1,2} {3} {4}</text>
+<text x="537.0" y="202.0" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="10" font-weight="400" fill="#93a3b0" text-anchor="middle">subsets in emission order (first 60)</text>
+</svg>

@@ -74,6 +74,29 @@ qrsalvage solve photo.jpg
 That is the whole first step. If fewer than three finder patterns are found, narrow the search
 with `--crop X0 Y0 X1 Y1`; the finder search does not cope well with busy backgrounds.
 
+If one photograph is not enough, take more and pass them all:
+
+```
+qrsalvage solve photo1.jpg photo2.jpg photo3.jpg
+```
+
+Photographs taken from different angles get *different* cells wrong, and where they disagree the
+fused reading lands near a half — which is exactly what the search needs to be told. This is the
+only ensemble in the project with a positive measurement behind it. Three photographs against
+one, over fourteen trials per level:
+
+| damage | one photograph | three, fused |
+|---|---|---|
+| glare and low contrast | 62 % | 93 % |
+| a heavy stain | 52 % | 100 % |
+| a heavier stain | 36 % | 86 % |
+
+Re-photograph from a **different angle and in different light**. A burst from the same position
+buys nothing: the dominant error is the grid, every frame inherits the same one, and three
+copies of one mistake are still one mistake. The same reasoning explains why the stain rows gain
+more than the contrast rows — poor contrast spoils every cell of every photograph alike, while a
+stain sits somewhere else each time, so what one photograph loses the others still hold.
+
 Or drop the photograph onto a page in your browser:
 
 ```
@@ -82,9 +105,10 @@ qrsalvage serve
 
 That opens a local interface on `127.0.0.1` — and only there. The payload of a damaged code is
 frequently a secret, so nothing is uploaded and the port is not reachable from another machine.
-The page shows the same diagnostics as the command line, and if the finder search comes up short
-you can click the three corner squares yourself. Roughly is enough: the click picks which
-candidate to use, the position still comes from the image.
+The page shows the same diagnostics as the command line, with a one-line verdict on top, and
+drops of several photographs are read together exactly like the command line reads them. If the
+finder search comes up short you can click the three corner squares yourself. Roughly is
+enough: the click picks which candidate to use, the position still comes from the image.
 
 Export the result:
 
@@ -100,6 +124,19 @@ report showing the photograph, the recovered matrix and the evidence between the
 
 Zigbee payloads can be split into their fields with `--zigbee`, which is off by default: an
 install code is a pairing secret, not an identifier.
+
+Turn a pile of photographs of *different* codes into a printable register:
+
+```
+qrsalvage catalog lampe.jpg heizung.jpg tor.jpg --titles "LED Lampe Bad" "Heizung" "Gartentor"
+```
+
+Every photograph is recovered on its own and the result is one A4 PDF, three entries per page:
+the re-encoded code at a real physical size on the left, its content on the right, your title
+above — because the payload identifies the code, but the title identifies the lamp. Duplicate
+photographs of one code fold into a single entry, and titles default to the file names. The
+same catalogue is built in the browser: drop the pile, switch to "different codes", name each
+card, download.
 
 Generate an artificially degraded test case with a known answer:
 
@@ -238,4 +275,7 @@ after. A change that cannot be measured is a change that cannot be reviewed.
 
 ## Licence
 
-Apache License 2.0. See [LICENSE](LICENSE).
+Apache License 2.0. See [LICENSE](LICENSE) and, for what this software stands on,
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) — everything in that list is permissively
+licensed, which is what makes it possible to offer qrsalvage as free software, in a browser,
+funded by donations rather than by your photographs.
