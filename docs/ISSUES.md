@@ -221,10 +221,20 @@ Einzelfall durchgeht.
   **12,4 s solve** (nativ ~4 s), ~4 s Ladezeit für CPython+NumPy+OpenCV vom CDN, zxing-cpp-WASM
   0,2 s, Progress-Events laufen unverändert. Sync/Async-Brücke über JSPI (`run_sync`,
   Chrome 137+; Fallback für Browser ohne JSPI: der synchrone Emscripten-Build von zxing-cpp).
-  **Restarbeit zur Seite:** Web Worker statt Main-Thread (Seite friert derzeit während des
-  Lösens), Assets selbst hosten statt CDN, Encode-Richtung bridgen (writeBarcode), Pages-Repo
-  mit `.domains`, DNS CNAME auf `<user>.codeberg.page`. Lizenzseitig geklärt
-  (`THIRD-PARTY-NOTICES.md`).
+  **Worker-Ausbau erledigt** (`spike/pyodide/worker.js`): Module-Worker, Seite bleibt
+  reaktiv (Tick-Zähler als Beweis), 12,1 s solve, alle Progress-Events live. **JSPI entfernt**:
+  ein Warmup-Aufruf über den Wrapper fängt das voll-defaultete embind-Options-Objekt, danach
+  ist jeder Decode ein synchroner `readBarcodesFromPixmap(ptr, w, h, options)`-Aufruf
+  (~0,9 ms) — nichts mehr im Pfad, das Safari fehlt (Realtest auf Safari/iOS steht aus).
+  **Mobile-Ehrlichkeit auf der Seite:** HEIC wird nicht mehr stumm verschluckt (Meldung; auf
+  Safari clientseitige JPEG-Transkodierung), nach einem Erfolg startet ein neuer Drop frisch
+  statt sinnlos anzuhängen, der Fehl-Verdict unterscheidet informations- von geometrie-tot
+  (Gitter sauber über ≥3 Fotos → ehrlich „Module physisch weg" statt Falsche-Hoffnung-Schleife),
+  und hart erkämpfte Erfolge (>100 Versuche) tragen die Aufforderung, den re-encodierten Code
+  vor dem Eintippen mit dem eigenen Handy gegenzuscannen. Upload-Deckel auf 64 MB für
+  Kamera-Serien. **Restarbeit:** Assets selbst hosten statt CDN (Versionen pinnen),
+  Encode-Richtung bridgen (writeBarcode), Pages-Repo mit `.domains`, DNS CNAME auf
+  `<user>.codeberg.page`. Lizenzseitig geklärt (`THIRD-PARTY-NOTICES.md`).
 - **Mehrere Codes in einem Bild.** Ein Produktfoto mit zwei Etiketten liefert sechs oder mehr
   Finder-Kandidaten; wir suchen daraus genau ein Tripel und ignorieren den Rest.
 - **Symbologie-Grenze dokumentieren.** `structure.py`, `layout.py` und `qrspec.py` sind die

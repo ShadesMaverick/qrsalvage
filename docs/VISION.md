@@ -60,8 +60,12 @@ In dieser Reihenfolge, jede Stufe für sich nutzbar:
   **12,4 s** (nativ ~4 s, Faktor ~3 — im prognostizierten Band), Ladezeit CPython+NumPy+OpenCV
   ~4 s vom CDN, alle 225 Progress-Events flossen durch. Die Orakel-Naht (`core/oracle.py`)
   macht zxing-cpp austauschbar; die Sync/Async-Brücke läuft über JSPI (`run_sync`,
-  Chrome 137+). Noch offen: Worker statt Main-Thread, Assets selbst hosten statt CDN,
-  Encode-Richtung des WASM-Orakels, Pages-Repo, `.domains`, DNS.
+  Chrome 137+). **Worker-Ausbau erledigt**: die Rechnerei
+  läuft im Module-Worker (Seite bleibt beweisbar reaktiv), und das Orakel wird über den
+  synchronen embind-Aufruf von zxing-wasm gerufen — **JSPI ist raus aus dem Pfad**, die
+  Safari-Blockade damit architektonisch beseitigt (Realtest auf Safari steht aus). Noch
+  offen: Assets selbst hosten statt CDN (Versionen pinnen), Encode-Richtung des Orakels,
+  Pages-Repo, `.domains`, DNS.
 - [ ] **5. Veröffentlichung auf Codeberg** — Übersetzung der Docstrings (ISSUES 1), README
   final, `CONTRIBUTING`, die echte EUI64 in `tests/test_export.py` durch eine erfundene
   ersetzen, Impressum + Datenschutzerklärung für die öffentliche Seite (trivial: „keine

@@ -409,6 +409,7 @@ let token = null;   // identifies the result the server is holding for export
 let seq = 0;        // solve sequence; a late answer from a superseded run must not render
 let timerId = null;
 let mode = "one";   // "one": several photographs of one code; "many": a catalogue
+let lastSolved = false;  // a fresh drop after a success starts a fresh recovery
 
 /* --- camera: a burst while the hand moves ------------------------------------------- */
 /* The fusion of photographs from different angles is the strongest measured lever of the
@@ -533,16 +534,49 @@ function readAsDataURL(file) {
   });
 }
 
+function bitmapToJpeg(bitmap) {
+  const frame = document.createElement("canvas");
+  frame.width = bitmap.width;
+  frame.height = bitmap.height;
+  frame.getContext("2d").drawImage(bitmap, 0, 0);
+  return frame.toDataURL("image/jpeg", 0.95);
+}
+
 async function addFiles(files) {
   const images = [...(files || [])].filter((f) => f.type && f.type.startsWith("image/"));
   if (!images.length) return;
-  for (const file of images) {
-    loaded.push({
-      dataUrl: await readAsDataURL(file),
-      bitmap: await createImageBitmap(file),
-      name: file.name,
-    });
+
+  // After a success a fresh drop means a fresh code: adding to a solved one is always
+  // pointless, because the already-solved member wins again before anything is fused.
+  if (mode === "one" && lastSolved && loaded.length) {
+    loaded = []; token = null; lastSolved = false;
   }
+
+  const refused = [];
+  for (const file of images) {
+    try {
+      const bitmap = await createImageBitmap(file);
+      // iPhones photograph HEIC. Where the browser can decode it (Safari), it is transcoded
+      // to JPEG here, because the recovery backend cannot read HEIC bytes. Everything else
+      // travels untouched -- recompressing a crisp PNG would only cost detail.
+      const transcode = /hei[cf]/i.test(file.type || "");
+      loaded.push({
+        dataUrl: transcode ? bitmapToJpeg(bitmap) : await readAsDataURL(file),
+        bitmap,
+        name: file.name,
+      });
+    } catch {
+      // The old behaviour on an undecodable file was silence -- the drop zone did not even
+      // twitch. The most common cause is an iPhone HEIC on a browser without an HEIC decoder.
+      refused.push(file.name);
+    }
+  }
+  if (refused.length) {
+    status.textContent =
+      `could not read: ${refused.join(", ")} — likely HEIC (iPhone). ` +
+      "Export or share the photo as JPEG and drop it again.";
+  }
+  if (!loaded.length) return;
   picked = []; picking = false;
   refresh();
   run();
@@ -942,6 +976,15 @@ $("catalogPdf").addEventListener("click", async () => {
   $("catalogThanks").innerHTML = thanksHtml();
 });
 
+function informationGone(a) {
+  // The honest bad news, distinguished from the hopeful kind: the grid is essentially
+  // perfect, several photographs agreed, and the data still will not read. Measured on the
+  // corpus, that combination means modules are physically gone -- more photographs of the
+  // same views cannot bring them back.
+  const rate = a.wrong_known / a.known_total;
+  return !a.ok && rate <= 0.01 && a.timing >= 100 && (a.images_given || 1) >= 3;
+}
+
 function verdictFor(a) {
   if (!a.modules) {
     const n = a.finders.length;
@@ -954,10 +997,16 @@ function verdictFor(a) {
   if (rate > 0.05 || a.timing < 100) {
     return ["bad", "the grid did not seat — none of the cell counts below can be trusted yet"];
   }
+  if (informationGone(a)) {
+    return ["bad", `the grid is clean across ${a.images_given} photographs and the data still ` +
+      "does not read — that usually means modules are physically gone. Only a genuinely " +
+      "different view of the damaged area might help; more of the same will not"];
+  }
   return ["warn", "the grid seats but the payload is out of reach — more photographs are the strongest lever"];
 }
 
 function render(a) {
+  lastSolved = !!a.ok;
   $("results").classList.remove("hidden");
   $("payload").classList.remove("hidden");
   liveGrid = null;
@@ -1019,9 +1068,17 @@ function render(a) {
          <dl>${rows}</dl>
          <div class="note quiet">${escapeHtml(a.payload_info.fields.warning || "")}</div></div>`;
     }
+    // A result that took thousands of attempts or leaned on erasures is honest work, not a
+    // lie -- but Reed-Solomon can produce valid-and-wrong answers, and a confidently wrong
+    // install code costs more than none. One sentence buys the check that settles it.
+    const caveat = a.candidates_tried > 100
+      ? `<div class="note"><span class="warn">Hard-won (${Number(a.candidates_tried)} attempts).</span>
+         Before typing a secret anywhere, scan the re-encoded code below with your own phone
+         and check it shows the same text.</div>`
+      : "";
     payload.innerHTML =
       `<div class="label" style="color:var(--pink)">recovered · ${a.text.length} characters</div>
-       <code>${escapeHtml(a.text)}</code>${knowledge}
+       <code>${escapeHtml(a.text)}</code>${knowledge}${caveat}
        <div class="actions"><button id="copy">Copy</button></div>${thanksHtml()}`;
     $("copy").addEventListener("click", async () => {
       const button = $("copy");
@@ -1041,9 +1098,16 @@ function render(a) {
       tips.push("Mark the three corner squares by hand — the button under the photograph. " +
                 "Roughly is enough.");
     }
-    tips.push(`Add two or three <em>more photographs of the same code</em> — different angle,
+    if (informationGone(a)) {
+      tips.push(`This looks <em>information-limited, not geometry-limited</em>: the grid sits
+                 cleanly and still nothing reads. If part of the label is scratched away or
+                 missing, no amount of photographs restores it — only a view that shows those
+                 modules intact would.`);
+    } else {
+      tips.push(`Add two or three <em>more photographs of the same code</em> — different angle,
                different light. They are read together, and photographs that fail alone
                regularly decode as a group.`);
+    }
     payload.innerHTML =
       `<div class="label" style="color:var(--bad)">not recovered</div>
        <div class="note">${escapeHtml(a.failure || "unknown reason")}</div>
