@@ -13,6 +13,7 @@ import pytest
 from qrsalvage.core.decoding import decode_matrix, reencode
 from qrsalvage.core.galois import ReedSolomonError, correct_block
 from qrsalvage.core.layout import (
+    codeword_positions,
     deinterleave,
     extract_codewords,
     function_mask,
@@ -22,7 +23,7 @@ from qrsalvage.core.layout import (
     read_format,
 )
 from qrsalvage.core.qrspec import BLOCK_PLANS, TOTAL_CODEWORDS, block_plan
-from qrsalvage.core.repair import repair_progressive
+from qrsalvage.core.repair import repair_progressive, repair_scattered
 from qrsalvage.core.structure import version_for_modules
 
 
@@ -207,3 +208,61 @@ def test_erasures_rescue_what_errors_alone_cannot():
     assert with_hint.erasures_used > 0
     if without_hint.ok:
         pytest.skip("the damage was manageable without position hints too")
+
+
+def test_scattered_erasures_reach_what_no_prefix_can():
+    """Damage interleaved with sound codewords in the reliability order.
+
+    Constructed so that every prefix of the order provably fails: the sound-but-doubtful
+    codewords are all cheaper than the damaged ones, so a prefix must erase the whole decoy
+    band before it touches the first damaged codeword, and by then the budget is spent. An
+    arbitrary subset walks around the decoys.
+    """
+    text = "SCATTERED-BEATS-PREFIX"
+    original = reencode(text)
+    n = original.shape[0]
+    version = version_for_modules(n)
+    ecc, _, _ = read_format(original)
+    plan = block_plan(version, ecc)
+    t = plan.ec_per_block
+    positions = codeword_positions(n, version, ecc)[0]
+
+    damaged_count = t // 2 + 1  # one more than plain error correction can absorb
+    decoy_count = t - 2
+    assert decoy_count > t - damaged_count, "premise: decoys must outlast every prefix"
+
+    damaged = original.copy()
+    posterior = np.where(original, 0.999, 0.001)
+
+    # The damaged codewords: one flipped module each, and slightly *more* reliable than the
+    # decoys, so every prefix of the reliability order fills up with decoys first.
+    for index in range(damaged_count):
+        flat = positions[index][0]
+        damaged.flat[flat] = not damaged.flat[flat]
+        posterior.flat[flat] = 0.52 if damaged.flat[flat] else 0.48
+    for index in range(damaged_count, damaged_count + decoy_count):
+        flat = positions[index][0]
+        posterior.flat[flat] = 0.51 if damaged.flat[flat] else 0.49
+
+    block = deinterleave(
+        extract_codewords(damaged, read_format(damaged)[1])[: plan.total_codewords],
+        version,
+        ecc,
+    )[0]
+    with pytest.raises(ReedSolomonError):
+        corrected, error_positions, _ = correct_block(block, t, [])
+        if len(error_positions) < damaged_count:
+            raise ReedSolomonError("miscorrected instead of failing")  # also a fail
+
+    # The outside check, as in production. Without it the ladder happily returns a valid-but-
+    # wrong solution here -- five erased decoys plus one "corrected" error satisfy the
+    # syndromes -- which is precisely the failure mode repair.py documents.
+    def verify(candidate: np.ndarray) -> bool:
+        return decode_matrix(candidate) == text
+
+    ladder = repair_progressive(damaged, posterior=posterior, verify=verify)
+    assert not ladder.ok, "premise broken: a prefix sufficed, nothing scattered to show"
+
+    scattered = repair_scattered(damaged, posterior, verify=verify)
+    assert scattered.ok, scattered.failure
+    assert np.array_equal(scattered.matrix, original)

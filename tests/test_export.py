@@ -14,7 +14,15 @@ import pytest
 
 from qrsalvage.core.decoding import reencode
 from qrsalvage.core.pipeline import solve
-from qrsalvage.export import Layout, to_html_report, to_json, to_pdf, to_svg, zigbee_fields
+from qrsalvage.export import (
+    Layout,
+    to_catalog_pdf,
+    to_html_report,
+    to_json,
+    to_pdf,
+    to_svg,
+    zigbee_fields,
+)
 from qrsalvage.synth import Damage, render_photo
 
 TEXT = "QRSALVAGE-EXPORT-TEST-0815"
@@ -120,3 +128,78 @@ def test_html_report_is_self_contained(result):
     # leak the payload through a URL.
     assert "http://" not in page
     assert "https://" not in page.replace('<html lang="en">', "")
+
+
+def test_catalog_pdf_puts_three_entries_on_a_page():
+    """The catalogue: A4, three rows, title and payload next to each code."""
+    entry = {"title": "LED Lampe Badezimmer", "text": "CATALOG-TEST-0815", "matrix": MATRIX}
+    pdf = to_catalog_pdf([dict(entry) for _ in range(4)], size_mm=50.0)
+
+    assert pdf.startswith(b"%PDF-")
+    assert pdf.count(b"/Type /Page ") == 2, "four entries at three per page are two pages"
+    # A4 in points, i.e. the entries did not inherit the single-code square page.
+    assert b"/MediaBox [0 0 595.2756 841.8898]" in pdf
+    # The title reaches the page, umlaut-safe via WinAnsi.
+    assert b"(LED Lampe Badezimmer)" in pdf
+    assert pdf.count(b"(CATALOG-TEST-0815)") == 4
+
+    # The cross-reference table has to be honest here too.
+    import re as regex
+
+    start = int(regex.search(rb"startxref\s+(\d+)", pdf).group(1))
+    assert pdf[start : start + 4] == b"xref"
+
+
+def test_catalog_pdf_escapes_what_would_break_a_pdf_string():
+    backslash = chr(92)
+    entry = {
+        "title": f"Heizung (Keller) {backslash} Haupthaus",
+        "text": "PAREN(THESES)",
+        "matrix": MATRIX,
+    }
+    pdf = to_catalog_pdf([entry])
+    # Parentheses escape to backslash-paren, a backslash doubles.
+    expected = b"(Heizung " + rb"\(Keller\) \\ " + b"Haupthaus)"
+    assert expected in pdf
+    assert rb"(PAREN\(THESES\))" in pdf
+
+
+def test_catalog_pdf_refuses_to_be_empty():
+    import pytest as _pytest
+
+    with _pytest.raises(ValueError):
+        to_catalog_pdf([])
+
+
+def test_catalog_codes_survive_the_round_trip():
+    """The catalogue's reason to exist: every printed code must scan back to its text.
+
+    The PDF's content stream is uncompressed and every dark module is a filled `re` rectangle,
+    so the page can be rasterised from the file itself -- no PDF library, no dependence on a
+    viewer. What zxing reads out of that raster is exactly what a phone will read off the
+    printed page, minus the printer.
+    """
+    import re as regex
+
+    import numpy as np
+    import zxingcpp
+
+    from qrsalvage.export import A4_HEIGHT, A4_WIDTH
+
+    texts = ["CATALOG-ROUNDTRIP-A-01", "CATALOG-ROUNDTRIP-B-02", "CATALOG-ROUNDTRIP-C-03"]
+    entries = [
+        {"title": f"entry {i}", "text": t, "matrix": reencode(t)} for i, t in enumerate(texts)
+    ]
+    pdf = to_catalog_pdf(entries, size_mm=50.0)
+
+    scale = 3.0  # pixels per point; about 216 dpi, an ordinary office printer
+    page = np.full((int(A4_HEIGHT * scale) + 1, int(A4_WIDTH * scale) + 1), 255, dtype=np.uint8)
+    stream = pdf.split(b"stream\n", 1)[1].split(b"\nendstream", 1)[0].decode("ascii")
+    for x, y, w, h in regex.findall(r"([\d.]+) ([\d.]+) ([\d.]+) ([\d.]+) re", stream):
+        x, y, w, h = float(x), float(y), float(w), float(h)
+        top = int(round((A4_HEIGHT - y - h) * scale))
+        left = int(round(x * scale))
+        page[top : top + int(round(h * scale)), left : left + int(round(w * scale))] = 0
+
+    hits = {hit.text for hit in zxingcpp.read_barcodes(page) if hit.text}
+    assert hits == set(texts), f"scanned back {hits}"

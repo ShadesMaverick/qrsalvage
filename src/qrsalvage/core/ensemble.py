@@ -121,6 +121,141 @@ def _pool(stack: np.ndarray, weights: np.ndarray | None = None):
     return posterior, spread, (stack > 0).sum(axis=0)
 
 
+# --------------------------------------------------------------------------------------
+# Several photographs of one code.
+#
+# This is the one ensemble that reaches the error source the two below cannot. Both of those
+# vary the measurement inside a single image, and the dominant error -- a homography standing
+# in for a curved surface -- is a property of that image, so every member inherits it. Separate
+# photographs do not share it: different angle, different light, different grit, so their
+# mistakes fall on different cells and disagreement finally means something.
+#
+# MEASURED RESULT, and the first positive one in this file. Three photographs per trial, each
+# with its own angle, curvature, light and resolution, fourteen trials per level, single images
+# scored at the same budget as the fusion (scripts/multi_image.py):
+#
+#                    one photograph          fused, averaging probabilities
+#   contrast 0.10    34/42 = 81 %            14/14 = 100 %
+#   contrast 0.09    26/42 = 62 %            13/14 =  93 %
+#   contrast 0.08    14/42 = 33 %             9/14 =  64 %
+#   stain    0.40    27/42 = 64 %            14/14 = 100 %
+#   stain    0.50    22/42 = 52 %            14/14 = 100 %
+#   stain    0.60    15/42 = 36 %            12/14 =  86 %
+#
+# That is the win the two ensembles below never delivered, and for the reason stated above: the
+# grid error is finally uncorrelated between members.
+#
+# The two axes are not interchangeable, and the difference is the more useful half of the
+# result. Low contrast spoils every cell of every photograph alike, so three photographs carry
+# three copies of one handicap -- searched across three contrast levels and twelve groups, not
+# one case turned up where fusing three rescued what three could not do individually. A stain
+# lands somewhere else each time, so what one photograph loses the others still hold. Advice to
+# a user follows directly: re-photograph from a different angle and in different light, and do
+# not bother with a burst from the same position.
+#
+# The rule: at the mild levels all of them tie. They separate exactly where the fusion has to
+# work hardest, at stain 0.60 -- probabilities 12/14, pooled 10/14, log-odds 9/14. Those
+# intervals overlap, so that alone would not settle it; what settles it is that the same order
+# appeared on four photographs of one real engraved code, where averaging probabilities was the
+# only rule to solve within the shipped defaults (22 probe cells, budget 4000, 2018 attempts)
+# and the others needed the budget raised fivefold. The reason is measurable on that code: its
+# posterior is overconfident -- cells it calls certain beyond 0.999 are wrong 1.7 % of the time
+# -- and averaging log-odds compounds exactly that, leaving 4 cells inside the uncertainty band
+# where averaging probabilities leaves 20. A probe can only visit doubt it has been shown. So
+# the conservative rule is the default and the others stay available.
+
+
+@dataclass(frozen=True)
+class ImageConsensus:
+    """What several photographs of one code agreed and disagreed on."""
+
+    posterior: np.ndarray
+    members: int
+    agreement: tuple[float, ...]
+    mirrored: tuple[int, ...]
+    rejected: tuple[int, ...]
+    disagreeing: int
+
+    @property
+    def fused(self) -> bool:
+        return self.members > 1
+
+
+FUSION_RULES = ("probability", "log-odds", "pooled", "median")
+DEFAULT_FUSION = "probability"
+
+
+def _combine(stack: np.ndarray, rule: str) -> np.ndarray:
+    """Reduce several posteriors of the same cell to one."""
+    if rule == "probability":
+        return stack.mean(axis=0)
+    if rule == "median":
+        return np.median(stack, axis=0)
+    if rule == "pooled":
+        return _pool(np.stack([_logit(p) for p in stack]))[0]
+    if rule == "log-odds":
+        mean = np.stack([_logit(p) for p in stack]).mean(axis=0)
+        return 1.0 / (1.0 + np.exp(-np.clip(mean, -60.0, 60.0)))
+    raise ValueError(f"unknown fusion rule: {rule!r}")
+
+
+def fuse_images(
+    posteriors: list[np.ndarray],
+    known_dark: np.ndarray,
+    known_light: np.ndarray,
+    rule: str = DEFAULT_FUSION,
+    min_agreement: float = 0.75,
+) -> ImageConsensus:
+    """Fuse the posteriors of several photographs, after checking they show the same code.
+
+    The first posterior is the reference and should be the best-fitting one; the rest are
+    accepted only if they agree with it well enough to be the same code. Chance agreement is
+    50 %, a second photograph of the same code sits well above 90 %, so the default threshold
+    separates the two cleanly and refuses to average in a picture of something else.
+
+    A mirrored photograph is checked for explicitly, because nothing upstream can catch it. The
+    structure mask is symmetric about the main diagonal apart from the single always-dark
+    module: a code photographed in a mirror therefore fits its grid, scores one wrong known
+    cell out of a few hundred, and arrives here transposed. Averaged in unchecked it would
+    corrupt every cell it touched.
+    """
+    free = ~(known_dark | known_light)
+    reference = posteriors[0] >= 0.5
+
+    accepted = [posteriors[0]]
+    agreement: list[float] = [1.0]
+    mirrored: list[int] = []
+    rejected: list[int] = []
+
+    for index, posterior in enumerate(posteriors[1:], start=1):
+        if posterior.shape != reference.shape:
+            rejected.append(index)
+            continue
+        straight = float(((posterior >= 0.5)[free] == reference[free]).mean())
+        flipped = float(((posterior.T >= 0.5)[free] == reference[free]).mean())
+        if max(straight, flipped) < min_agreement:
+            rejected.append(index)
+            continue
+        if flipped > straight:
+            posterior = posterior.T
+            mirrored.append(index)
+        accepted.append(posterior)
+        agreement.append(max(straight, flipped))
+
+    stack = np.stack(accepted)
+    votes = (stack >= 0.5).sum(axis=0)
+    disagreeing = int(((votes > 0) & (votes < len(accepted)) & free).sum())
+
+    return ImageConsensus(
+        posterior=_combine(stack, rule) if len(accepted) > 1 else accepted[0],
+        members=len(accepted),
+        agreement=tuple(agreement),
+        mirrored=tuple(mirrored),
+        rejected=tuple(rejected),
+        disagreeing=disagreeing,
+    )
+
+
 def consensus_posterior(
     bgr: np.ndarray,
     corners: np.ndarray,

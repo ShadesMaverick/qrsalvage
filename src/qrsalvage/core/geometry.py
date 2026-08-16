@@ -186,9 +186,8 @@ def initial_corners(
     )
 
 
-def evaluate(gray, corners, modules, scale, known_dark, known_light) -> GridFit:
-    """Score one corner placement against the cells whose value the standard fixes."""
-    warped = warp(gray, corners, modules, scale)
+def _score(warped, corners, modules, scale, known_dark, known_light) -> GridFit:
+    """Score one rectification against the cells whose value the standard fixes."""
     means, spread = sample_cells(warped, modules, scale)
     fit = estimate_levels(means, spread, known_dark, known_light)
     posterior = posterior_dark(means, fit)
@@ -212,17 +211,139 @@ def evaluate(gray, corners, modules, scale, known_dark, known_light) -> GridFit:
     )
 
 
+def evaluate(gray, corners, modules, scale, known_dark, known_light) -> GridFit:
+    """Score one corner placement against the cells whose value the standard fixes."""
+    warped = warp(gray, corners, modules, scale)
+    return _score(warped, corners, modules, scale, known_dark, known_light)
+
+
+def _bowed_warp(gray, corners, bow: np.ndarray, modules, scale):
+    """Rectify with a homography plus two separable quadratic bows.
+
+    The mathematical gap this closes: a homography maps straight lines to straight lines, and a
+    module row on a cylinder is not a straight line in the photograph -- it bows. Four corners
+    have no way to say "bow"; they can only tilt the plane.
+
+    The parametrisation is deliberately the *smallest* one that can say it. A cylinder displaces
+    grid lines by an arc that depends on one coordinate only, and with the corners already
+    pinned by the flat fit, the quadratic bump 4t(1-t) is that arc's second-order shape. So:
+    two bow vectors, one swept along each axis, four scalars in all.
+
+    Not a control lattice. A first version used a 3x3 lattice of free offsets -- eighteen
+    parameters -- and it *overfitted the border*: the objective is measured on the known cells,
+    which ring the code, so the lattice bought border margin by bending the unmeasured middle,
+    and images the flat grid solved stopped decoding. Four separable parameters cannot express
+    "fix the border, trash the middle"; the constraint is the parametrisation itself, with no
+    penalty weight to tune.
+
+    Zero bow reproduces the homography exactly, so the two models nest.
+    """
+    n = modules * scale
+    destination = np.array([[0, 0], [n, 0], [0, n], [n, n]], dtype=np.float32)
+    # module space -> image space, the inverse of the mapping warp() hands to warpPerspective
+    homography = cv2.getPerspectiveTransform(destination, np.asarray(corners, dtype=np.float32))
+
+    xs, ys = np.meshgrid(np.arange(n, dtype=np.float64), np.arange(n, dtype=np.float64))
+    denominator = homography[2, 0] * xs + homography[2, 1] * ys + homography[2, 2]
+    map_x = (homography[0, 0] * xs + homography[0, 1] * ys + homography[0, 2]) / denominator
+    map_y = (homography[1, 0] * xs + homography[1, 1] * ys + homography[1, 2]) / denominator
+
+    u = xs / max(n - 1, 1)
+    v = ys / max(n - 1, 1)
+    bump_u = 4.0 * u * (1.0 - u)
+    bump_v = 4.0 * v * (1.0 - v)
+    map_x = map_x + bow[0] * bump_u + bow[2] * bump_v
+    map_y = map_y + bow[1] * bump_u + bow[3] * bump_v
+
+    return cv2.remap(
+        gray,
+        map_x.astype(np.float32),
+        map_y.astype(np.float32),
+        cv2.INTER_LINEAR,
+        borderMode=cv2.BORDER_CONSTANT,
+        borderValue=255,
+    )
+
+
+def refine_bow(
+    gray,
+    fit: GridFit,
+    known_dark,
+    known_light,
+    scale: int = 12,
+    start_delta: float = 3.0,
+    min_delta: float = 0.1,
+    on_step=None,
+) -> GridFit:
+    """Let the fitted grid bow, after the flat refinement has done all a plane can do.
+
+    Same coordinate descent, same smooth objective as refine_corners, over the four bow
+    parameters of :func:`_bowed_warp`. Separate stage on purpose: run on every candidate size
+    it would multiply the search cost, while the bow only matters once the size is settled --
+    so the corners carry the search and the bow is granted only to the winner.
+
+    Starting at zero bow reproduces the homography result, and the descent keeps a change only
+    when the objective improves, so this cannot return a worse grid than it was given. The
+    stopping step is coarser than the corner refinement's 0.05 px: a bow is a broad, smooth
+    correction, and chasing it below a tenth of a pixel buys noise, not signal.
+
+    MEASURED RESULT, in two halves (scripts/ab_bow.py). On the synthetic cylinder: nothing --
+    16/16, 16/16, 3/16, 0/16 across curvature 0.5 to 0.85, identical with and without, at
+    about 20 percent extra runtime. The corner refinement already absorbs a *uniform* cylinder
+    within the resolution-readable zone, and past that the edge modules are compressed below
+    five pixels, where the failure is information, not geometry. Joint descent over corners
+    and bow together was also tried and also moved nothing there.
+
+    On real damage the ledger flips: a photographed fabric label that no configuration without
+    the bow could solve (13 damaged codewords, six beyond the erasure budget at every setting)
+    decodes *directly* with it -- one attempt, no probing. Cloth drapes; its bow is uneven and
+    genuinely quadratic-ish in a way the synthetic cylinder, tamed by the corners, is not. The
+    stage stays on for that photograph's sake: synthetic damage shows the term is harmless,
+    real damage shows why it exists.
+    """
+    bow = np.zeros(4, dtype=np.float64)
+
+    def score(candidate: np.ndarray) -> GridFit:
+        warped = _bowed_warp(gray, fit.corners, candidate, fit.modules, scale)
+        return _score(warped, fit.corners, fit.modules, scale, known_dark, known_light)
+
+    best = score(bow)
+    if best.quality < fit.quality:
+        best = fit  # the remap disagrees with warpPerspective by a whisker; keep the better
+    delta = start_delta
+    while delta > min_delta:
+        improved = False
+        for axis in range(4):
+            for step in (delta, -delta):
+                candidate = bow.copy()
+                candidate[axis] += step
+                trial = score(candidate)
+                if trial.quality > best.quality:
+                    best, bow, improved = trial, candidate, True
+                    if on_step:
+                        on_step(best)
+        if not improved:
+            delta /= 2.0
+    return best
+
+
 def refine_corners(
-    gray, corners, modules, scale, known_dark, known_light, start_delta: float = 3.0
+    gray, corners, modules, scale, known_dark, known_light, start_delta: float = 3.0, on_step=None
 ) -> GridFit:
     """Nudge the four corners until the known cells sit as well as they can.
 
     A homography cannot represent a curved surface exactly. The best available approximation
     is not analytically available, but it is findable: coordinate descent with a shrinking step
     size, scored against the known cells.
+
+    `on_step` is called with every fit the descent accepts, the starting one included. That is
+    the hook the live view hangs on: the story of a recovery *is* this descent, and showing
+    the true intermediate grids costs nothing beyond the improvements that happen anyway.
     """
     current = np.array(corners, dtype=np.float64)
     best = evaluate(gray, current, modules, scale, known_dark, known_light)
+    if on_step:
+        on_step(best)
     delta = start_delta
     while delta > 0.05:
         improved = False
@@ -234,6 +355,8 @@ def refine_corners(
                     trial = evaluate(gray, candidate, modules, scale, known_dark, known_light)
                     if trial.quality > best.quality:
                         best, current, improved = trial, candidate, True
+                        if on_step:
+                            on_step(best)
         if not improved:
             delta /= 2.0
     return best
