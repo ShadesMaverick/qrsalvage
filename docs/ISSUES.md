@@ -198,7 +198,7 @@ Einzelfall durchgeht.
 - **Der Spendenmoment — GEBAUT, wartet auf Konten.** Die Karte sitzt auf der Erfolgskarte
   (und nach dem Katalog-Download), mit Axolotl, Privacy-Satz und Knöpfen — und bleibt
   unsichtbar, solange keine URLs eingetragen sind. **Eintragen in `index.html`, Konstante
-  `DONATE` ganz oben im Skript**, sobald Ko-fi-/LiberaPay-Konten existieren. Bewusst nicht auf
+  `DONATE` ganz oben im Skript**, sobald die Konten existieren — PayPal.me zuerst (in Deutschland der vertrauteste Knopf; Ko-fi wickelt intern ohnehin über PayPal ab), dazu Ko-fi und LiberaPay. Bewusst nicht auf
   der Startseite: Reziprozität hat einen Moment.
 - **Statische Browser-Version (Codeberg Pages + eigene Domain).** Kein Server: Pyodide
   (CPython/WASM, MPL-2.0) mit NumPy- und OpenCV-Paketen, zxing-cpp als WASM-Orakel hinter

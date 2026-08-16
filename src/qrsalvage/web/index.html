@@ -378,8 +378,10 @@ const $ = (id) => document.getElementById(id);
    else: a donation is reciprocity, and reciprocity has a moment. It shares its sentence with
    the privacy fact because that answers the unspoken question of what this tool lives on. */
 const DONATE = [
-  { label: "Ko-fi", url: "" },
-  { label: "LiberaPay", url: "" },
+  // PayPal first: for a German audience it is the button people recognise and already have.
+  { label: "PayPal", url: "" },      // e.g. "https://paypal.me/yourname"
+  { label: "Ko-fi", url: "" },       // e.g. "https://ko-fi.com/yourname"
+  { label: "LiberaPay", url: "" },   // e.g. "https://liberapay.com/yourname"
 ];
 
 function thanksHtml() {
