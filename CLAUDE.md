@@ -16,6 +16,11 @@ adressiert — so ist immer eindeutig, welcher Interpreter läuft.
 
 - Setup (einmalig): `py -3.11 -m venv .venv`, dann `.venv\Scripts\python.exe -m pip install -r requirements.txt`, dann `.venv\Scripts\python.exe -m pip install -e .`
 - Code lesen: `.venv\Scripts\python.exe -m qrsalvage solve <bild> [--crop X0 Y0 X1 Y1]`
+- Mehrere Fotos desselben Codes: `.venv\Scripts\python.exe -m qrsalvage solve <bild1> <bild2> ...`
+- Katalog verschiedener Codes als A4-PDF: `.venv\Scripts\python.exe -m qrsalvage catalog <bilder...> [--titles ...]`
+- Mehrbild-Gewinn messen: `.venv\Scripts\python.exe scripts\multi_image.py`
+- Kalibrierung der Posterior messen: `.venv\Scripts\python.exe scripts\calibration.py`
+- A/B einzelner Verfahrensteile: `scripts\ab_ensemble.py`, `scripts\ab_sigma.py`, `scripts\ab_bow.py`
 - Testfall erzeugen: `.venv\Scripts\python.exe -m qrsalvage synth "<text>" --contrast 0.14 --curvature 0.4`
 - Schwierigkeitskurve messen: `.venv\Scripts\python.exe scripts\difficulty.py`
 - Test: `.venv\Scripts\python.exe -m pytest`
@@ -48,8 +53,10 @@ Es gibt keinen Build-Schritt. Die Oberfläche ist eine statische HTML/JS-Datei, 
   - `repair.py` macht unsichere Zellen zu Auslassungen; steigert deren Zahl nur so weit,
     wie eine äußere Prüfung das Ergebnis akzeptiert
   - `decoding.py` Zeichnen, Decodieren, geordnetes Nachtasten, Neukodieren
-  - `ensemble.py` Mehrfachmessung — beide Varianten standardmäßig aus, Messergebnisse im
-    Docstring
+  - `ensemble.py` Mehrfachmessung. Die zwei Varianten *innerhalb* eines Bildes sind
+    standardmäßig aus — beide teilen sich den Gitterfehler und lösen messbar keinen Fall mehr.
+    Die Fusion mehrerer Fotos desselben Codes ist die einzige mit positivem Messergebnis; sie
+    läuft automatisch, sobald `solve` mehrere Bilder bekommt. Alle Messwerte im Docstring
   - `pipeline.py` fügt zusammen, entscheidet nichts selbst
 - `src/qrsalvage/synth.py` — künstlich verdorbene Fälle mit bekannter Antwort
 - `src/qrsalvage/cli.py` — Textinterface, zugleich der Agentenweg. Alles Ausgeben und Schreiben

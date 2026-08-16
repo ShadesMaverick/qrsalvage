@@ -61,6 +61,28 @@
   #drop.compact { padding: .8rem 1.2rem; }
   #drop.compact strong { font-size: .92rem; font-weight: 500; }
   #drop.compact .hint, #drop.compact::before { display: none; }
+  .linkish {
+    border: none; background: none; color: var(--muted); text-decoration: underline;
+    padding: .2rem .4rem; font-size: .85rem; cursor: pointer;
+  }
+  .linkish:hover { border: none; color: var(--pink-soft); }
+
+  /* --- the wait ------------------------------------------------------------------- */
+  /* A recovery legitimately takes seconds to a minute. Everything below the drop zone dims
+     while one runs: the alternative -- last photograph's diagnostics standing crisp and
+     confident next to a new photograph -- had someone reading numbers that belonged to a
+     different image. */
+  .busy #results { opacity: .35; pointer-events: none; }
+  .busy.watching #results { opacity: 1; pointer-events: auto; }
+  #results { transition: opacity .25s; }
+  .spin {
+    display: inline-block; width: .85em; height: .85em; border-radius: 50%;
+    border: 2px solid var(--line); border-top-color: var(--pink);
+    animation: spin .8s linear infinite; vertical-align: -.12em; margin-right: .35rem;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .quiet { color: var(--muted); }
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 
   /* --- layout --------------------------------------------------------------------- */
   /* Panels size to their own content. Stretching the diagnostics to match the height of the
@@ -84,11 +106,69 @@
     max-width: 100%; display: block; border-radius: 8px; background: var(--panel-in);
   }
   canvas { cursor: crosshair; }
+  #images img { width: 100%; image-rendering: pixelated; }
+
+  #thumbs { display: flex; gap: .55rem; flex-wrap: wrap; margin-bottom: .8rem; }
+  .thumb { position: relative; }
+  .thumb img { height: 54px; border-radius: 6px; display: block; }
+  .thumb button {
+    position: absolute; top: -7px; right: -7px; width: 20px; height: 20px; padding: 0;
+    border-radius: 50%; font-size: .72rem; line-height: 1;
+  }
+
+  #modeRow {
+    display: flex; gap: 1.6rem; justify-content: center; flex-wrap: wrap;
+    margin-top: .7rem; color: var(--muted); font-size: .87rem;
+  }
+  #modeRow label { display: inline-flex; gap: .45rem; align-items: center; cursor: pointer; }
+  #modeRow input { accent-color: var(--pink); }
+  #modeRow label:has(input:checked) { color: var(--fg); }
+
+  #catalogPanel { margin-top: 1.4rem; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+           gap: .9rem; margin: .4rem 0 .9rem; }
+  .card {
+    background: var(--panel-in); border: 1px solid var(--line); border-radius: 10px;
+    padding: .8rem; display: flex; flex-direction: column; gap: .6rem;
+  }
+  .card.miss { border-left: 3px solid var(--bad); }
+  .card.dup  { opacity: .6; }
+  .card img { width: 7.5rem; image-rendering: pixelated; border-radius: 6px; }
+  .card input.title {
+    font: inherit; padding: .5rem .6rem; border-radius: 7px; width: 100%;
+    border: 1px solid var(--line); background: var(--panel); color: var(--fg);
+  }
+  .card .snippet {
+    font: 11px/1.5 var(--mono); color: var(--muted); word-break: break-all;
+    max-height: 4.6em; overflow: hidden;
+  }
+  .card .state { font: 600 .68rem/1 var(--mono); letter-spacing: .1em;
+                 text-transform: uppercase; }
+
+  /* The live view during a recovery: the true intermediate states, not an animation. */
+  #live .stage { font-size: .9rem; margin-bottom: .8rem; min-height: 1.3em; }
+  #live .stage a { color: var(--pink-soft); border-bottom: 1px solid transparent; }
+  #live .stage a:hover { border-bottom-color: var(--pink-soft); }
+  .heatrow { display: flex; gap: .9rem; align-items: flex-start; margin-top: .9rem; }
+  #heat { image-rendering: pixelated; border-radius: 6px; max-width: 11rem; }
+  .racebar { display: inline-block; height: .55em; background: var(--line); border-radius: 3px;
+             vertical-align: middle; margin-right: .5rem; }
+  .racebar.best { background: var(--pink); }
 
   dl { display: grid; grid-template-columns: auto 1fr; gap: .42rem 1rem; margin: 0; }
   dt { color: var(--muted); }
   dd { margin: 0; font-family: var(--mono); font-variant-numeric: tabular-nums; }
   .ok { color: var(--ok); } .warn { color: var(--warn); } .bad { color: var(--bad); }
+
+  /* One sentence of judgement above the numbers: the numbers stay the evidence, but not
+     everyone who drops a photograph knows whether 6 of 841 uncertain cells is good news. */
+  .verdict {
+    border-radius: 8px; padding: .55rem .8rem; margin-bottom: .9rem; font-size: .9rem;
+    background: var(--panel-in); border: 1px solid var(--line);
+  }
+  .verdict.ok   { border-left: 3px solid var(--ok); }
+  .verdict.warn { border-left: 3px solid var(--warn); }
+  .verdict.bad  { border-left: 3px solid var(--bad); }
 
   /* --- payload -------------------------------------------------------------------- */
   .payload {
@@ -102,9 +182,12 @@
     background: var(--panel-in); font: 14px/1.55 var(--mono); word-break: break-all;
     user-select: all;
   }
+  .tips { margin: .7rem 0 0; padding-left: 1.15rem; color: var(--muted); font-size: .9rem; }
+  .tips li { margin: .35rem 0; }
+  .tips em { color: var(--pink-soft); font-style: normal; }
 
   /* --- controls ------------------------------------------------------------------- */
-  .actions { display: flex; gap: .55rem; flex-wrap: wrap; margin-top: 1rem; }
+  .actions { display: flex; gap: .55rem; flex-wrap: wrap; margin-top: 1rem; align-items: center; }
   button {
     font: 500 .88rem/1 inherit; padding: .55rem 1rem; border-radius: 8px;
     border: 1px solid var(--line); background: var(--panel-in); color: var(--fg);
@@ -148,9 +231,22 @@
   </header>
 
   <div id="drop">
-    <p><strong>Drop a photograph here</strong> &nbsp;or click to choose one</p>
-    <p class="hint">Processed on this machine. Nothing is uploaded, nothing leaves it.</p>
-    <input id="file" type="file" accept="image/*" class="hidden">
+    <p><strong id="dropTitle">Drop a photograph here</strong>
+       <span id="dropMore">&nbsp;or click to choose one</span>
+       <button id="reset" class="linkish hidden">start over</button></p>
+    <p class="hint">Several photographs of the same code are read together — take them from
+      different angles and what one loses, the others still hold.<br>
+      Processed on this machine. Nothing is uploaded, nothing leaves it.</p>
+    <input id="file" type="file" accept="image/*" multiple class="hidden">
+  </div>
+
+  <!-- The one decision the page cannot guess: several photographs are either several views of
+       one code (fuse them) or several different codes (catalogue them). -->
+  <div id="modeRow">
+    <label><input type="radio" name="mode" value="one" checked>
+      one code — photographs are read together</label>
+    <label><input type="radio" name="mode" value="many">
+      different codes — build a printable catalogue</label>
   </div>
 
   <div id="status" class="note"></div>
@@ -159,6 +255,7 @@
     <div class="row">
       <div class="panel">
         <h2>Input</h2>
+        <div id="thumbs" class="hidden"></div>
         <canvas id="photo"></canvas>
         <div class="note" id="canvasNote"></div>
         <div class="actions">
@@ -168,6 +265,15 @@
       </div>
       <div class="panel">
         <h2>Diagnostics</h2>
+        <div id="live" class="hidden">
+          <div id="liveStage" class="stage"></div>
+          <dl id="liveSizes"></dl>
+          <div class="heatrow">
+            <canvas id="heat" width="0" height="0"></canvas>
+            <div class="note" id="heatNote"></div>
+          </div>
+        </div>
+        <div id="verdict" class="hidden"></div>
         <dl id="metrics"></dl>
       </div>
     </div>
@@ -213,6 +319,23 @@
       <pre class="grid" id="grid"></pre>
     </details>
   </div>
+
+  <div class="panel hidden" id="catalogPanel">
+    <h2>Catalogue</h2>
+    <p class="note" style="margin-top:0">
+      Every photograph is treated as its own code. Give each one the name it has in your life —
+      <em>LED lamp, bathroom</em> — and the PDF prints three to an A4 page: the code at a real
+      physical size on the left, its content on the right, your title above. Duplicate
+      photographs of one code fold into a single entry.
+    </p>
+    <div class="cards" id="cards"></div>
+    <div class="actions">
+      <label class="size">code size
+        <input id="catalogSizeMm" type="number" value="50" min="20" max="70" step="1"> mm
+      </label>
+      <button id="catalogPdf">Download A4 catalogue (PDF)</button>
+    </div>
+  </div>
 </main>
 
 <script>
@@ -221,36 +344,104 @@ const $ = (id) => document.getElementById(id);
 const drop = $("drop"), fileInput = $("file"), status = $("status");
 const canvas = $("photo"), ctx = canvas.getContext("2d");
 
-let imageDataUrl = null;
-let bitmap = null;
+// Several photographs of one code, in the order they arrived. The first one is the one shown
+// on the canvas; hand-marking finders only makes sense against a single framing, so the
+// marking flow is offered only while exactly one is loaded.
+let loaded = [];    // { dataUrl, bitmap, name, result? (catalogue mode caches per photo) }
 let picking = false;
 let picked = [];
 let token = null;   // identifies the result the server is holding for export
+let seq = 0;        // solve sequence; a late answer from a superseded run must not render
+let timerId = null;
+let mode = "one";   // "one": several photographs of one code; "many": a catalogue
+
+for (const radio of document.querySelectorAll('#modeRow input')) {
+  radio.addEventListener("change", () => {
+    mode = radio.value;
+    picked = []; picking = false;
+    if (loaded.length) run();
+  });
+}
+
+function run() {
+  if (mode === "many") { catalogRun(); } else { solve(); }
+}
 
 drop.addEventListener("click", () => fileInput.click());
 drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
 drop.addEventListener("dragleave", () => drop.classList.remove("over"));
 drop.addEventListener("drop", (e) => {
   e.preventDefault(); drop.classList.remove("over");
-  if (e.dataTransfer.files[0]) load(e.dataTransfer.files[0]);
+  addFiles(e.dataTransfer.files);
 });
-fileInput.addEventListener("change", () => { if (fileInput.files[0]) load(fileInput.files[0]); });
+fileInput.addEventListener("change", () => { addFiles(fileInput.files); fileInput.value = ""; });
+$("reset").addEventListener("click", (e) => { e.stopPropagation(); resetAll(); });
 
-function load(file) {
-  const reader = new FileReader();
-  reader.onload = async () => {
-    imageDataUrl = reader.result;
-    bitmap = await createImageBitmap(file);
-    drop.classList.add("compact");
-    picked = []; picking = false;
-    draw();
-    solve();
-  };
-  reader.readAsDataURL(file);
+function readAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function addFiles(files) {
+  const images = [...(files || [])].filter((f) => f.type && f.type.startsWith("image/"));
+  if (!images.length) return;
+  for (const file of images) {
+    loaded.push({
+      dataUrl: await readAsDataURL(file),
+      bitmap: await createImageBitmap(file),
+      name: file.name,
+    });
+  }
+  picked = []; picking = false;
+  refresh();
+  run();
+}
+
+function resetAll() {
+  seq += 1;               // orphan any solve still in flight
+  busy(false);
+  loaded = []; picked = []; picking = false; token = null;
+  $("results").classList.add("hidden");
+  $("catalogPanel").classList.add("hidden");
+  drop.classList.remove("compact");
+  $("reset").classList.add("hidden");
+  $("dropTitle").textContent = "Drop a photograph here";
+  $("dropMore").innerHTML = "&nbsp;or click to choose one";
+  status.textContent = "";
+}
+
+function refresh() {
+  drop.classList.add("compact");
+  $("reset").classList.remove("hidden");
+  $("dropTitle").textContent =
+    loaded.length === 1 ? "1 photograph loaded" : `${loaded.length} photographs loaded`;
+  $("dropMore").textContent = " — drop more of the same code to add them";
+
+  const thumbs = $("thumbs");
+  thumbs.classList.toggle("hidden", mode === "one" && loaded.length < 2);
+  thumbs.innerHTML = loaded
+    .map((l, i) => `<div class="thumb"><img src="${l.dataUrl}" alt="">` +
+                   `<button data-index="${i}" title="remove">×</button></div>`)
+    .join("");
+  for (const button of thumbs.querySelectorAll("button")) {
+    button.addEventListener("click", () => {
+      loaded.splice(parseInt(button.dataset.index, 10), 1);
+      picked = []; picking = false;
+      if (!loaded.length) { resetAll(); return; }
+      refresh();
+      run();
+    });
+  }
+  draw();
 }
 
 function draw(detected) {
-  if (!bitmap) return;
+  if (!loaded.length) return;
+  const bitmap = loaded[0].bitmap;
   const width = Math.min(bitmap.width, 520);
   const scale = width / bitmap.width;
   canvas.width = width;
@@ -258,17 +449,35 @@ function draw(detected) {
   ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
   canvas.dataset.scale = scale;
 
-  // What the detector found, quietly; what the user clicked, loudly.
-  for (const p of detected || []) ring(p.x * scale, p.y * scale, 11, "#93a3b0", 1.5);
+  // What the detector found, quietly; what the user clicked, loudly. Both over a dark halo,
+  // because a thin bright ring on a bright photograph is invisible exactly where it matters.
+  for (const p of detected || []) ring(p.x * scale, p.y * scale, 11, "#8fd3b0", 2.5);
+  if (liveGrid) {
+    // top-left, top-right, bottom-left, bottom-right — drawn as the quadrilateral the
+    // descent currently holds. Watching it snap into place IS the method.
+    const order = [0, 1, 3, 2];
+    ctx.beginPath();
+    order.forEach((i, k) => {
+      const [x, y] = liveGrid[i];
+      if (k === 0) ctx.moveTo(x * scale, y * scale); else ctx.lineTo(x * scale, y * scale);
+    });
+    ctx.closePath();
+    ctx.strokeStyle = "rgba(10, 14, 18, .85)"; ctx.lineWidth = 4.5; ctx.stroke();
+    ctx.strokeStyle = "#f07ea3"; ctx.lineWidth = 2; ctx.stroke();
+  }
   picked.forEach((p, i) => {
     ring(p.x * scale, p.y * scale, 11, "#f07ea3", 2.5);
-    ctx.fillStyle = "#f07ea3";
     ctx.font = "600 13px ui-monospace, monospace";
+    ctx.strokeStyle = "rgba(10, 14, 18, .85)"; ctx.lineWidth = 3;
+    ctx.strokeText(String(i + 1), p.x * scale + 15, p.y * scale + 5);
+    ctx.fillStyle = "#f07ea3";
     ctx.fillText(String(i + 1), p.x * scale + 15, p.y * scale + 5);
   });
 }
 
 function ring(x, y, r, colour, width) {
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.strokeStyle = "rgba(10, 14, 18, .85)"; ctx.lineWidth = width + 3; ctx.stroke();
   ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
   ctx.strokeStyle = colour; ctx.lineWidth = width; ctx.stroke();
 }
@@ -287,31 +496,334 @@ canvas.addEventListener("click", (e) => {
   if (picked.length === 3) { picking = false; solve(picked); }
 });
 
+function busy(on) {
+  document.body.classList.toggle("busy", on);
+  clearInterval(timerId);
+  if (!on) { status.textContent = ""; return; }
+  const started = Date.now();
+  const together = loaded.length > 1 ? ` · reading ${loaded.length} photographs together` : "";
+  status.innerHTML =
+    `<span class="spin"></span> recovering… <span class="mono" id="elapsed">0 s</span>${together}` +
+    `<span class="quiet"> — a large photograph can take a minute</span>`;
+  timerId = setInterval(() => {
+    const el = $("elapsed");
+    if (el) el.textContent = Math.round((Date.now() - started) / 1000) + " s";
+  }, 1000);
+}
+
 async function solve(points) {
-  status.textContent = "recovering…";
-  let answer;
+  if (!loaded.length) return;
+  const my = ++seq;
+  $("catalogPanel").classList.add("hidden");
+  busy(true);
+  liveStart();
+  let answer = null;
   try {
     const response = await fetch("/api/solve", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ image: imageDataUrl, finder_points: points || null }),
+      body: JSON.stringify({
+        images: loaded.map((l) => l.dataUrl),
+        finder_points: points || null,
+        stream: true,
+      }),
     });
-    answer = await response.json();
+    // Newline-delimited JSON: every line but the last is a step of the actual recovery —
+    // the grid snapping into place, the versions competing, the probe counting. The last
+    // line is the result.
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let cut;
+      while ((cut = buffer.indexOf("\n")) >= 0) {
+        const line = buffer.slice(0, cut).trim();
+        buffer = buffer.slice(cut + 1);
+        if (!line || my !== seq) continue;
+        const event = JSON.parse(line);
+        if (event.type === "result") { answer = event; } else { liveEvent(event); }
+      }
+    }
   } catch (err) {
-    status.textContent = "the local server did not answer: " + err;
+    if (my === seq) { busy(false); liveEnd(); status.textContent = "the local server did not answer: " + err; }
     return;
   }
+  if (my !== seq) return;  // superseded by a newer drop; this answer belongs to old inputs
+  busy(false);
+  liveEnd();
+  if (answer) render(answer);
+}
+
+/* --- the live view: watch the method work ------------------------------------------- */
+/* Everything shown here is a true intermediate state of the recovery, not an animation
+   played over a black box. The grid drawn on the photograph is the grid the descent is
+   holding right now; the numbers are the numbers it is scoring. */
+
+let liveGrid = null;      // last accepted grid, drawn onto the photograph
+let liveSizes = {};       // modules -> {wrong, total, quality}
+let liveFrame = false;    // requestAnimationFrame throttle
+let liveChosen = null;
+
+const STAGES = {
+  image:   ['reading the photograph', null],
+  finders: ['looking for finder patterns', '/method#search'],
+  polarity:['trying inverted polarity', '/method#search'],
+  grid:    ['fitting the grid — coordinate descent on the known cells', '/method#grid'],
+  chosen:  ['version chosen', '/method#search'],
+  sampled: ['sampling — a probability for every module', '/method#posterior'],
+  repair:  ['Reed-Solomon with erasures', '/method#rs'],
+  probe:   ['probing the least certain cells', '/method#probe'],
+  member:  ['reading photographs', null],
+  fusion:  ['fusing the photographs', null],
+};
+
+function liveStart() {
+  liveGrid = null; liveSizes = {}; liveChosen = null;
+  document.body.classList.add("watching");
+  $("live").classList.remove("hidden");
+  $("verdict").classList.add("hidden");
+  $("metrics").innerHTML = "";
+  $("liveStage").textContent = "";
+  $("liveSizes").innerHTML = "";
+  $("heat").width = 0; $("heat").height = 0;
+  $("heatNote").textContent = "";
+  $("payload").classList.add("hidden");
+  $("images").innerHTML = "";
+  $("exports").classList.add("hidden");
+  $("results").classList.remove("hidden");
+}
+
+function liveEnd() {
+  document.body.classList.remove("watching");
+  $("live").classList.add("hidden");
+  $("payload").classList.remove("hidden");
+  liveGrid = null;
+  scheduleDraw();
+}
+
+function liveEvent(e) {
+  const stage = STAGES[e.type];
+  if (stage) {
+    const member = e.member !== undefined ? `photograph ${e.member + 1} · ` : "";
+    const extra =
+      e.type === "grid" && e.phase === "bow" ? " — letting it bow" :
+      e.type === "probe" ? ` — ${e.tried} of ${e.budget} attempts` :
+      e.type === "repair" ? (e.method === "ladder" ? ` — ${e.step} erasures` : ` — ${e.step} sets`) :
+      e.type === "member" ? ` — ${e.index + 1} of ${e.total}` : "";
+    $("liveStage").innerHTML = member + (stage[1]
+      ? `<a href="${stage[1]}" target="_blank">${stage[0]}</a>` : stage[0]) + escapeHtml(extra);
+  }
+  if (e.type === "member") { liveGrid = null; liveSizes = {}; liveChosen = null; scheduleDraw(); }
+  if (e.type === "finders" && loaded.length === 1 && e.member === undefined) {
+    draw(e.points);
+  }
+  if (e.type === "grid") {
+    liveSizes[e.modules] = { wrong: e.wrong, total: e.total, quality: e.quality };
+    renderRace();
+    // Only the primary photograph's grid is drawn — the canvas shows that one.
+    if (loaded.length === 1 || e.member === 0 || e.member === undefined) {
+      liveGrid = e.corners;
+      scheduleDraw();
+    }
+  }
+  if (e.type === "chosen") { liveChosen = e.modules; renderRace(); }
+  if (e.type === "sampled" && e.posterior) { renderHeat(e); }
+}
+
+function renderRace() {
+  const sizes = Object.keys(liveSizes).map(Number).sort((a, b) => a - b);
+  const rows = sizes.map((m) => {
+    const s = liveSizes[m];
+    const share = Math.min(s.wrong / Math.max(s.total, 1) / 0.4, 1);
+    const width = 4 + Math.round(76 * share);
+    const best = liveChosen === m ? " best" : "";
+    return `<dt>${m} modules</dt><dd><span class="racebar${best}" style="width:${width}px"></span>` +
+           `${s.wrong} / ${s.total} wrong</dd>`;
+  });
+  $("liveSizes").innerHTML = rows.join("");
+}
+
+function renderHeat(e) {
+  // The three-state story, visible: dark and light where the model is sure, red where it is
+  // not. This is the matrix the search is about to work on.
+  const n = e.posterior.length;
+  const heat = $("heat");
+  heat.width = n; heat.height = n;
+  heat.style.width = `${Math.min(n * 5, 176)}px`;
+  const context = heat.getContext("2d");
+  const pixels = context.createImageData(n, n);
+  for (let r = 0; r < n; r++) {
+    for (let c = 0; c < n; c++) {
+      const p = e.posterior[r][c];
+      const confidence = Math.min(Math.abs(p - 0.5) * 2 / 0.6, 1);
+      const base = p >= 0.5 ? [14, 22, 29] : [238, 241, 243];
+      const offset = (r * n + c) * 4;
+      pixels.data[offset]     = Math.round(base[0] * confidence + 224 * (1 - confidence));
+      pixels.data[offset + 1] = Math.round(base[1] * confidence + 90 * (1 - confidence));
+      pixels.data[offset + 2] = Math.round(base[2] * confidence + 74 * (1 - confidence));
+      pixels.data[offset + 3] = 255;
+    }
+  }
+  context.putImageData(pixels, 0, 0);
+  $("heatNote").textContent =
+    `what the machine sees: ${e.modules}×${e.modules} cells, ` +
+    `${e.uncertain} uncertain (red), ${e.wrong_known} known cells wrong`;
+}
+
+function scheduleDraw() {
+  if (liveFrame) return;
+  liveFrame = true;
+  requestAnimationFrame(() => { liveFrame = false; draw(); });
+}
+
+/* --- catalogue mode: every photograph its own code ---------------------------------- */
+
+function titleFrom(name) {
+  return (name || "").replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").trim() || "untitled";
+}
+
+async function catalogRun() {
+  const my = ++seq;
+  $("results").classList.add("hidden");
+  $("catalogPanel").classList.remove("hidden");
+  document.body.classList.add("busy");
+
+  // One photograph at a time, so the progress is real rather than a guess — and a photograph
+  // already recovered in this session is not recovered again when one more lands in the pile.
+  const pending = loaded.filter((l) => !l.result);
+  let done = 0;
+  for (const item of pending) {
+    status.innerHTML =
+      `<span class="spin"></span> recovering ${++done} of ${pending.length}… ` +
+      `<span class="quiet">${escapeHtml(item.name)}</span>`;
+    catalogRender();
+    try {
+      const response = await fetch("/api/solve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ images: [item.dataUrl] }),
+      });
+      if (my !== seq) return;
+      item.result = await response.json();
+    } catch (err) {
+      if (my !== seq) return;
+      status.textContent = "the local server did not answer: " + err;
+      document.body.classList.remove("busy");
+      return;
+    }
+  }
+  if (my !== seq) return;
   status.textContent = "";
-  render(answer);
+  document.body.classList.remove("busy");
+  catalogRender();
+}
+
+function catalogRender() {
+  const seen = new Map();  // payload text -> index of the first card that carries it
+  const cards = loaded.map((item, index) => {
+    const r = item.result;
+    if (item.title === undefined) item.title = titleFrom(item.name);
+    if (!r) {
+      return `<div class="card"><span class="state quiet">waiting…</span>
+        <img src="${item.dataUrl}" alt=""></div>`;
+    }
+    if (!r.ok) {
+      return `<div class="card miss"><span class="state bad">not recovered</span>
+        <img src="${item.dataUrl}" alt="">
+        <div class="snippet">${escapeHtml(item.name)} — ${escapeHtml(r.failure || "")}.
+        Several photographs of it, read together in the other mode, often succeed.</div></div>`;
+    }
+    const first = seen.get(r.text);
+    if (first !== undefined) {
+      return `<div class="card dup"><span class="state quiet">same code as
+        “${escapeHtml(loaded[first].title)}” — folded into one entry</span>
+        <img src="${item.dataUrl}" alt=""></div>`;
+    }
+    seen.set(r.text, index);
+    return `<div class="card"><span class="state ok">recovered</span>
+      ${r.clean_png ? `<img src="${r.clean_png}" alt="">` : ""}
+      <input class="title" data-index="${index}" value="${escapeHtml(item.title)}"
+        placeholder="what is this code, to you?">
+      <div class="snippet">${escapeHtml(r.text)}</div></div>`;
+  });
+  $("cards").innerHTML = cards.join("");
+  for (const input of $("cards").querySelectorAll("input.title")) {
+    input.addEventListener("input", () => {
+      loaded[parseInt(input.dataset.index, 10)].title = input.value;
+    });
+  }
+  const solvedTexts = new Set(
+    loaded.filter((l) => l.result && l.result.ok).map((l) => l.result.text)
+  );
+  $("catalogPdf").disabled = solvedTexts.size === 0;
+}
+
+$("catalogPdf").addEventListener("click", async () => {
+  const seen = new Set();
+  const entries = [];
+  for (const item of loaded) {
+    const r = item.result;
+    if (!r || !r.ok || seen.has(r.text)) continue;
+    seen.add(r.text);
+    const note = (r.version ? `version ${r.version}` : "") +
+      (r.ecc ? ` · error correction ${r.ecc}` : "") + ` · ${r.text.length} characters`;
+    entries.push({ title: item.title || titleFrom(item.name), text: r.text,
+                   ecc: r.ecc || null, note: note.replace(/^ · /, "") });
+  }
+  if (!entries.length) return;
+  const response = await fetch("/api/catalog", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ entries, size_mm: parseFloat($("catalogSizeMm").value) || 50 }),
+  });
+  if (!response.ok) {
+    status.textContent = "catalogue failed: " +
+      ((await response.json()).failure || response.status);
+    return;
+  }
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "catalog.pdf";
+  link.click();
+  URL.revokeObjectURL(url);
+});
+
+function verdictFor(a) {
+  if (!a.modules) {
+    const n = a.finders.length;
+    return ["bad", `no grid — ${n} finder candidate${n === 1 ? "" : "s"} found`];
+  }
+  const rate = a.wrong_known / a.known_total;
+  const seated = rate <= 0.01 && a.timing >= 100;
+  if (a.ok && seated) return ["ok", "grid seated cleanly — the payload fell out almost by itself"];
+  if (a.ok) return ["ok", "recovered — the numbers below say how hard it fought"];
+  if (rate > 0.05 || a.timing < 100) {
+    return ["bad", "the grid did not seat — none of the cell counts below can be trusted yet"];
+  }
+  return ["warn", "the grid seats but the payload is out of reach — more photographs are the strongest lever"];
 }
 
 function render(a) {
   $("results").classList.remove("hidden");
-  draw(picked.length ? null : a.finders);
+  $("payload").classList.remove("hidden");
+  liveGrid = null;
+  const single = loaded.length === 1;
+  draw(single && !picked.length ? a.finders : null);
+  $("canvasNote").textContent = single
+    ? "" : `showing the first photograph — ${loaded.length} are read together`;
+
+  const [cls, text] = verdictFor(a);
+  const verdict = $("verdict");
+  verdict.className = `verdict ${cls}`;
+  verdict.textContent = text;
 
   const rows = [];
-  const push = (k, v, cls) =>
-    rows.push(`<dt>${k}</dt><dd${cls ? ` class="${cls}"` : ""}>${v}</dd>`);
+  const push = (k, v, klass) =>
+    rows.push(`<dt>${k}</dt><dd${klass ? ` class="${klass}"` : ""}>${v}</dd>`);
 
   push("image", `${a.width} × ${a.height} px`);
   push("finders", a.finders.length, a.finders.length >= 3 ? "" : "bad");
@@ -325,26 +837,66 @@ function render(a) {
     push("decode attempts", a.candidates_tried);
     if (a.repair) push("reed-solomon", a.repair);
   }
+  if (a.fusion) {
+    push("photographs fused", a.fusion.photographs);
+    const worst = Math.min(...a.fusion.agreement.slice(1));
+    if (isFinite(worst)) push("agreement", `${(worst * 100).toFixed(1)} % (lowest)`);
+    push("cells in dispute", a.fusion.disagreeing);
+    if (a.fusion.rejected.length)
+      push("dropped", `${a.fusion.rejected.length} — did not match the best reading`, "warn");
+    if (a.fusion.mirrored.length)
+      push("mirrored", `${a.fusion.mirrored.length}, turned back`);
+  }
   $("metrics").innerHTML = rows.join("");
 
   const payload = $("payload");
   payload.classList.toggle("miss", !a.ok);
-  payload.innerHTML = a.ok
-    ? `<div class="label" style="color:var(--pink)">recovered · ${a.text.length} characters</div>
-       <code>${escapeHtml(a.text)}</code>`
-    : `<div class="label" style="color:var(--bad)">not recovered</div>
-       <div class="note">${escapeHtml(a.failure || "unknown reason")}</div>`;
+  if (a.ok) {
+    payload.innerHTML =
+      `<div class="label" style="color:var(--pink)">recovered · ${a.text.length} characters</div>
+       <code>${escapeHtml(a.text)}</code>
+       <div class="actions"><button id="copy">Copy</button></div>`;
+    $("copy").addEventListener("click", async () => {
+      const button = $("copy");
+      try { await navigator.clipboard.writeText(a.text); button.textContent = "copied ✓"; }
+      catch { button.textContent = "copy failed — select the text"; }
+      setTimeout(() => { button.textContent = "Copy"; }, 1600);
+    });
+  } else {
+    // The moment of failure is the one moment advice is worth anything. The order follows
+    // what actually rescues photographs, measured: geometry first, then the fusion.
+    const tips = [];
+    if (a.finders.length < 3 && single) {
+      tips.push("Photograph closer, or crop away the surroundings — a busy background is the " +
+                "most common reason the finder search comes up short.");
+    }
+    if (single) {
+      tips.push("Mark the three corner squares by hand — the button under the photograph. " +
+                "Roughly is enough.");
+    }
+    tips.push(`Add two or three <em>more photographs of the same code</em> — different angle,
+               different light. They are read together, and photographs that fail alone
+               regularly decode as a group.`);
+    payload.innerHTML =
+      `<div class="label" style="color:var(--bad)">not recovered</div>
+       <div class="note">${escapeHtml(a.failure || "unknown reason")}</div>
+       <ul class="tips">${tips.map((t) => `<li>${t}</li>`).join("")}</ul>
+       <div class="actions"><button id="addMore">Add photographs</button></div>`;
+    $("addMore").addEventListener("click", () => fileInput.click());
+  }
 
-  const offerManual = !a.ok || a.finders.length < 3;
+  const offerManual = single && (!a.ok || a.finders.length < 3);
   $("retry").classList.toggle("hidden", !offerManual || picking);
   $("cancel").classList.add("hidden");
 
   const images = $("images");
   images.innerHTML = "";
   if (a.reconstructed_png)
-    images.appendChild(panel("Recovered matrix", a.reconstructed_png, "reconstructed.png"));
+    images.appendChild(panel("Recovered matrix", a.reconstructed_png, "reconstructed.png",
+      "As sampled from the photograph — repaired cells included."));
   if (a.clean_png)
-    images.appendChild(panel("Re-encoded · standards clean", a.clean_png, "qrsalvage.png"));
+    images.appendChild(panel("Re-encoded · standards clean", a.clean_png, "qrsalvage.png",
+      "Freshly encoded from the recovered text. <em>This is the one to print.</em>"));
 
   $("grid").textContent = a.grid || "(no grid sampled)";
 
@@ -384,10 +936,11 @@ for (const button of document.querySelectorAll("#exports button")) {
   button.addEventListener("click", () => download(button.dataset.format));
 }
 
-function panel(title, dataUrl, filename) {
+function panel(title, dataUrl, filename, note) {
   const div = document.createElement("div");
   div.className = "panel";
   div.innerHTML = `<h2>${title}</h2><img src="${dataUrl}" alt="${title}">
+    <div class="note">${note || ""}</div>
     <div class="actions"><a download="${filename}" href="${dataUrl}"><button>Download PNG</button></a></div>`;
   return div;
 }
@@ -414,5 +967,3 @@ function escapeHtml(s) {
 </script>
 </body>
 </html>
-
-

@@ -9,13 +9,15 @@ from __future__ import annotations
 import base64
 import http.client
 import json
+import re
 import threading
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 
+import cv2
 import pytest
 
-from qrsalvage.server import Handler, export_payload, solve_payload
+from qrsalvage.server import Handler, catalog_payload, export_payload, solve_payload
 
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "engraved-curved-hard.png"
 
@@ -53,6 +55,45 @@ def test_a_broken_upload_is_reported_not_raised():
     answer = solve_payload({"image": "data:image/png;base64,bm90YW5pbWFnZQ=="})
     assert answer["ok"] is False
     assert answer["failure"]
+
+
+def test_several_photographs_are_fused_when_none_reads_alone():
+    """The strongest measured capability of the tool, reachable from the page.
+
+    Three synthetic photographs of one code, each with its own stain, none of which the solver
+    reads alone -- exactly the constructed case test_fusion.py pins down -- handed to the
+    server as one request. The response must carry the fusion evidence, because whoever reads
+    it decides whether to trust an install code on its strength.
+    """
+    from test_fusion import HARD_GROUP, HARD_STAIN, photographs
+    from test_fusion import TEXT as FUSION_TEXT
+
+    encoded = []
+    for photo in photographs(HARD_STAIN, HARD_GROUP):
+        ok, buffer = cv2.imencode(".png", photo)
+        assert ok
+        encoded.append(
+            "data:image/png;base64," + base64.b64encode(buffer.tobytes()).decode("ascii")
+        )
+
+    answer = solve_payload({"images": encoded})
+
+    assert answer["ok"] is True
+    assert answer["text"] == FUSION_TEXT
+    assert answer["images_given"] == 3
+    assert answer["fusion"]["photographs"] == 3
+    assert answer["fusion"]["rejected"] == []
+    assert answer["fusion"]["disagreeing"] > 0
+    assert json.dumps(answer)
+
+
+def test_a_single_image_may_still_arrive_under_the_old_key():
+    """The page sends `images` now; the old `image` contract stays honoured."""
+    single = solve_payload({"image": _data_url(FIXTURE)})
+    listed = solve_payload({"images": [_data_url(FIXTURE)]})
+    assert single["ok"] is True and listed["ok"] is True
+    assert single["text"] == listed["text"]
+    assert "fusion" not in listed, "one photograph is not a fusion"
 
 
 def test_hand_placed_finders_are_accepted():
@@ -142,7 +183,97 @@ def test_it_serves_the_page_and_nothing_else(running_server):
     connection.close()
 
 
+def test_every_figure_the_method_page_asks_for_is_served(running_server):
+    """A missing figure is invisible from the outside: the page still renders, just emptier.
+
+    The alt text carries the argument for readers who cannot see the picture, so a silently
+    broken image loses the statement as well as the illustration.
+    """
+    host, port = running_server
+    connection = http.client.HTTPConnection(host, port, timeout=10)
+
+    connection.request("GET", "/method")
+    page = connection.getresponse().read().decode("utf-8")
+    referenced = re.findall(r'<img src="(/[^"]+)"', page)
+    assert referenced, "the method page references no figures at all"
+
+    for path in referenced:
+        connection.request("GET", path)
+        response = connection.getresponse()
+        body = response.read()
+        assert response.status == 200, f"{path} is referenced but not served"
+        assert body, f"{path} is served empty"
+
+    # Inside a <figure> the alt text is not decoration, it is the only version of the picture a
+    # screen reader gets, so it has to carry the argument. Elsewhere -- the header axolotl --
+    # an empty alt is the correct answer and this must not push anyone into writing "logo".
+    figures = re.findall(r"<figure>.*?</figure>", page, re.S)
+    assert len(figures) >= 6, f"only {len(figures)} figures on the method page"
+    for figure in figures:
+        alt = re.search(r'alt="([^"]*)"', figure)
+        assert alt and len(alt.group(1)) > 60, figure[:200]
+    connection.close()
+
+
 def test_it_listens_on_loopback_only(running_server):
     """A damaged code's payload is frequently a secret. The socket must not be reachable."""
     host, _ = running_server
     assert host == "127.0.0.1"
+
+
+def test_the_catalogue_is_built_from_titles_and_texts_alone():
+    """Stateless: the page sends what it knows, the server re-encodes and lays out.
+
+    No token, no cache: a catalogue can span more recoveries than the export cache holds, and
+    the entries survive a server restart because there is nothing to survive.
+    """
+    body, content_type, filename = catalog_payload(
+        {
+            "entries": [
+                {"title": "LED Lampe Badezimmer", "text": "CATALOG-A-0001", "ecc": "L"},
+                {"title": "Heizung Keller", "text": "CATALOG-B-0002"},
+                {"title": "", "text": "CATALOG-C-0003"},
+                {"title": "leer", "text": "   "},
+            ],
+            "size_mm": 45,
+        }
+    )
+    assert body.startswith(b"%PDF-")
+    assert content_type == "application/pdf"
+    assert filename == "catalog.pdf"
+    assert b"(LED Lampe Badezimmer)" in body
+    assert b"(untitled)" in body, "an empty title falls back rather than vanishing"
+    assert b"CATALOG-C-0003" in body
+    assert body.count(b"/Type /Page ") == 1, "three usable entries fit one page"
+
+
+def test_the_catalogue_refuses_nothing_and_nonsense_sizes():
+    with pytest.raises(ValueError):
+        catalog_payload({"entries": [{"title": "x", "text": "  "}]})
+    with pytest.raises(ValueError):
+        catalog_payload({"entries": [{"title": "x", "text": "OK"}], "size_mm": 400})
+
+
+def test_the_solve_can_stream_its_progress(running_server):
+    """Newline-delimited JSON: the recovery narrated live, the result as the last line."""
+    host, port = running_server
+    connection = http.client.HTTPConnection(host, port, timeout=120)
+    body = json.dumps({"image": _data_url(FIXTURE), "stream": True})
+    connection.request(
+        "POST", "/api/solve", body=body, headers={"Content-Type": "application/json"}
+    )
+    response = connection.getresponse()
+    assert response.status == 200
+    assert response.getheader("Content-Type", "").startswith("application/x-ndjson")
+
+    lines = [json.loads(line) for line in response.read().splitlines() if line.strip()]
+    connection.close()
+
+    assert len(lines) > 5, "a recovery has more steps than that"
+    assert lines[-1]["type"] == "result"
+    assert lines[-1]["ok"] is True
+    kinds = {line["type"] for line in lines}
+    assert {"image", "finders", "grid", "sampled"} <= kinds
+    # Coordinates in the events land on the photograph the page shows.
+    grid = next(line for line in lines if line["type"] == "grid")
+    assert all(0 <= x <= 4000 and 0 <= y <= 4000 for x, y in grid["corners"])

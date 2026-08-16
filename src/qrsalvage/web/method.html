@@ -54,6 +54,19 @@
     padding: .9rem 1.1rem; margin: 1.4rem 0; font-size: .93rem; color: var(--muted);
   }
   .aside b { color: var(--fg); font-weight: 600; }
+  figure {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    margin: 1.4rem 0; padding: 1rem 1rem .85rem;
+  }
+  /* Below roughly 520 px the labels inside a figure stop being readable, so the figure
+     scrolls inside its own box rather than shrinking the page or the type. */
+  figure .plot { overflow-x: auto; }
+  figure img { display: block; width: 100%; min-width: 520px; height: auto; }
+  figcaption {
+    color: var(--muted); font-size: .87rem; line-height: 1.6; margin-top: .85rem;
+    padding-top: .7rem; border-top: 1px solid var(--line);
+  }
+  figcaption b { color: var(--fg); font-weight: 600; }
   ul { padding-left: 1.2rem; } li { margin: .35rem 0; }
   .toc { columns: 2; column-gap: 2rem; font-size: .93rem; margin: 0 0 1rem; padding-left: 1.1rem; }
   .toc a { color: var(--muted); text-decoration: none; }
@@ -95,12 +108,20 @@
     not data. The standard fixes them, so their true values are known before anything is read.
     In a version 3 code that is <em>244 of 841 cells</em> — about 29 %.
   </p>
-  <table>
-    <tr><th>version</th><th>modules</th><th>known cells</th><th>share</th></tr>
-    <tr><td class="num">1</td><td class="num">21 × 21</td><td class="num">203</td><td class="num">46 %</td></tr>
-    <tr><td class="num">3</td><td class="num">29 × 29</td><td class="num">244</td><td class="num">29 %</td></tr>
-    <tr><td class="num">6</td><td class="num">41 × 41</td><td class="num">268</td><td class="num">16 %</td></tr>
-  </table>
+  <figure>
+    <div class="plot">
+      <img src="/fig-known.svg" alt="Three QR code outlines, versions 1, 3 and 6, with the cells
+      the standard fixes drawn at their true black or white value and the remaining cells in
+      slate. The fixed cells sit around the border and shrink as a share of the code as the
+      version grows.">
+    </div>
+    <figcaption>
+      <b>The reference the whole method is calibrated against.</b> Drawn straight from the same
+      <code>structure_mask</code> the solver scores itself with. The fixed cells cluster around
+      the border — which is why the uncertainty model cannot be estimated from them alone, and
+      why <a href="#posterior">§03</a> has to add a second term for the middle.
+    </figcaption>
+  </figure>
   <p>
     That is the whole idea. Every later step — the brightness model, the grid, the version, the
     polarity — produces a number that can be checked against cells whose answer is already
@@ -137,6 +158,23 @@
   <div class="formula">
     T(r,c) = ( D + L ) / 2 &nbsp;&nbsp;&nbsp; C(r,c) = max( L − D , ε )
   </div>
+  <figure>
+    <div class="plot">
+      <img src="/fig-levels.svg" alt="A cross-section along module row 6. Two curves, the fitted
+      dark level D and light level L, run across the width of the code with the measured known
+      cells scattered on them. The gap between the curves is only about sixteen grey values and
+      both curves drift together across the code.">
+    </div>
+    <figcaption>
+      <b>Both levels, measured across one row.</b> Row 6 is the only row with a known cell at
+      every column — finder, separator, then the alternating timing pattern — so both fields can
+      be shown against real samples rather than extrapolated. Taken from
+      <code>fixtures/engraved-curved-hard.png</code>: the two levels are separated by roughly
+      sixteen grey values out of 255, and they drift across the code together. A single global
+      threshold has to be right to within a few grey values everywhere at once; the midpoint of
+      two fitted fields does not.
+    </figcaption>
+  </figure>
 
   <h2 id="posterior"><span class="num">03</span>A probability per module</h2>
   <p>
@@ -178,6 +216,24 @@
       k = 1.5 · only the <em>excess</em> over the baseline counts, or the signal is flattened
     </span>
   </div>
+  <figure>
+    <div class="plot">
+      <img src="/fig-posterior.svg" alt="Two panels. On the left, two Gaussian curves centred on
+      the dark and the light level with the threshold midway between them. On the right, the
+      resulting probability curve at two values of sigma, each with the width of its uncertain
+      band marked as a measured horizontal span: 0.02 of the contrast for the cleanest cell in
+      the image and 0.09 for the noisiest.">
+    </div>
+    <figcaption>
+      <b>What σ actually buys.</b> Both curves are the same formula on the same measurement; only
+      the spread differs, taken at the cleanest and the noisiest cell of
+      <code>fixtures/engraved-curved-hard.png</code>. By eye the two are almost the same curve,
+      so the figure marks the quantity that matters instead: how wide a range of measurements the
+      cell reports as undecided. It is <em>0.02 of the local contrast against 0.09</em> — a factor
+      of nearly six in how readily a cell admits doubt, and therefore in whether the search ever
+      looks at it. The shaded strip is the ±0.15 the solver counts as uncertain.
+    </figcaption>
+  </figure>
 
   <h2 id="grid"><span class="num">04</span>Fitting the grid</h2>
   <p>
@@ -204,9 +260,39 @@
     pixel, so it is what the search follows — while the integer count is what the result is
     judged by.
   </div>
+  <figure>
+    <div class="plot">
+      <img src="/fig-objective.svg" alt="Two stacked panels sharing an axis of grid offset in
+      pixels. The upper panel shows Q as a smooth curve with a single clear peak at zero
+      offset. The lower panel shows the count of wrong known cells as a staircase that is flat
+      at zero over a narrow plateau and then jumps in steps to over a hundred.">
+    </div>
+    <figcaption>
+      <b>The same movement, seen by both numbers.</b> The fitted grid on
+      <code>fixtures/engraved-curved-hard.png</code> is slid sideways one pixel at a time and
+      both quantities are recorded. Q moves for every fraction of a pixel and points back at the
+      optimum from anywhere on the curve; the error count is flat, then jumps, and past about
+      two pixels it is uselessly saturated. Two quantities on two scales, so two panels — never
+      one plot with two axes.
+    </figcaption>
+  </figure>
   <p>
     On the photograph this project started with, that descent took the sampling error from
     <em>18 wrong known cells to 2</em>, and only then did the code decode.
+  </p>
+  <h3>When the plane is not enough</h3>
+  <p>
+    A homography maps straight lines to straight lines, and four corners can only tilt the
+    plane — they have no way to say <em>bow</em>. So the winning grid gets one more stage: two
+    quadratic bows, one swept along each axis, four parameters in all. The parametrisation is
+    deliberately the smallest one that can express what a curved surface does. A first attempt
+    with a free 3×3 control lattice — eighteen parameters — overfitted the border: the
+    objective is measured on the known cells, which ring the code, so the lattice bought border
+    margin by bending the unmeasured middle, and images the flat grid solved stopped decoding.
+    Four separable parameters cannot say "fix the border, bend the middle"; the constraint is
+    the parametrisation itself, with no penalty weight to tune. On a photographed fabric label
+    this stage is the difference between no result at any budget and decoding on the first
+    attempt.
   </p>
 
   <h2 id="search"><span class="num">05</span>What is searched, not guessed</h2>
@@ -254,6 +340,22 @@
     search over a heap. Each subset already emitted spawns exactly two successors — extend it,
     or advance its last element — which yields every subset exactly once, in order.
   </p>
+  <figure>
+    <div class="plot">
+      <img src="/fig-probe.svg" alt="Two panels. On the left, a bar chart of the flip cost of the
+      22 least certain cells, rising from about 0.2 to about 5.6. On the right, the total cost
+      of each subset in the order the heap emits it, rising monotonically, with the first five
+      subsets labelled.">
+    </div>
+    <figcaption>
+      <b>The ladder, and the order it is climbed in.</b> Costs measured on
+      <code>fixtures/engraved-curved-hard.png</code>: the cheapest doubt costs
+      <em>0.22 against 5.6</em> for the twenty-second, a factor of twenty-five. So the order is
+      not a detail — enumerating the same cells in any other order would spend the whole budget
+      on combinations that were never plausible. The right panel is the property the heap
+      guarantees: the total cost never decreases from one emission to the next.
+    </figcaption>
+  </figure>
   <div class="aside">
     <b>Why no learned scoring.</b> The decoder is an exact oracle: it does not say "warmer", it
     says valid or not valid. Reinforcement learning exists to approximate a reward function you
@@ -273,6 +375,21 @@
       an erasure costs one, because its position is already known
     </span>
   </div>
+  <figure>
+    <div class="plot">
+      <img src="/fig-rs.svg" alt="Three rows, each a budget of ten check symbols. The first
+      spends it on five errors, each two symbols wide. The second on two errors and six
+      erasures. The third on ten erasures, each one symbol wide. All three fill the same
+      budget, but the number of cells salvaged doubles from five to ten.">
+    </div>
+    <figcaption>
+      <b>One budget, spent three ways.</b> Each row fills the same ten check symbols of a
+      version 1-M block. Deciding every doubtful cell and getting five of them wrong exhausts
+      the budget; abstaining on ten does too — and covers twice as many cells. That factor of
+      two is the entire argument for the third state, and it is why an uncertain cell must never
+      be rounded to the nearer value on the way through.
+    </figcaption>
+  </figure>
   <p>
     That factor of two is why the module matrix has three states rather than two. An honest
     "I don't know, but I know where" is worth twice a guess.
@@ -290,6 +407,17 @@
     wrong. So the erasure count is raised one step at a time and the sparsest result that an
     outside check accepts is taken. Without that contradiction from outside, the method returns
     something every time, and usually nonsense.
+  </p>
+  <h3>Prefixes are not enough either</h3>
+  <p>
+    Raising the count erases the k <em>least reliable</em> codewords — a prefix of the
+    reliability order. Measured on real photographs, the damaged codewords interleave with
+    sound ones in that order, and every sound codeword inside the prefix is a check symbol
+    spent on nothing. Damage at reliability ranks {2,4,6,8,10,12,14,16,18} is unreachable for
+    any prefix — covering rank 18 costs 18 of 15 symbols — while the exact set costs 9. So
+    after the ladder fails, arbitrary erasure <em>sets</em> are enumerated in ascending total
+    doubt, by the same heap that orders the cell probe in <a href="#probe">§06</a>. Each
+    candidate still has to survive the outside check.
   </p>
 
   <h2 id="limits"><span class="num">08</span>Where it stops</h2>

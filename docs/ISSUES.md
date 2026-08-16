@@ -161,6 +161,36 @@ Einzelfall durchgeht.
 
 **Labels:** `enhancement`
 
+- **Kalibrierung der Posterior korrigieren.** Das Messwerkzeug gibt es jetzt
+  (`scripts/calibration.py`, Rand und Mitte getrennt), und es hat die Frage verschoben. Befund:
+  bei mildem und gleichmäßigem Schaden ist die Posterior praktisch perfekt kalibriert; bei
+  lokalem Schaden (Fleck) lügt genau die Mitte (98,1 % richtig bei behaupteten ≥0,999, ECE 6,7×
+  Rand). Die Fehlkalibrierung ist also räumlich, nicht global — ein Temperaturparameter, am
+  ehrlichen Rand gefittet, käme als T ≈ 1 heraus und änderte nichts. Zwei räumliche σ-Terme
+  (Beacon aus falsch lesenden bekannten Zellen, geglättete Nachbarschafts-Streuung) sind gebaut,
+  gemessen und wirkungslos: Erfolgsraten in keinem Arm bewegt, ECE 0,0238 → 0,0233
+  (`scripts/ab_sigma.py`; Gewichte stehen auf 0, Code und Protokoll in `sampling.py`).
+  Vermutliche Ursache: der Blur reicht 1–2 Zellen weit, ein Fleck ist viele Zellen groß — das
+  Innere bleibt für beide Terme unsichtbar. Nächste Kandidaten: größerer/mehrskaliger Blur oder
+  ein echtes MRF über die Zellen. **Fertig, wenn:** die Erfolgsquote in `scripts/difficulty.py`
+  oder die Mitte-ECE in `scripts/calibration.py` messbar besser wird.
+- **Mehrbild-Fusion in der Oberfläche — ERLEDIGT.** Der Server nimmt `payload["images"]` als
+  Liste (das alte `image` bleibt gültig), die Seite hat Mehrfachauswahl, Thumbnails mit
+  Entfernen-Knopf und zeigt Übereinstimmung, strittige Zellen und aussortierte Fotos an. Der
+  Fehlerfall bietet das Nachlegen weiterer Fotos aktiv an. Dabei zwei echte Fehler gefunden und
+  behoben: die Handmarkierung übersprang die Auflösungskorrektur des automatischen Wegs
+  (90 Sekunden Rechnen in ein falsches Gitter, jetzt 7 Sekunden ins richtige), und die
+  Finder-Koordinaten wurden im Arbeitsbild statt im Originalbild gemeldet — die Ringe auf dem
+  Foto saßen daneben, sobald intern skaliert wurde.
+- **Statische Browser-Version (Codeberg Pages + eigene Domain).** Kein Server: Pyodide
+  (CPython/WASM, MPL-2.0) mit NumPy- und OpenCV-Paketen, zxing-cpp als WASM-Orakel hinter
+  einer kleinen Naht in `decoding.py` (einzige native Abhängigkeit, vier Aufrufe). Der
+  Ereigniskanal (`progress` in `solve`/`solve_many`) ist transportneutral gebaut und speist
+  den Web Worker unverändert. Erst der Spike: pures Wheel + Minimalseite, eine Fixture im
+  Browser lösen, Zeit messen. Ehrliche Kosten: ~40–60 MB Erstladung, 2–5× langsamer,
+  single-threaded (Pages kann keine COOP/COEP-Header setzen). Lizenzseitig geklärt, siehe
+  `THIRD-PARTY-NOTICES.md`. Domain: `.domains`-Datei im Pages-Repo, DNS CNAME auf
+  `<user>.codeberg.page`.
 - **Mehrere Codes in einem Bild.** Ein Produktfoto mit zwei Etiketten liefert sechs oder mehr
   Finder-Kandidaten; wir suchen daraus genau ein Tripel und ignorieren den Rest.
 - **Symbologie-Grenze dokumentieren.** `structure.py`, `layout.py` und `qrspec.py` sind die

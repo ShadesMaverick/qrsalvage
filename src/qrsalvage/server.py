@@ -26,8 +26,8 @@ import cv2
 import numpy as np
 
 from .core.decoding import reencode, render
-from .core.pipeline import solve
-from .export import to_html_report, to_json, to_pdf, to_svg
+from .core.pipeline import solve, solve_many
+from .export import to_catalog_pdf, to_html_report, to_json, to_pdf, to_svg
 
 WEB_ROOT = Path(__file__).resolve().parent / "web"
 MAX_UPLOAD = 24 * 1024 * 1024
@@ -50,24 +50,42 @@ def _png_data_url(matrix: np.ndarray, scale: int = 8) -> str:
     return "data:image/png;base64," + base64.b64encode(_png_bytes(matrix, scale)).decode("ascii")
 
 
-def solve_payload(payload: dict) -> dict:
-    """Run one recovery and return everything the page needs, as plain JSON types."""
-    raw = base64.b64decode(payload["image"].split(",", 1)[-1])
-    buffer = np.frombuffer(raw, dtype=np.uint8)
-    image = cv2.imdecode(buffer, cv2.IMREAD_COLOR)
-    if image is None:
-        return {"ok": False, "failure": "the file could not be read as an image"}
+def solve_payload(payload: dict, progress=None) -> dict:
+    """Run one recovery and return everything the page needs, as plain JSON types.
+
+    Accepts either a single ``image`` or a list under ``images``. Several photographs of one
+    code are fused -- the strongest measured capability of the whole tool, and the page's
+    failure guidance sends people here on purpose. Hand-placed finder points only apply to a
+    single photograph: three clicks describe one framing, not several.
+    """
+    encoded = payload.get("images") or [payload["image"]]
+    images = []
+    for entry in encoded:
+        raw = base64.b64decode(entry.split(",", 1)[-1])
+        image = cv2.imdecode(np.frombuffer(raw, dtype=np.uint8), cv2.IMREAD_COLOR)
+        if image is None:
+            which = f" ({len(images) + 1} of {len(encoded)})" if len(encoded) > 1 else ""
+            return {"ok": False, "failure": f"the file{which} could not be read as an image"}
+        images.append(image)
 
     points = payload.get("finder_points") or None
-    if points:
+    if points and len(images) == 1:
         points = [(float(p["x"]), float(p["y"])) for p in points]
+    else:
+        points = None
 
-    result = solve(
-        image,
-        budget=int(payload.get("budget", 4000)),
-        ensemble=payload.get("ensemble", "off"),
-        finder_points=points,
-    )
+    budget = int(payload.get("budget", 4000))
+    if len(images) == 1:
+        result = solve(
+            images[0],
+            budget=budget,
+            ensemble=payload.get("ensemble", "off"),
+            finder_points=points,
+            progress=progress,
+        )
+    else:
+        result = solve_many(images, budget=budget, progress=progress)
+    image = images[0]
 
     out: dict = {
         "ok": result.solved,
@@ -75,9 +93,21 @@ def solve_payload(payload: dict) -> dict:
         "failure": result.failure,
         "width": int(image.shape[1]),
         "height": int(image.shape[0]),
+        "images_given": len(images),
         "finders": [{"x": x, "y": y} for x, y, _ in result.finders],
         "candidates_tried": result.candidates_tried,
+        # The level the original carried. The catalogue re-encodes from text alone, and
+        # without this a reprinted label would silently get whatever level the encoder likes.
+        "ecc": result.ecc,
     }
+    if result.fusion is not None:
+        out["fusion"] = {
+            "photographs": result.fusion.members,
+            "agreement": [round(a, 4) for a in result.fusion.agreement],
+            "mirrored": list(result.fusion.mirrored),
+            "rejected": list(result.fusion.rejected),
+            "disagreeing": result.fusion.disagreeing,
+        }
     if result.modules is not None:
         out.update(
             version=result.version,
@@ -100,8 +130,10 @@ def solve_payload(payload: dict) -> dict:
             or f"{result.repair.errors_corrected} errors, "
             f"{result.repair.erasures_used} erasures over {result.repair.blocks} blocks"
         )
+    # Both result codes at the same scale, or the page shows two QR images of visibly
+    # different size side by side and looks like it cannot make up its mind.
     if result.decoded_matrix is not None:
-        out["reconstructed_png"] = _png_data_url(result.decoded_matrix)
+        out["reconstructed_png"] = _png_data_url(result.decoded_matrix, scale=12)
     if result.solved:
         out["clean_png"] = _png_data_url(reencode(result.text), scale=12)
 
@@ -151,6 +183,36 @@ def export_payload(payload: dict) -> tuple[bytes, str, str]:
     raise ValueError(f"unknown export format: {fmt}")
 
 
+def catalog_payload(payload: dict) -> tuple[bytes, str, str]:
+    """Build the A4 catalogue from recovered texts. Returns (bytes, content type, filename).
+
+    Stateless on purpose: the page sends title and text per entry and the codes are re-encoded
+    from the text, at the error correction level each original carried. Nothing has to be
+    remembered between the recoveries and the download, so a catalogue can span more
+    recoveries than the export cache holds.
+    """
+    entries = []
+    for entry in payload.get("entries", []):
+        text = (entry.get("text") or "").strip()
+        if not text:
+            continue
+        entries.append(
+            {
+                "title": (entry.get("title") or "").strip() or "untitled",
+                "text": text,
+                "matrix": reencode(text, ecc=entry.get("ecc") or None),
+                "note": (entry.get("note") or "").strip() or None,
+            }
+        )
+    if not entries:
+        raise ValueError("no entries with a recovered text")
+
+    size_mm = float(payload.get("size_mm", 50.0))
+    if not 20.0 <= size_mm <= 70.0:
+        raise ValueError("catalogue code size must be between 20 and 70 mm")
+    return to_catalog_pdf(entries, size_mm=size_mm), "application/pdf", "catalog.pdf"
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "qrsalvage"
 
@@ -168,13 +230,21 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    # Only these, by name. No path joining, so no traversal to worry about.
+    # Only these, by name. No path joining, so no traversal to worry about. The figures on the
+    # method page are listed one by one for the same reason; docs/make_method_figures.py builds
+    # them, and test_server.py checks that every figure the page asks for is in here.
     STATIC = {
         "/": ("index.html", "text/html; charset=utf-8"),
         "/index.html": ("index.html", "text/html; charset=utf-8"),
         "/method": ("method.html", "text/html; charset=utf-8"),
         "/method.html": ("method.html", "text/html; charset=utf-8"),
         "/axolotl.png": ("axolotl.png", "image/png"),
+        "/fig-known.svg": ("fig-known.svg", "image/svg+xml"),
+        "/fig-levels.svg": ("fig-levels.svg", "image/svg+xml"),
+        "/fig-posterior.svg": ("fig-posterior.svg", "image/svg+xml"),
+        "/fig-objective.svg": ("fig-objective.svg", "image/svg+xml"),
+        "/fig-probe.svg": ("fig-probe.svg", "image/svg+xml"),
+        "/fig-rs.svg": ("fig-rs.svg", "image/svg+xml"),
     }
 
     def do_GET(self) -> None:  # noqa: N802 - name fixed by BaseHTTPRequestHandler
@@ -198,7 +268,7 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_POST(self) -> None:  # noqa: N802 - name fixed by BaseHTTPRequestHandler
-        if self.path not in ("/api/solve", "/api/export"):
+        if self.path not in ("/api/solve", "/api/export", "/api/catalog"):
             self._send(404, b"not found", "text/plain; charset=utf-8")
             return
         length = int(self.headers.get("Content-Length", 0))
@@ -206,9 +276,10 @@ class Handler(BaseHTTPRequestHandler):
             self._send(413, b'{"ok":false,"failure":"image too large"}', "application/json")
             return
 
-        if self.path == "/api/export":
+        if self.path in ("/api/export", "/api/catalog"):
+            builder = export_payload if self.path == "/api/export" else catalog_payload
             try:
-                body, content_type, filename = export_payload(json.loads(self.rfile.read(length)))
+                body, content_type, filename = builder(json.loads(self.rfile.read(length)))
             except Exception as exc:
                 message = json.dumps({"ok": False, "failure": f"{exc}"}).encode("utf-8")
                 self._send(400, message, "application/json; charset=utf-8")
@@ -218,6 +289,46 @@ class Handler(BaseHTTPRequestHandler):
 
         try:
             payload = json.loads(self.rfile.read(length))
+        except Exception as exc:
+            answer = {"ok": False, "failure": f"{type(exc).__name__}: {exc}"}
+            self._send(200, json.dumps(answer).encode("utf-8"), "application/json; charset=utf-8")
+            return
+
+        if payload.get("stream"):
+            # Newline-delimited JSON: progress events as they happen, the result as the last
+            # line. HTTP/1.0 close-delimits the body, so no length is needed up front -- which
+            # is the whole point, the length is not known until the recovery is over. The page
+            # gets to *show* the descent instead of a spinner, and the events are the same ones
+            # every other shell sees; the core neither knows nor cares that this one is a wire.
+            self.send_response(200)
+            self.send_header("Content-Type", "application/x-ndjson; charset=utf-8")
+            self.send_header(
+                "Content-Security-Policy", "default-src 'self' data: blob: 'unsafe-inline'"
+            )
+            self.end_headers()
+            alive = True
+
+            def push(event: str, data: dict) -> None:
+                nonlocal alive
+                if not alive:
+                    return
+                try:
+                    line = json.dumps({"type": event, **data}) + "\n"
+                    self.wfile.write(line.encode("utf-8"))
+                    self.wfile.flush()
+                except OSError:
+                    # The reader hung up. The recovery finishes anyway -- it cannot be
+                    # interrupted mid-flight -- but there is no one left to talk to.
+                    alive = False
+
+            try:
+                answer = solve_payload(payload, progress=push)
+            except Exception as exc:
+                answer = {"ok": False, "failure": f"{type(exc).__name__}: {exc}"}
+            push("result", answer)
+            return
+
+        try:
             answer = solve_payload(payload)
         except Exception as exc:  # a bad upload must not take the server down
             answer = {"ok": False, "failure": f"{type(exc).__name__}: {exc}"}
