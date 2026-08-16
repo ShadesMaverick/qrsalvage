@@ -77,7 +77,7 @@ def _subsets_by_cost(costs: np.ndarray, budget: int):
 
 
 def ordered_search(
-    mm: ModuleMatrix, max_cells: int = 22, budget: int = 4000, scale: int = 4
+    mm: ModuleMatrix, max_cells: int = 22, budget: int = 4000, scale: int = 4, on_step=None
 ) -> SearchResult:
     """Probe the matrix at its least certain cells, cheapest doubts first.
 
@@ -105,6 +105,10 @@ def ordered_search(
             flat = order[position]
             candidate.flat[flat] = not candidate.flat[flat]
         tried += 1
+        # Every 250th attempt, not every attempt: the point of the report is that the search
+        # is alive, and a thousand messages a second would cost more than they say.
+        if on_step and tried % 250 == 0:
+            on_step(tried)
         text = decode_matrix(candidate, scale=scale)
         if text:
             flipped = [(order[p] // n, order[p] % n) for p in subset]

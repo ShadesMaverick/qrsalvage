@@ -16,6 +16,24 @@ import numpy as np
 # scripts/difficulty.py.
 SPREAD_WEIGHT = 1.5
 
+# Damage is spatially contiguous -- a stain, a scratch, a worn patch -- while the two terms
+# above treat every cell as its own island. Two neighbourhood terms can carry that structure:
+# a known cell that reads wrong is ground truth that damage crosses that exact spot, so its
+# blurred indicator marks the surroundings (BEACON_WEIGHT); and a stain's interior cells are
+# covered whole -- uniform inside, confidently wrong, invisible to their own spread -- so only
+# the blurred spread of the ring around them reaches them (NEIGHBOR_WEIGHT).
+#
+# MEASURED RESULT, and a negative one: both default to zero. On the stain axis (16 images per
+# level, scripts/ab_sigma.py) the success rate did not move by a single image in any arm --
+# 14/16 and 11/16 at stain 0.35 and 0.45, identical for off/off, beacon, neighbour and both --
+# and the middle-of-the-code calibration error barely twitched (ECE 0.0238 -> 0.0233 at stain
+# 0.5, scripts/calibration.py). The plausible reason: the blur radius reaches one or two cells,
+# but a synthetic stain is many cells wide, so the interior stays dark to both terms. The terms
+# and the measurement stay, so the next idea starts from numbers instead of from scratch.
+BEACON_WEIGHT = 0.0
+NEIGHBOR_WEIGHT = 0.0
+SPATIAL_BLUR = 1.2  # in cells; roughly the scale at which stains outgrow single modules
+
 
 @dataclass(frozen=True)
 class LevelFit:
@@ -101,9 +119,19 @@ def estimate_levels(
 
     baseline = float(np.median(spread[known])) if known.any() else 0.0
     excess = np.maximum(spread - baseline, 0.0) / contrast
-    sigma = np.sqrt(base_sigma**2 + (SPREAD_WEIGHT * excess) ** 2)
+    variance = base_sigma**2 + (SPREAD_WEIGHT * excess) ** 2
 
-    return LevelFit(dark=dark, light=light, sigma=sigma)
+    # The neighbourhood terms; both weights default to zero, see the measurement above them.
+    if BEACON_WEIGHT > 0.0:
+        threshold = (dark + light) / 2.0
+        mismatch = (known_dark & (means > threshold)) | (known_light & (means < threshold))
+        beacon = cv2.GaussianBlur(mismatch.astype(np.float64), (0, 0), SPATIAL_BLUR)
+        variance = variance + (BEACON_WEIGHT * beacon) ** 2
+    if NEIGHBOR_WEIGHT > 0.0:
+        neighborhood = cv2.GaussianBlur(excess, (0, 0), SPATIAL_BLUR)
+        variance = variance + (NEIGHBOR_WEIGHT * neighborhood) ** 2
+
+    return LevelFit(dark=dark, light=light, sigma=np.sqrt(variance))
 
 
 def posterior_dark(means: np.ndarray, fit: LevelFit) -> np.ndarray:

@@ -203,3 +203,117 @@ def test_success_rate_at_moderate_damage():
         for seed in range(10)
     )
     assert solved >= 8, f"only {solved} of 10 solved"
+
+
+def test_the_bow_never_returns_a_worse_grid():
+    """The descent invariant that makes the bow safe to run unconditionally.
+
+    Zero bow reproduces the homography result and only improvements are kept, so the bowed
+    grid must score at least as well as the flat one it started from -- on a flat surface just
+    as on a curved one.
+    """
+    from qrsalvage.core.geometry import refine_bow
+    from qrsalvage.core.pipeline import DEFAULT_SIZES, _attempt
+
+    for curvature in (0.0, 0.6):
+        photo = render_photo(reencode(TEXT), Damage(contrast=0.25, curvature=curvature), seed=2)
+        _, gray, _, _, fits, _, _ = _attempt(photo, DEFAULT_SIZES, False, None)
+        flat = min(fits, key=lambda f: (f.wrong_known, -f.quality))
+        known_dark, known_light = structure_mask(flat.modules)
+
+        bowed = refine_bow(gray, flat, known_dark, known_light)
+
+        assert bowed.quality >= flat.quality
+        assert bowed.wrong_known <= flat.wrong_known + 1, (
+            "a quality gain must not be bought with known cells"
+        )
+
+
+def test_hand_marked_finders_survive_an_oversized_photograph():
+    """The escape hatch gets the same resolution correction as the automatic path.
+
+    Before it did, this exact case failed: hand-marked finders on a photograph far above the
+    working band ran the preprocessing at native resolution, where its fixed blur is a fraction
+    of a module, and lost a code whose downscaled version reads cleanly. The person reaching
+    for the escape hatch is by definition holding a photograph the automatic path could not
+    handle -- it must not be the path with fewer safety nets.
+    """
+    import cv2
+
+    from qrsalvage.core.pipeline import GOOD_MODULE_PX
+
+    damage = Damage(contrast=0.30, curvature=0.0, rotation_deg=0.0, module_px=8.0)
+    photo = render_photo(reencode(TEXT), damage, seed=4)
+    big = cv2.resize(photo, None, fx=4.0, fy=4.0, interpolation=cv2.INTER_CUBIC)
+    assert GOOD_MODULE_PX[1] < 8.0 * 4, "precondition: far above the working band"
+
+    # With no rotation and no curvature the finder centres are exactly where synth drew them:
+    # a five-module quiet zone, then 3.5 modules into the code.
+    modules = reencode(TEXT).shape[0]
+    near = (5 + 3.5) * 8.0 * 4
+    far = (5 + modules - 3.5) * 8.0 * 4
+    points = [(near, near), (far, near), (near, far)]
+
+    result = solve(big, finder_points=points)
+
+    assert result.solved, result.failure
+    assert result.text == TEXT
+
+    # And the reported finders land on the photograph the caller handed over -- not on some
+    # internal working image nobody outside ever sees.
+    for x, y, _ in result.finders[:3]:
+        assert min(abs(x - p[0]) + abs(y - p[1]) for p in points) < 8.0 * 4 * 2, (
+            "finder reported far from every marked point; coordinates are off"
+        )
+
+
+def test_reported_finders_are_in_the_coordinates_of_the_given_image():
+    """The automatic path downscales internally; the report must not leak that."""
+    import cv2
+
+    damage = Damage(contrast=0.30, curvature=0.0, rotation_deg=0.0, module_px=8.0)
+    photo = render_photo(reencode(TEXT), damage, seed=4)
+    big = cv2.resize(photo, None, fx=4.0, fy=4.0, interpolation=cv2.INTER_CUBIC)
+
+    result = solve(big)
+    assert result.solved
+
+    modules = reencode(TEXT).shape[0]
+    near = (5 + 3.5) * 8.0 * 4
+    far = (5 + modules - 3.5) * 8.0 * 4
+    expected = [(near, near), (far, near), (near, far)]
+    for ex, ey in expected:
+        assert min(abs(x - ex) + abs(y - ey) for x, y, _ in result.finders) < 8.0 * 4 * 2, (
+            "no reported finder near a true centre, in the handed-over image's pixels"
+        )
+
+
+def test_progress_events_tell_the_story_in_order():
+    """The live view shows true intermediate states, so the core must supply them.
+
+    The order is the method's order: first the photograph, then the finders, then grids being
+    fitted, then the sampled probabilities. And a listener is an observer, never a participant:
+    one that raises must change nothing about the result.
+    """
+    photo = render_photo(reencode(TEXT), Damage(contrast=0.30, curvature=0.2), seed=3)
+
+    events = []
+    result = solve(photo, progress=lambda event, data: events.append((event, data)))
+    assert result.solved
+
+    names = [event for event, _ in events]
+    assert names.index("image") < names.index("finders") < names.index("grid")
+    assert names.index("grid") < names.index("sampled")
+
+    grids = [data for event, data in events if event == "grid"]
+    assert len(grids) > 4, "the descent accepts improvements; each one is an event"
+    assert all(len(g["corners"]) == 4 for g in grids)
+    sampled = next(data for event, data in events if event == "sampled")
+    assert len(sampled["posterior"]) == sampled["modules"]
+
+    def broken(event, data):
+        raise RuntimeError("a watcher must never sink the recovery")
+
+    undisturbed = solve(photo, progress=broken)
+    assert undisturbed.solved
+    assert undisturbed.text == result.text
