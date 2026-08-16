@@ -317,3 +317,46 @@ def test_progress_events_tell_the_story_in_order():
     undisturbed = solve(photo, progress=broken)
     assert undisturbed.solved
     assert undisturbed.text == result.text
+
+
+def test_the_oracle_is_a_seam_not_a_dependency():
+    """The one native dependency stays behind one seam, and the seam holds.
+
+    A registered backend replaces zxing for decode and encode alike; and the core imports
+    without the binding even installed, which is the fact the browser build stands on. The
+    import check runs in a fresh interpreter because this one has long since loaded zxing.
+    """
+    import subprocess
+    import sys
+
+    from qrsalvage.core import oracle
+
+    calls = []
+
+    def fake_decode(image):
+        calls.append(image.shape)
+        return "FROM-THE-FAKE"
+
+    def fake_encode(text, ec_level):
+        calls.append((text, ec_level))
+        return np.zeros((21, 21), dtype=bool)
+
+    try:
+        oracle.use(fake_decode, fake_encode)
+        from qrsalvage.core.decoding import decode_matrix, reencode
+
+        assert decode_matrix(np.zeros((21, 21), dtype=bool)) == "FROM-THE-FAKE"
+        assert reencode("ANYTHING", ecc="M").shape == (21, 21)
+        assert ("ANYTHING", "M") in calls
+    finally:
+        oracle.use(*oracle._native())
+
+    probe = (
+        "import sys; import qrsalvage.core.pipeline; "
+        "assert 'zxingcpp' not in sys.modules, 'the import leaked'; print('clean')"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", probe], capture_output=True, text=True, timeout=120
+    )
+    assert result.returncode == 0, result.stderr
+    assert "clean" in result.stdout

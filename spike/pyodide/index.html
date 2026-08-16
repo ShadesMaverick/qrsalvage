@@ -1,0 +1,149 @@
+<!doctype html>
+<!-- The Pyodide spike: does the core run in a browser, and how fast.
+
+     This page answers the one real unknown on the road to a serverless qrsalvage: it loads
+     CPython on WebAssembly (Pyodide) with numpy and OpenCV, installs the pure qrsalvage
+     wheel, hands the oracle seam a zxing-cpp compiled to WASM, and solves a fixture from the
+     public corpus - measuring every stage.
+
+     Deliberately NOT the product: assets come from a CDN (the production plan self-hosts),
+     everything runs on the main thread (production gets a worker), and only the decode
+     direction of the oracle is bridged. The question here is feasibility and speed, nothing
+     else.
+
+     Run from the repository root, so the wheel and the fixture are reachable:
+         python -m pip wheel . --no-deps -w dist
+         python -m http.server 8801
+     then open  http://127.0.0.1:8801/spike/pyodide/index.html
+
+     Needs a browser with JSPI (WebAssembly.Suspending) - Chrome 137+. Pyodide's run_sync
+     rides on it to let the synchronous core wait on the asynchronous WASM oracle. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>qrsalvage — pyodide spike</title>
+<style>
+  body { font: 15px/1.6 ui-monospace, monospace; background: #1b252e; color: #f2f4f5;
+         max-width: 60rem; margin: 2rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.2rem; color: #f07ea3; }
+  #log div { padding: .15rem 0; border-bottom: 1px solid #26333f; }
+  .ok { color: #8fd3b0; } .bad { color: #e0644a; } .t { color: #93a3b0; }
+</style>
+</head>
+<body>
+<h1>qrsalvage — pyodide spike</h1>
+<div id="log"></div>
+
+<script src="https://cdn.jsdelivr.net/pyodide/v0.28.0/full/pyodide.js"></script>
+<script type="module">
+const log = (text, cls) => {
+  const row = document.createElement("div");
+  row.textContent = text;
+  if (cls) row.className = cls;
+  document.getElementById("log").appendChild(row);
+};
+const stamp = (label, t0) => log(`${label}: ${((performance.now() - t0) / 1000).toFixed(1)} s`, "t");
+
+try {
+  if (typeof WebAssembly.Suspending !== "function") {
+    throw new Error("no JSPI in this browser - the sync/async bridge needs it");
+  }
+
+  // --- the oracle, compiled differently -------------------------------------------------
+  let t = performance.now();
+  const zxing = await import("https://cdn.jsdelivr.net/npm/zxing-wasm@2/full/+esm");
+  await zxing.prepareZXingModule({ fireImmediately: true });
+  stamp("zxing-cpp WASM ready", t);
+
+  window.zxReadBarcodes = (imageData) =>
+    zxing.readBarcodes(imageData, { formats: ["QRCode"], tryInvert: false });
+  window.makeImageData = (bytes, width, height) => {
+    const clamped = new Uint8ClampedArray(bytes.length ?? bytes.byteLength);
+    clamped.set(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes));
+    return new ImageData(clamped, width, height);
+  };
+
+  // --- CPython, numpy, OpenCV -----------------------------------------------------------
+  t = performance.now();
+  const pyodide = await loadPyodide();
+  stamp("pyodide (CPython) ready", t);
+
+  t = performance.now();
+  await pyodide.loadPackage(["numpy", "opencv-python"]);
+  stamp("numpy + opencv loaded", t);
+
+  // --- the pure qrsalvage wheel ----------------------------------------------------------
+  t = performance.now();
+  const wheel = await (await fetch("/dist/qrsalvage-0.1.0-py3-none-any.whl")).arrayBuffer();
+  pyodide.unpackArchive(wheel, "wheel");
+  const fixture = new Uint8Array(
+    await (await fetch("/fixtures/engraved-curved-hard.png")).arrayBuffer()
+  );
+  pyodide.FS.writeFile("/fixture.png", fixture);
+  stamp("qrsalvage wheel + fixture in place", t);
+
+  // --- solve, in the browser ---------------------------------------------------------------
+  t = performance.now();
+  await pyodide.runPythonAsync(`
+import json
+import time
+
+import cv2
+import js
+import numpy as np
+from pyodide.ffi import run_sync, to_js
+
+from qrsalvage.core import oracle
+
+
+def wasm_decode(gray):
+    height, width = gray.shape
+    rgba = np.dstack([gray, gray, gray, np.full_like(gray, 255)])
+    image_data = js.makeImageData(to_js(rgba.tobytes()), width, height)
+    for hit in run_sync(js.zxReadBarcodes(image_data)):
+        if hit.text:
+            return hit.text
+    return None
+
+
+def no_encode(text, ec_level):
+    raise NotImplementedError("the spike bridges the decode direction only")
+
+
+oracle.use(wasm_decode, no_encode)
+
+from qrsalvage.core.pipeline import solve
+
+image = cv2.imread("/fixture.png")
+events = []
+started = time.perf_counter()
+result = solve(image, progress=lambda event, data: events.append(event))
+elapsed = time.perf_counter() - started
+
+report = json.dumps({
+    "solved": result.solved,
+    "text": result.text,
+    "version": result.version,
+    "wrong_known": result.wrong_known,
+    "known_total": result.known_total,
+    "attempts": result.candidates_tried,
+    "events": len(events),
+    "seconds": round(elapsed, 1),
+})
+`);
+  const report = JSON.parse(pyodide.globals.get("report"));
+  stamp("solve finished", t);
+
+  log("");
+  log(`solved: ${report.solved} — "${report.text}"`, report.solved ? "ok" : "bad");
+  log(`version ${report.version}, ${report.wrong_known}/${report.known_total} known cells ` +
+      `wrong, ${report.attempts} attempt(s), ${report.events} progress events`);
+  log(`solve wall clock in the browser: ${report.seconds} s`, "ok");
+  document.title = report.solved ? "spike: SOLVED" : "spike: failed";
+} catch (error) {
+  log(String(error), "bad");
+  document.title = "spike: error";
+}
+</script>
+</body>
+</html>
