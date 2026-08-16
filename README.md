@@ -124,8 +124,11 @@ about 1.4 mm across. SVG and PDF carry that size for real; the PNG is for sharin
 the payload alongside the figures that say how much to trust it, and `html` is a self-contained
 report showing the photograph, the recovered matrix and the evidence between them.
 
-Zigbee payloads can be split into their fields with `--zigbee`, which is off by default: an
-install code is a pairing secret, not an identifier.
+Recognised payloads — Zigbee install codes, Matter onboarding codes, Wi-Fi credentials — are
+explained next to the recovered text: what the code is and where one types it. For Matter that
+includes the derived 11-digit *manual pairing code*, which is precisely what a person whose
+code cannot be scanned needs. In the JSON export the split is opt-in via `--split-payload`:
+install codes, passcodes and network keys are secrets, not identifiers.
 
 Turn a pile of photographs of *different* codes into a printable register:
 

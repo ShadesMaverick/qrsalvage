@@ -27,7 +27,15 @@ import numpy as np
 
 from .core.decoding import reencode, render
 from .core.pipeline import solve, solve_many
-from .export import to_catalog_pdf, to_html_report, to_json, to_pdf, to_svg
+from .export import (
+    PAYLOAD_HINTS,
+    payload_fields,
+    to_catalog_pdf,
+    to_html_report,
+    to_json,
+    to_pdf,
+    to_svg,
+)
 
 WEB_ROOT = Path(__file__).resolve().parent / "web"
 MAX_UPLOAD = 24 * 1024 * 1024
@@ -100,6 +108,13 @@ def solve_payload(payload: dict, progress=None) -> dict:
         # without this a reprinted label would silently get whatever level the encoder likes.
         "ecc": result.ecc,
     }
+    # The follow-up question, answered: what is this payload, and where does one type it. The
+    # split fields stay on this loopback answer -- the page is as local as the photograph.
+    if result.text:
+        recognised = payload_fields(result.text)
+        if recognised:
+            kind, fields = recognised
+            out["payload_info"] = {"kind": kind, "hint": PAYLOAD_HINTS[kind], "fields": fields}
     if result.fusion is not None:
         out["fusion"] = {
             "photographs": result.fusion.members,
@@ -169,7 +184,7 @@ def export_payload(payload: dict) -> tuple[bytes, str, str]:
     if fmt == "pdf":
         return to_pdf(matrix, size_mm=size_mm), "application/pdf", "code.pdf"
     if fmt == "json":
-        body = to_json(result, include_zigbee=bool(payload.get("zigbee")))
+        body = to_json(result, split_payload=bool(payload.get("split", payload.get("zigbee"))))
         return body.encode("utf-8"), "application/json", "result.json"
     if fmt == "html":
         ok, encoded = cv2.imencode(".png", image)
