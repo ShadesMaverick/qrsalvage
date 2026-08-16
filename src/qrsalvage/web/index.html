@@ -116,6 +116,9 @@
     border-radius: 50%; font-size: .72rem; line-height: 1;
   }
 
+  #cameraPanel { margin-top: 1rem; max-width: 34rem; margin-left: auto; margin-right: auto; }
+  #cameraFeed { width: 100%; border-radius: 8px; background: #000; display: block; }
+
   #modeRow {
     display: flex; gap: 1.6rem; justify-content: center; flex-wrap: wrap;
     margin-top: .7rem; color: var(--muted); font-size: .87rem;
@@ -233,11 +236,25 @@
   <div id="drop">
     <p><strong id="dropTitle">Drop a photograph here</strong>
        <span id="dropMore">&nbsp;or click to choose one</span>
+       <button id="cameraOpen" class="linkish hidden">· use the camera</button>
        <button id="reset" class="linkish hidden">start over</button></p>
     <p class="hint">Several photographs of the same code are read together — take them from
       different angles and what one loses, the others still hold.<br>
       Processed on this machine. Nothing is uploaded, nothing leaves it.</p>
     <input id="file" type="file" accept="image/*" multiple class="hidden">
+  </div>
+
+  <!-- The camera turns the strongest measured lever into a gesture: nobody takes three
+       photographs of a lamp by hand, but everyone can hold a phone and move it slowly. -->
+  <div id="cameraPanel" class="panel hidden">
+    <h2>Camera</h2>
+    <video id="cameraFeed" autoplay playsinline muted></video>
+    <div class="note" id="cameraNote"></div>
+    <div class="actions">
+      <button id="capture">Capture</button>
+      <button id="torch" class="hidden">Light on</button>
+      <button id="cameraClose">Close</button>
+    </div>
   </div>
 
   <!-- The one decision the page cannot guess: several photographs are either several views of
@@ -355,6 +372,98 @@ let seq = 0;        // solve sequence; a late answer from a superseded run must 
 let timerId = null;
 let mode = "one";   // "one": several photographs of one code; "many": a catalogue
 
+/* --- camera: a burst while the hand moves ------------------------------------------- */
+/* The fusion of photographs from different angles is the strongest measured lever of the
+   whole tool -- and nobody takes three photographs by hand. One press takes four frames over
+   two and a half seconds while the hand drifts, which is angle variation enough; frames go
+   through exactly the same path as dropped files. The stream never leaves the device, and it
+   is released the moment the panel closes. */
+
+let cameraStream = null;
+let capturing = false;
+let torchOn = false;
+
+if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+  $("cameraOpen").classList.remove("hidden");
+}
+
+$("cameraOpen").addEventListener("click", (e) => { e.stopPropagation(); openCamera(); });
+$("cameraClose").addEventListener("click", closeCamera);
+$("capture").addEventListener("click", captureBurst);
+$("torch").addEventListener("click", toggleTorch);
+
+async function openCamera() {
+  if (cameraStream) return;
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "environment", width: { ideal: 2560 }, height: { ideal: 1440 } },
+      audio: false,
+    });
+  } catch (err) {
+    status.textContent =
+      "no camera: " + err.name + " — dropping a photograph works exactly the same";
+    return;
+  }
+  $("cameraFeed").srcObject = cameraStream;
+  $("cameraPanel").classList.remove("hidden");
+  $("cameraNote").innerHTML = mode === "one"
+    ? "Fill the frame with the code. One press takes <em>four frames over two seconds</em> — " +
+      "move the camera slowly around the code while it counts. They are read together."
+    : "Fill the frame with the code — one press, one photograph, one catalogue entry.";
+  $("capture").textContent = mode === "one" ? "Capture 4 frames" : "Capture";
+
+  // A torch helps exactly where this tool gets used: lamp sockets and dark corners.
+  const track = cameraStream.getVideoTracks()[0];
+  const capabilities = track.getCapabilities ? track.getCapabilities() : {};
+  $("torch").classList.toggle("hidden", !capabilities.torch);
+  torchOn = false;
+  $("torch").textContent = "Light on";
+}
+
+function closeCamera() {
+  if (cameraStream) for (const track of cameraStream.getTracks()) track.stop();
+  cameraStream = null;
+  $("cameraFeed").srcObject = null;
+  $("cameraPanel").classList.add("hidden");
+}
+
+async function toggleTorch() {
+  if (!cameraStream) return;
+  torchOn = !torchOn;
+  try {
+    await cameraStream.getVideoTracks()[0].applyConstraints({ advanced: [{ torch: torchOn }] });
+    $("torch").textContent = torchOn ? "Light off" : "Light on";
+  } catch { /* not every browser lets the page at the torch; the button just stays honest */ }
+}
+
+async function captureBurst() {
+  if (!cameraStream || capturing) return;
+  const video = $("cameraFeed");
+  if (!video.videoWidth) { $("cameraNote").textContent = "the camera is still starting…"; return; }
+  capturing = true;
+  const count = mode === "one" ? 4 : 1;
+  for (let i = 0; i < count; i++) {
+    $("cameraNote").innerHTML =
+      count > 1 ? `<em>frame ${i + 1} of ${count}</em> — keep moving slowly…` : "captured.";
+    const frame = document.createElement("canvas");
+    frame.width = video.videoWidth;
+    frame.height = video.videoHeight;
+    frame.getContext("2d").drawImage(video, 0, 0);
+    loaded.push({
+      // JPEG, not PNG: a camera frame is noise-limited anyway, and a 2560-wide PNG would
+      // make every recovery haul megabytes across the loopback for nothing.
+      dataUrl: frame.toDataURL("image/jpeg", 0.92),
+      bitmap: await createImageBitmap(frame),
+      name: `camera ${loaded.length + 1}`,
+    });
+    if (i < count - 1) await new Promise((resolve) => setTimeout(resolve, 700));
+  }
+  capturing = false;
+  closeCamera();
+  refresh();
+  run();
+}
+
 for (const radio of document.querySelectorAll('#modeRow input')) {
   radio.addEventListener("change", () => {
     mode = radio.value;
@@ -404,6 +513,7 @@ async function addFiles(files) {
 function resetAll() {
   seq += 1;               // orphan any solve still in flight
   busy(false);
+  closeCamera();
   loaded = []; picked = []; picking = false; token = null;
   $("results").classList.add("hidden");
   $("catalogPanel").classList.add("hidden");

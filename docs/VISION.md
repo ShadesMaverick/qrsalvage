@@ -43,7 +43,7 @@ dieser drei Faktoren ein.
 
 In dieser Reihenfolge, jede Stufe für sich nutzbar:
 
-- [ ] **1. Kamera-Modus mit Bewegungs-Serie** *(Rettungsquote)* — „Halte die Kamera auf die
+- [x] **1. Kamera-Modus mit Bewegungs-Serie** *(Rettungsquote)* — „Halte die Kamera auf die
   Lampe und beweg sie langsam": Live-Vorschau per `getUserMedia`, automatisch 3–5 Frames
   greifen, direkt in `solve_many`. Die Fusion ist der stärkste gemessene Hebel
   (36–81 % einzeln → 93–100 % fusioniert), aber niemand macht von Hand drei Fotos — aus dem

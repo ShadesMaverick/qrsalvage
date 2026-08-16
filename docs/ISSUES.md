@@ -182,11 +182,12 @@ Einzelfall durchgeht.
   (90 Sekunden Rechnen in ein falsches Gitter, jetzt 7 Sekunden ins richtige), und die
   Finder-Koordinaten wurden im Arbeitsbild statt im Originalbild gemeldet — die Ringe auf dem
   Foto saßen daneben, sobald intern skaliert wurde.
-- **Kamera-Modus mit Bewegungs-Serie.** Der stärkste gemessene Hebel des Werkzeugs ist die
-  Fusion mehrerer Fotos aus verschiedenen Winkeln — und niemand macht von Hand drei Fotos.
-  `getUserMedia` (läuft auf 127.0.0.1 und später HTTPS), Live-Vorschau, automatisch 3–5 Frames
-  greifen, während der Nutzer das Telefon langsam um die Lampe bewegt, direkt in `solve_many`.
-  Aus dem Feature, das Erklärung braucht, wird eine Geste. Kein anderer QR-Reader kann das.
+- **Kamera-Modus mit Bewegungs-Serie — ERLEDIGT.** „use the camera" in der Ablagezone:
+  Live-Vorschau (`getUserMedia`, environment-Kamera, ideal 2560 px), ein Druck nimmt vier
+  Frames über ~2 Sekunden, während die Hand driftet — direkt in `solve_many`. Im Katalogmodus
+  ein Frame pro Druck. Taschenlampen-Knopf, wo der Browser sie hergibt; Stream wird beim
+  Schließen freigegeben; verweigerte Berechtigung fällt freundlich auf den Dateiweg zurück.
+  Ende-zu-Ende geprüft über einen gefälschten Kamera-Stream (Canvas mit driftendem Foto).
 - **Payload-Intelligenz für die Smart-Home-Nische.** `zigbee_fields` existiert; Matter
   (`MT:...`) und WLAN (`WIFI:S:...;P:...`) fehlen. Nach der Rettung erklären, *was* der Code
   ist und was man jetzt damit tut („Setup-PIN für Matter-Kopplung, in Home Assistant unter …")

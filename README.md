@@ -74,7 +74,9 @@ qrsalvage solve photo.jpg
 That is the whole first step. If fewer than three finder patterns are found, narrow the search
 with `--crop X0 Y0 X1 Y1`; the finder search does not cope well with busy backgrounds.
 
-If one photograph is not enough, take more and pass them all:
+In the browser there is a camera button for exactly this: one press takes four frames over
+two seconds while your hand drifts around the code — angle variation for free, read together.
+On the command line, pass the photographs yourself:
 
 ```
 qrsalvage solve photo1.jpg photo2.jpg photo3.jpg
