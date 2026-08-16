@@ -68,7 +68,10 @@ Es gibt keinen Build-Schritt. Die Oberfläche ist eine statische HTML/JS-Datei, 
 - `tests/`, `scripts/` (Messwerkzeuge, kein Produktionscode)
 
 Wohin das Projekt will und in welcher Reihenfolge: `docs/VISION.md` (Fahrplan mit
-Begründungen). Technische Einzelaufgaben: `docs/ISSUES.md`.
+Begründungen). Technische Einzelaufgaben: `docs/ISSUES.md`. Die englische Landkarte für
+Beitragende — Datenfluss, Lesereihenfolge, Invarianten, Nahtstellen — ist
+`docs/ARCHITECTURE.md` und wird bei Architekturänderungen mitgepflegt; die Messinstrumente
+sind in `scripts/README.md` indexiert.
 
 ## Rules
 

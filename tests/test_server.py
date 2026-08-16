@@ -332,7 +332,7 @@ def test_a_foreign_host_header_is_refused(running_server):
 
 
 def test_the_page_ships_hardened_headers(running_server):
-    """No sniffing, no framing, no referrer -- and inline scripts allowed by hash, not blanket."""
+    """No sniffing, no framing, no referrer -- and no inline script to allow at all."""
     host, port = running_server
     connection = http.client.HTTPConnection(host, port, timeout=10)
     connection.request("GET", "/")
@@ -343,24 +343,24 @@ def test_the_page_ships_hardened_headers(running_server):
     assert response.getheader("Referrer-Policy") == "no-referrer"
     assert "frame-ancestors 'none'" in policy
     assert "'unsafe-inline'" not in policy.split("style-src")[0], (
-        "scripts must be allowed by hash, not by blanket"
+        "scripts must never be allowed by blanket"
     )
-    assert "'sha256-" in policy
 
-    # The hash actually matches the page's inline script, or the page is dead on arrival.
-    import base64 as b64
-    import hashlib as hl
+    # The page carries no inline script at all -- its script is an external file under
+    # script-src 'self'. That is the strongest position: nothing to hash, nothing an injected
+    # <script> tag could ever satisfy. (The hash machinery in the server still exists for any
+    # HTML that does carry an inline script, and it once cost a page its life to a CRLF-vs-LF
+    # mismatch: the browser hashes after the parser normalises line endings.)
     import re as regex
 
-    # Normalised exactly the way the HTML parser normalises before the browser hashes:
-    # CR and CRLF become LF. Without this the test and the server agree with each other and
-    # both disagree with the browser, which is how the bug shipped the first time.
-    normalised = body.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
-    scripts = regex.findall(rb"<script>(.*?)</script>", normalised, regex.S)
-    assert scripts, "the page lost its script"
-    for script in scripts:
-        digest = "sha256-" + b64.b64encode(hl.sha256(script).digest()).decode()
-        assert digest in policy, "a served script is not named by the policy"
+    assert not regex.findall(rb"<script>", body), "the page grew an inline script"
+    assert b'<script src="/app.js">' in body
+
+    connection.request("GET", "/app.js")
+    response = connection.getresponse()
+    assert response.status == 200
+    assert response.getheader("Content-Type", "").startswith("text/javascript")
+    assert b"use strict" in response.read()
 
     # API answers and figures carry a policy that allows nothing at all.
     connection.request("GET", "/fig-known.svg")

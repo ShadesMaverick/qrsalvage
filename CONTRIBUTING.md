@@ -1,22 +1,38 @@
 # Contributing to qrsalvage
 
-## Setup
+## Your first hour
+
+The map of the whole system is one page: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) —
+data flow, reading order, the three invariants, and a "where do I change…" table. The method
+itself is explained, with figures computed from the real code, on the `/method` page of the
+local interface. Read those two and you know where everything lives; the *why* of each
+decision is in the docstring of the module it concerns.
+
+Then see it work:
 
 ```
 git clone https://github.com/<owner>/qrsalvage
 cd qrsalvage
 python -m venv .venv
-pip install -r requirements.txt
-pip install -e .
+pip install -r requirements.txt && pip install -e .
+
+qrsalvage solve fixtures/engraved-curved-hard.png   # a recovery, narrated in numbers
+qrsalvage serve                                     # the same thing with a live view
+python scripts/difficulty.py --axis contrast --samples 8   # how claims get measured here
 ```
 
-Python 3.11 or newer.
+Python 3.11 or newer. The checks that gate every change:
 
 ```
 ruff check . && ruff format --check .
-pytest                      # everything, about 80 seconds
+pytest                      # everything, a couple of minutes
 pytest -m "not regression"  # fast path
 ```
+
+The tests double as the specification — they are named as claims
+(`test_scattered_erasures_reach_what_no_prefix_can`) and reading the ones around your change
+is the fastest way to learn what behaviour is load-bearing. The measurement instruments in
+`scripts/` have their own index: [`scripts/README.md`](scripts/README.md).
 
 ## Three rules that are not negotiable
 

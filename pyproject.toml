@@ -22,7 +22,7 @@ where = ["src"]
 # this it is silently left out and `qrsalvage serve` answers 500 on an installed copy while
 # working perfectly from a source checkout.
 [tool.setuptools.package-data]
-qrsalvage = ["web/*.html", "web/*.png"]
+qrsalvage = ["web/*.html", "web/*.png", "web/*.css", "web/*.js", "web/*.svg"]
 
 [tool.ruff]
 line-length = 100

@@ -305,6 +305,8 @@ class Handler(BaseHTTPRequestHandler):
         "/method": ("method.html", "text/html; charset=utf-8"),
         "/method.html": ("method.html", "text/html; charset=utf-8"),
         "/axolotl.png": ("axolotl.png", "image/png"),
+        "/style.css": ("style.css", "text/css; charset=utf-8"),
+        "/app.js": ("app.js", "text/javascript; charset=utf-8"),
         "/fig-known.svg": ("fig-known.svg", "image/svg+xml"),
         "/fig-levels.svg": ("fig-levels.svg", "image/svg+xml"),
         "/fig-posterior.svg": ("fig-posterior.svg", "image/svg+xml"),

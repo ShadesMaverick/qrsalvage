@@ -1,0 +1,228 @@
+/* The interface's single stylesheet. Split from index.html for one reason only:
+   a 1200-line file was the largest mental hurdle in the repository. Still no build
+   step -- three static files instead of one, served as they are. */
+
+  :root {
+    --bg:        #1b252e;
+    --bg-lift:   #232f3a;
+    --panel:     #26333f;
+    --panel-in:  #1f2a34;
+    --line:      #37485a;
+    --fg:        #f2f4f5;
+    --muted:     #93a3b0;
+    --pink:      #f07ea3;
+    --pink-soft: #f7b3c8;
+    --ok:        #8fd3b0;
+    --warn:      #e0b356;
+    --bad:       #e0644a;
+    --mono: ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { color-scheme: dark; }
+  body {
+    margin: 0; padding: 2.5rem 1.25rem 5rem; color: var(--fg);
+    background: radial-gradient(120% 90% at 50% 0%, var(--bg-lift) 0%, var(--bg) 62%) fixed;
+    min-height: 100vh;
+    font: 15px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { max-width: 64rem; margin: 0 auto; }
+
+  /* --- identity ------------------------------------------------------------------- */
+  header { display: flex; align-items: center; gap: 1rem; margin-bottom: .2rem; }
+  header img { flex: none; height: 66px; image-rendering: pixelated; }
+  h1 {
+    font: 600 1.55rem/1 var(--mono); letter-spacing: .04em; margin: 0;
+  }
+  .tagline { color: var(--muted); margin: 0 0 2rem 0; font-size: .95rem; }
+  .tagline a { color: var(--pink-soft); border-bottom: 1px solid transparent; }
+  .tagline a:hover { border-bottom-color: var(--pink-soft); }
+
+  /* --- drop zone ------------------------------------------------------------------ */
+  #drop {
+    position: relative; border-radius: 14px; padding: 3.25rem 1.5rem; text-align: center;
+    cursor: pointer; background: var(--panel); border: 1px solid var(--line);
+    transition: border-color .18s, background .18s, transform .18s;
+  }
+  #drop::before {
+    content: ""; position: absolute; inset: 9px; border-radius: 8px; pointer-events: none;
+    border: 2px dashed var(--line); transition: border-color .18s;
+  }
+  #drop:hover, #drop.over { background: #2b3844; }
+  #drop:hover::before, #drop.over::before { border-color: var(--pink); }
+  #drop.over { transform: scale(1.006); border-color: var(--pink); }
+  #drop strong { font-size: 1.05rem; }
+  #drop .hint { color: var(--muted); font-size: .87rem; margin: .45rem 0 0; }
+  /* Once an image is loaded the invitation has done its job and should stop taking a third of
+     the screen. It stays reachable, just out of the way. */
+  #drop.compact { padding: .8rem 1.2rem; }
+  #drop.compact strong { font-size: .92rem; font-weight: 500; }
+  #drop.compact .hint, #drop.compact::before { display: none; }
+  .linkish {
+    border: none; background: none; color: var(--muted); text-decoration: underline;
+    padding: .2rem .4rem; font-size: .85rem; cursor: pointer;
+  }
+  .linkish:hover { border: none; color: var(--pink-soft); }
+
+  /* --- the wait ------------------------------------------------------------------- */
+  /* A recovery legitimately takes seconds to a minute. Everything below the drop zone dims
+     while one runs: the alternative -- last photograph's diagnostics standing crisp and
+     confident next to a new photograph -- had someone reading numbers that belonged to a
+     different image. */
+  .busy #results { opacity: .35; pointer-events: none; }
+  .busy.watching #results { opacity: 1; pointer-events: auto; }
+  #results { transition: opacity .25s; }
+  .spin {
+    display: inline-block; width: .85em; height: .85em; border-radius: 50%;
+    border: 2px solid var(--line); border-top-color: var(--pink);
+    animation: spin .8s linear infinite; vertical-align: -.12em; margin-right: .35rem;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .quiet { color: var(--muted); }
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+  /* --- layout --------------------------------------------------------------------- */
+  /* Panels size to their own content. Stretching the diagnostics to match the height of the
+     photograph left a column of empty panel under seven lines of numbers. */
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 1.1rem; margin-top: 1.4rem;
+         align-items: start; }
+  @media (max-width: 46rem) { .row { grid-template-columns: 1fr; } }
+  .panel {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 1.1rem;
+  }
+  .panel h2 {
+    display: flex; align-items: center; gap: .5rem;
+    font: 600 .72rem/1 var(--mono); text-transform: uppercase; letter-spacing: .12em;
+    color: var(--muted); margin: 0 0 .9rem;
+  }
+  .panel h2::before {
+    content: ""; width: 7px; height: 7px; background: var(--pink); flex: none;
+  }
+  canvas, .panel img {
+    max-width: 100%; display: block; border-radius: 8px; background: var(--panel-in);
+  }
+  canvas { cursor: crosshair; }
+  #images img { width: 100%; image-rendering: pixelated; }
+
+  #thumbs { display: flex; gap: .55rem; flex-wrap: wrap; margin-bottom: .8rem; }
+  .thumb { position: relative; }
+  .thumb img { height: 54px; border-radius: 6px; display: block; }
+  .thumb button {
+    position: absolute; top: -7px; right: -7px; width: 20px; height: 20px; padding: 0;
+    border-radius: 50%; font-size: .72rem; line-height: 1;
+  }
+
+  #cameraPanel { margin-top: 1rem; max-width: 34rem; margin-left: auto; margin-right: auto; }
+  #cameraFeed { width: 100%; border-radius: 8px; background: #000; display: block; }
+
+  #modeRow {
+    display: flex; gap: 1.6rem; justify-content: center; flex-wrap: wrap;
+    margin-top: .7rem; color: var(--muted); font-size: .87rem;
+  }
+  #modeRow label { display: inline-flex; gap: .45rem; align-items: center; cursor: pointer; }
+  #modeRow input { accent-color: var(--pink); }
+  #modeRow label:has(input:checked) { color: var(--fg); }
+
+  #catalogPanel { margin-top: 1.4rem; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+           gap: .9rem; margin: .4rem 0 .9rem; }
+  .card {
+    background: var(--panel-in); border: 1px solid var(--line); border-radius: 10px;
+    padding: .8rem; display: flex; flex-direction: column; gap: .6rem;
+  }
+  .card.miss { border-left: 3px solid var(--bad); }
+  .card.dup  { opacity: .6; }
+  .card img { width: 7.5rem; image-rendering: pixelated; border-radius: 6px; }
+  .card input.title {
+    font: inherit; padding: .5rem .6rem; border-radius: 7px; width: 100%;
+    border: 1px solid var(--line); background: var(--panel); color: var(--fg);
+  }
+  .card .snippet {
+    font: 11px/1.5 var(--mono); color: var(--muted); word-break: break-all;
+    max-height: 4.6em; overflow: hidden;
+  }
+  .card .state { font: 600 .68rem/1 var(--mono); letter-spacing: .1em;
+                 text-transform: uppercase; }
+
+  /* The live view during a recovery: the true intermediate states, not an animation. */
+  #live .stage { font-size: .9rem; margin-bottom: .8rem; min-height: 1.3em; }
+  #live .stage a { color: var(--pink-soft); border-bottom: 1px solid transparent; }
+  #live .stage a:hover { border-bottom-color: var(--pink-soft); }
+  .heatrow { display: flex; gap: .9rem; align-items: flex-start; margin-top: .9rem; }
+  #heat { image-rendering: pixelated; border-radius: 6px; max-width: 11rem; }
+  .racebar { display: inline-block; height: .55em; background: var(--line); border-radius: 3px;
+             vertical-align: middle; margin-right: .5rem; }
+  .racebar.best { background: var(--pink); }
+
+  dl { display: grid; grid-template-columns: auto 1fr; gap: .42rem 1rem; margin: 0; }
+  dt { color: var(--muted); }
+  dd { margin: 0; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .ok { color: var(--ok); } .warn { color: var(--warn); } .bad { color: var(--bad); }
+
+  /* One sentence of judgement above the numbers: the numbers stay the evidence, but not
+     everyone who drops a photograph knows whether 6 of 841 uncertain cells is good news. */
+  .verdict {
+    border-radius: 8px; padding: .55rem .8rem; margin-bottom: .9rem; font-size: .9rem;
+    background: var(--panel-in); border: 1px solid var(--line);
+  }
+  .verdict.ok   { border-left: 3px solid var(--ok); }
+  .verdict.warn { border-left: 3px solid var(--warn); }
+  .verdict.bad  { border-left: 3px solid var(--bad); }
+
+  /* --- payload -------------------------------------------------------------------- */
+  .payload {
+    margin-top: 1.4rem; padding: 1.15rem 1.25rem; border-radius: 12px;
+    background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--pink);
+  }
+  .payload.miss { border-left-color: var(--bad); }
+  .payload .label { font: 600 .72rem/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; }
+  .payload code {
+    display: block; margin-top: .7rem; padding: .7rem .85rem; border-radius: 8px;
+    background: var(--panel-in); font: 14px/1.55 var(--mono); word-break: break-all;
+    user-select: all;
+  }
+  .tips { margin: .7rem 0 0; padding-left: 1.15rem; color: var(--muted); font-size: .9rem; }
+  .tips li { margin: .35rem 0; }
+  .tips em { color: var(--pink-soft); font-style: normal; }
+
+  /* --- controls ------------------------------------------------------------------- */
+  .actions { display: flex; gap: .55rem; flex-wrap: wrap; margin-top: 1rem; align-items: center; }
+  button {
+    font: 500 .88rem/1 inherit; padding: .55rem 1rem; border-radius: 8px;
+    border: 1px solid var(--line); background: var(--panel-in); color: var(--fg);
+    cursor: pointer; transition: border-color .15s, color .15s;
+  }
+  button:hover { border-color: var(--pink); color: var(--pink-soft); }
+  a { color: inherit; text-decoration: none; }
+  .note { color: var(--muted); font-size: .85rem; margin-top: .65rem; min-height: 1.2em; }
+  .note em { color: var(--pink-soft); font-style: normal; }
+
+  details.panel { margin-top: 1.4rem; }
+  summary { cursor: pointer; color: var(--muted); font: 600 .72rem/1 var(--mono);
+            letter-spacing: .12em; text-transform: uppercase; }
+  pre.grid {
+    font: 10px/1 var(--mono); overflow-x: auto; margin: .9rem 0 0; letter-spacing: .55px;
+    color: var(--muted);
+  }
+  .hidden { display: none !important; }
+  label.size { display: inline-flex; align-items: center; gap: .45rem; color: var(--muted);
+               font-size: .87rem; }
+  label.size select { font: inherit; padding: .45rem .5rem; border-radius: 7px;
+                      border: 1px solid var(--line); background: var(--panel-in); color: var(--fg); }
+  label.size input { width: 5rem; font: inherit; padding: .45rem .5rem; border-radius: 7px;
+                     border: 1px solid var(--line); background: var(--panel-in);
+                     color: var(--fg); font-variant-numeric: tabular-nums; }
+  #splitRow { display: flex; gap: .5rem; align-items: flex-start; margin-top: .9rem;
+              max-width: 46rem; }
+  .knowledge { margin-top: .9rem; padding-top: .8rem; border-top: 1px solid var(--line); }
+  .thanks {
+    display: flex; gap: .8rem; align-items: center; flex-wrap: wrap;
+    margin-top: .9rem; padding-top: .85rem; border-top: 1px solid var(--line);
+    font-size: .88rem; color: var(--muted);
+  }
+  .thanks img { height: 34px; image-rendering: pixelated; flex: none; }
+  .thanks span { flex: 1 1 18rem; }
+  .thanks .links { display: flex; gap: .55rem; flex: none; }
+  .thanks em { color: var(--pink-soft); font-style: normal; }
+  .knowledge dl { margin-top: .6rem; font-size: .9rem; }
+  .knowledge .note { margin-top: .3rem; }
