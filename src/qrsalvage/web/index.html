@@ -219,6 +219,15 @@
   #splitRow { display: flex; gap: .5rem; align-items: flex-start; margin-top: .9rem;
               max-width: 46rem; }
   .knowledge { margin-top: .9rem; padding-top: .8rem; border-top: 1px solid var(--line); }
+  .thanks {
+    display: flex; gap: .8rem; align-items: center; flex-wrap: wrap;
+    margin-top: .9rem; padding-top: .85rem; border-top: 1px solid var(--line);
+    font-size: .88rem; color: var(--muted);
+  }
+  .thanks img { height: 34px; image-rendering: pixelated; flex: none; }
+  .thanks span { flex: 1 1 18rem; }
+  .thanks .links { display: flex; gap: .55rem; flex: none; }
+  .thanks em { color: var(--pink-soft); font-style: normal; }
   .knowledge dl { margin-top: .6rem; font-size: .9rem; }
   .knowledge .note { margin-top: .3rem; }
 </style>
@@ -355,12 +364,36 @@
       </label>
       <button id="catalogPdf">Download A4 catalogue (PDF)</button>
     </div>
+    <div id="catalogThanks"></div>
   </div>
 </main>
 
 <script>
 "use strict";
 const $ = (id) => document.getElementById(id);
+
+/* Where the thanks go, once the accounts exist. Fill in the URLs — for example
+   "https://ko-fi.com/yourname" and "https://liberapay.com/yourname" — and the card appears;
+   empty URLs keep the page silent about money. The ask lives on the success card and nowhere
+   else: a donation is reciprocity, and reciprocity has a moment. It shares its sentence with
+   the privacy fact because that answers the unspoken question of what this tool lives on. */
+const DONATE = [
+  { label: "Ko-fi", url: "" },
+  { label: "LiberaPay", url: "" },
+];
+
+function thanksHtml() {
+  const targets = DONATE.filter((d) => d.url);
+  if (!targets.length) return "";
+  const links = targets
+    .map((d) => `<a href="${d.url}" target="_blank" rel="noopener">` +
+                `<button>${escapeHtml(d.label)}</button></a>`)
+    .join("");
+  return `<div class="thanks"><img src="/axolotl.png" alt="">
+    <span>This ran <em>entirely on your machine</em> — nothing was uploaded, nothing ever is.
+    Saved your lamp? A small donation keeps the tool alive.</span>
+    <span class="links">${links}</span></div>`;
+}
 const drop = $("drop"), fileInput = $("file"), status = $("status");
 const canvas = $("photo"), ctx = canvas.getContext("2d");
 
@@ -903,6 +936,7 @@ $("catalogPdf").addEventListener("click", async () => {
   link.download = "catalog.pdf";
   link.click();
   URL.revokeObjectURL(url);
+  $("catalogThanks").innerHTML = thanksHtml();
 });
 
 function verdictFor(a) {
@@ -983,7 +1017,7 @@ function render(a) {
     payload.innerHTML =
       `<div class="label" style="color:var(--pink)">recovered · ${a.text.length} characters</div>
        <code>${escapeHtml(a.text)}</code>${knowledge}
-       <div class="actions"><button id="copy">Copy</button></div>`;
+       <div class="actions"><button id="copy">Copy</button></div>${thanksHtml()}`;
     $("copy").addEventListener("click", async () => {
       const button = $("copy");
       try { await navigator.clipboard.writeText(a.text); button.textContent = "copied ✓"; }

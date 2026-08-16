@@ -52,7 +52,7 @@ In dieser Reihenfolge, jede Stufe für sich nutzbar:
   und WLAN (`WIFI:…`) zerlegen wie heute Zigbee, und nach der Rettung die Folgefrage
   beantworten: was ist das, und wo gebe ich es ein. Aufschlüsselung opt-in, Klartext bleibt
   lokal.
-- [ ] **3. Die Spendenkarte** *(Moment)* — der Ask auf der Erfolgskarte, klein, unter dem
+- [x] **3. Die Spendenkarte** *(Moment; URLs nachtragen, siehe ISSUES)* — der Ask auf der Erfolgskarte, klein, unter dem
   Klartext, zusammen mit der Privacy-Aussage: „Lief komplett auf deinem Gerät. Lampe
   gerettet? 5 € halten das Werkzeug am Leben." Nicht auf der Startseite.
 - [ ] **4. Pyodide-Spike, dann statische Seite** *(Reichweite)* — erst die eine Unbekannte

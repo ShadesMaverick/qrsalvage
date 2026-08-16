@@ -195,10 +195,11 @@ Einzelfall durchgeht.
   samt Escaping. Die Seite zeigt Hinweis und Felder unter dem Klartext; im JSON-Export opt-in
   über `--split-payload` (`--zigbee` bleibt als Alias). Die echte EUI64 im Zigbee-Test ist
   durch eine erfundene ersetzt.
-- **Der Spendenmoment.** Der Ask gehört auf die Erfolgskarte, klein und ehrlich („Lief
-  komplett auf deinem Gerät. Lampe gerettet? 5 € halten das Werkzeug am Leben.") — nicht auf
-  die Startseite. Für Einmalspenden Ko-fi/LiberaPay statt nur Patreon (Abo-Logik passt nicht
-  zu einem Werkzeug, das man einmal im Jahr braucht).
+- **Der Spendenmoment — GEBAUT, wartet auf Konten.** Die Karte sitzt auf der Erfolgskarte
+  (und nach dem Katalog-Download), mit Axolotl, Privacy-Satz und Knöpfen — und bleibt
+  unsichtbar, solange keine URLs eingetragen sind. **Eintragen in `index.html`, Konstante
+  `DONATE` ganz oben im Skript**, sobald Ko-fi-/LiberaPay-Konten existieren. Bewusst nicht auf
+  der Startseite: Reziprozität hat einen Moment.
 - **Statische Browser-Version (Codeberg Pages + eigene Domain).** Kein Server: Pyodide
   (CPython/WASM, MPL-2.0) mit NumPy- und OpenCV-Paketen, zxing-cpp als WASM-Orakel hinter
   einer kleinen Naht in `decoding.py` (einzige native Abhängigkeit, vier Aufrufe). Der
