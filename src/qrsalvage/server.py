@@ -40,7 +40,9 @@ from .export import (
 )
 
 WEB_ROOT = Path(__file__).resolve().parent / "web"
-MAX_UPLOAD = 24 * 1024 * 1024
+# Roomy enough for a camera burst of full-resolution frames plus a couple of dropped photos,
+# base64 overhead included. Still a hard cap: this is one person's loopback, not an inbox.
+MAX_UPLOAD = 64 * 1024 * 1024
 
 # The exports are produced on demand rather than shipped with every answer, because a PDF and
 # an HTML report attached to a result nobody exports would be wasted on every single recovery.
