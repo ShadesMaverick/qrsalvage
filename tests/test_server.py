@@ -303,3 +303,66 @@ def test_the_solve_can_stream_its_progress(running_server):
     # Coordinates in the events land on the photograph the page shows.
     grid = next(line for line in lines if line["type"] == "grid")
     assert all(0 <= x <= 4000 and 0 <= y <= 4000 for x, y in grid["corners"])
+
+
+def test_a_foreign_host_header_is_refused(running_server):
+    """DNS rebinding is the one road a hostile page has to a loopback server.
+
+    The socket only listens on 127.0.0.1, and CORS never fires because the browser believes
+    the attacker's rebound domain IS this origin. What survives the rebinding is the Host
+    header, so the server refuses anything that does not name the loopback."""
+    host, port = running_server
+    connection = http.client.HTTPConnection(host, port, timeout=10)
+
+    connection.request("GET", "/", headers={"Host": "attacker.example"})
+    assert connection.getresponse().status == 403
+
+    connection.request(
+        "POST",
+        "/api/solve",
+        body=json.dumps({"image": "data:,x"}),
+        headers={"Host": "attacker.example:8765", "Content-Type": "application/json"},
+    )
+    assert connection.getresponse().status == 403
+
+    # The loopback names keep working, with and without a port.
+    connection.request("GET", "/", headers={"Host": f"localhost:{port}"})
+    assert connection.getresponse().status == 200
+    connection.close()
+
+
+def test_the_page_ships_hardened_headers(running_server):
+    """No sniffing, no framing, no referrer -- and inline scripts allowed by hash, not blanket."""
+    host, port = running_server
+    connection = http.client.HTTPConnection(host, port, timeout=10)
+    connection.request("GET", "/")
+    response = connection.getresponse()
+    body = response.read()
+    policy = response.getheader("Content-Security-Policy", "")
+    assert response.getheader("X-Content-Type-Options") == "nosniff"
+    assert response.getheader("Referrer-Policy") == "no-referrer"
+    assert "frame-ancestors 'none'" in policy
+    assert "'unsafe-inline'" not in policy.split("style-src")[0], (
+        "scripts must be allowed by hash, not by blanket"
+    )
+    assert "'sha256-" in policy
+
+    # The hash actually matches the page's inline script, or the page is dead on arrival.
+    import base64 as b64
+    import hashlib as hl
+    import re as regex
+
+    # Normalised exactly the way the HTML parser normalises before the browser hashes:
+    # CR and CRLF become LF. Without this the test and the server agree with each other and
+    # both disagree with the browser, which is how the bug shipped the first time.
+    normalised = body.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+    scripts = regex.findall(rb"<script>(.*?)</script>", normalised, regex.S)
+    assert scripts, "the page lost its script"
+    for script in scripts:
+        digest = "sha256-" + b64.b64encode(hl.sha256(script).digest()).decode()
+        assert digest in policy, "a served script is not named by the policy"
+
+    # API answers and figures carry a policy that allows nothing at all.
+    connection.request("GET", "/fig-known.svg")
+    assert connection.getresponse().getheader("Content-Security-Policy") == "default-src 'none'"
+    connection.close()

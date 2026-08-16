@@ -7,6 +7,7 @@ that is what later lets the solver probe exactly where the doubt is instead of g
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 
 import cv2
 import numpy as np
@@ -73,13 +74,38 @@ def sample_cells(warped: np.ndarray, modules: int, scale: int, inset_frac: float
     return core.mean(axis=(2, 3)), core.std(axis=(2, 3))
 
 
+@lru_cache(maxsize=16)
+def _quadratic_terms(n: int) -> np.ndarray:
+    """The design matrix of the quadratic fit -- a pure function of the grid size.
+
+    Cached because the grid refinement evaluates hundreds of candidate placements per solve
+    and every one of them fits two fields; rebuilding the identical matrix each time was pure
+    overhead. Frozen for the same reason every cached array here is.
+    """
+    rr, cc = np.mgrid[0:n, 0:n].astype(np.float64)
+    terms = np.stack([np.ones_like(rr), rr, cc, rr * rr, cc * cc, rr * cc], axis=-1)
+    terms.setflags(write=False)
+    return terms
+
+
+@lru_cache(maxsize=32)
+def _fit_operator(n: int, mask_bytes: bytes) -> np.ndarray:
+    """The pseudoinverse of the design matrix restricted to the marked cells.
+
+    The least-squares fit runs twice per grid evaluation and hundreds of evaluations per
+    solve, always against the same design matrix and the same mask -- only the measured means
+    change. So the solve collapses to one cached pseudoinverse and a matrix product, which is
+    the identical minimum-norm solution lstsq would compute, without the SVD every time.
+    """
+    mask = np.frombuffer(mask_bytes, dtype=bool).reshape(n, n)
+    return np.linalg.pinv(_quadratic_terms(n)[mask])
+
+
 def _fit_quadratic(means: np.ndarray, mask: np.ndarray) -> np.ndarray:
     """Fit a quadratic field to the marked cells and evaluate it everywhere."""
     n = means.shape[0]
-    rr, cc = np.mgrid[0:n, 0:n].astype(np.float64)
-    terms = np.stack([np.ones_like(rr), rr, cc, rr * rr, cc * cc, rr * cc], axis=-1)
-    coefficients, *_ = np.linalg.lstsq(terms[mask], means[mask], rcond=None)
-    return terms @ coefficients
+    coefficients = _fit_operator(n, mask.tobytes()) @ means[mask]
+    return _quadratic_terms(n) @ coefficients
 
 
 def estimate_levels(

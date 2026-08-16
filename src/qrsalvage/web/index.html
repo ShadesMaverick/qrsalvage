@@ -788,8 +788,9 @@ function renderRace() {
     const share = Math.min(s.wrong / Math.max(s.total, 1) / 0.4, 1);
     const width = 4 + Math.round(76 * share);
     const best = liveChosen === m ? " best" : "";
-    return `<dt>${m} modules</dt><dd><span class="racebar${best}" style="width:${width}px"></span>` +
-           `${s.wrong} / ${s.total} wrong</dd>`;
+    return `<dt>${Number(m)} modules</dt>` +
+           `<dd><span class="racebar${best}" style="width:${width}px"></span>` +
+           `${Number(s.wrong)} / ${Number(s.total)} wrong</dd>`;
   });
   $("liveSizes").innerHTML = rows.join("");
 }
@@ -972,7 +973,9 @@ function render(a) {
 
   const rows = [];
   const push = (k, v, klass) =>
-    rows.push(`<dt>${k}</dt><dd${klass ? ` class="${klass}"` : ""}>${v}</dd>`);
+    rows.push(
+      `<dt>${escapeHtml(k)}</dt><dd${klass ? ` class="${klass}"` : ""}>${escapeHtml(String(v))}</dd>`
+    );
 
   push("image", `${a.width} × ${a.height} px`);
   push("finders", a.finders.length, a.finders.length >= 3 ? "" : "bad");

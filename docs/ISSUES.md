@@ -161,6 +161,20 @@ Einzelfall durchgeht.
 
 **Labels:** `enhancement`
 
+- **Härtung und Performance — DURCHGANG ERLEDIGT (August 2026).** Server: Host-Header-Prüfung
+  gegen DNS-Rebinding (403 für fremde Hosts, getestet), CSP mit Skript-Hashes statt
+  `unsafe-inline` (Stolperfalle dokumentiert: der Browser hasht nach CR→LF-Normalisierung des
+  HTML-Parsers, eine CRLF-Datei hasht auf Platte anders als im Browser), `nosniff`,
+  `Referrer-Policy: no-referrer`, `frame-ancestors 'none'`; API-Antworten und Downloads mit
+  `default-src 'none'`. Seite: systematisches Escaping aller Diagnosewerte; XSS-Beweis mit
+  einem QR-Code, dessen Payload ein Injektionsversuch ist — erscheint wörtlich als Text.
+  Performance (gemessen, `out/bench.py`-Methodik): render über repeat statt kron,
+  `structure_mask`/Layout-Tabellen/Designmatrix/Pseudoinverse per lru_cache (eingefrorene
+  Arrays, damit ein schreibender Aufrufer laut scheitert statt den Cache zu vergiften) —
+  saubere Fixture 3,27 s → 2,66 s (−19 %), Probe-lastiges Echtfoto 6,92 s → 5,80 s (−16 %),
+  Decode-Rundtrip −27 %. Noch offen fürs Pages-Deployment: CDN-Versionen pinnen bzw.
+  selbst hosten (steht in der Browser-Restarbeit).
+
 - **Kalibrierung der Posterior korrigieren.** Das Messwerkzeug gibt es jetzt
   (`scripts/calibration.py`, Rand und Mitte getrennt), und es hat die Frage verschoben. Befund:
   bei mildem und gleichmäßigem Schaden ist die Posterior praktisch perfekt kalibriert; bei
