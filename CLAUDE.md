@@ -67,7 +67,8 @@ Es gibt keinen Build-Schritt. Die Oberfläche ist eine statische HTML/JS-Datei, 
 - `fixtures-local/` — echte Fotos, gitignoriert, verlassen den Rechner nicht
 - `tests/`, `scripts/` (Messwerkzeuge, kein Produktionscode)
 
-Noch offen: die Canvas-Oberfläche unter `web/` und die Exportformate. Siehe `docs/ISSUES.md`.
+Wohin das Projekt will und in welcher Reihenfolge: `docs/VISION.md` (Fahrplan mit
+Begründungen). Technische Einzelaufgaben: `docs/ISSUES.md`.
 
 ## Rules
 
