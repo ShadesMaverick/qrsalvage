@@ -21,10 +21,21 @@ def render(matrix: np.ndarray, scale: int = 10, quiet: int = 4) -> np.ndarray:
 
     The quiet zone is mandatory: an image cropped flush to the code edge is rejected by every
     decoder, no matter how clean the code inside it is.
+
+    repeat instead of kron, and the quiet zone written into a preallocated page instead of
+    np.pad: this function is effectively the entire cost of a decode attempt, and the probe
+    makes thousands of them. Measured on the probe benchmark, the rewrite roughly halves the
+    per-attempt price.
     """
+    n = int(matrix.shape[0])
+    margin = quiet * scale
+    side = n * scale + 2 * margin
+    page = np.full((side, side), np.uint8(255))
     cells = np.where(matrix, np.uint8(0), np.uint8(255))
-    enlarged = np.kron(cells, np.ones((scale, scale), dtype=np.uint8))
-    return np.pad(enlarged, quiet * scale, constant_values=255)
+    page[margin : margin + n * scale, margin : margin + n * scale] = cells.repeat(
+        scale, axis=0
+    ).repeat(scale, axis=1)
+    return page
 
 
 def decode_matrix(matrix: np.ndarray, scale: int = 4) -> str | None:

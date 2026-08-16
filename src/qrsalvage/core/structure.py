@@ -7,6 +7,8 @@ you would be guessing, and you would have no way to measure how well you guessed
 
 from __future__ import annotations
 
+from functools import lru_cache
+
 import numpy as np
 
 # Alignment pattern centres per version (ISO/IEC 18004, table E.1).
@@ -39,8 +41,13 @@ def is_valid_size(modules: int) -> bool:
     return version >= 1 and modules_for_version(version) == modules
 
 
+@lru_cache(maxsize=16)
 def structure_mask(modules: int) -> tuple[np.ndarray, np.ndarray]:
     """Return (known_dark, known_light) for a code size.
+
+    Cached: a pure function of the size, rebuilt with Python loops, and asked for repeatedly
+    on every solve. The returned arrays are frozen -- a caller that tries to write into the
+    standard's cells gets an exception instead of silently corrupting every later solve.
 
     Covers finders, separators, both timing rows, the alignment patterns and the always-dark
     module. Format and version information are deliberately left out: they carry content, so
@@ -84,6 +91,8 @@ def structure_mask(modules: int) -> tuple[np.ndarray, np.ndarray]:
                     target[ar + i, ac + j] = True
 
     dark[4 * version + 9, 8] = True  # the module that is always dark
+    dark.setflags(write=False)
+    light.setflags(write=False)
     return dark, light
 
 

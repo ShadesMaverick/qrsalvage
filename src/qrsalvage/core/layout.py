@@ -8,12 +8,15 @@ checks exactly that against real codes.
 
 from __future__ import annotations
 
+from functools import lru_cache
+
 import numpy as np
 
 from .qrspec import REMAINDER_BITS, block_plan, decode_format, format_bits, mask_bit
 from .structure import ALIGNMENT_CENTERS, version_for_modules
 
 
+@lru_cache(maxsize=16)
 def function_mask(modules: int) -> np.ndarray:
     """Every module that carries no data: finders, timing, alignment, format, version."""
     n = modules
@@ -43,9 +46,11 @@ def function_mask(modules: int) -> np.ndarray:
         mask[0:6, n - 11 : n - 8] = True
         mask[n - 11 : n - 8, 0:6] = True
 
+    mask.setflags(write=False)  # cached; a writing caller must fail loudly, not poison it
     return mask
 
 
+@lru_cache(maxsize=16)
 def placement_order(modules: int) -> list[tuple[int, int]]:
     """The order in which data modules are written.
 
@@ -198,6 +203,7 @@ def interleave(blocks: list[list[int]], version: int, ecc: str) -> list[int]:
     return out
 
 
+@lru_cache(maxsize=32)
 def codeword_positions(matrix_size: int, version: int, ecc: str) -> list[list[list[int]]]:
     """Which module positions (as flat indices) belong to which codeword of which block?
 

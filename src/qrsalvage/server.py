@@ -14,7 +14,9 @@ would have shipped a wheel with no page in it at all.
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
+import re
 import socketserver
 import uuid
 import webbrowser
@@ -228,20 +230,67 @@ def catalog_payload(payload: dict) -> tuple[bytes, str, str]:
     return to_catalog_pdf(entries, size_mm=size_mm), "application/pdf", "catalog.pdf"
 
 
+# The one inline <script> of a served page, hashed, so the policy can name it instead of
+# waving through every inline script with 'unsafe-inline'. Keyed by (path, mtime): the page is
+# edited during development, and a stale hash would block the page's own script -- loudly, in
+# the console, which is the right failure mode, but not one to ship.
+_CSP_CACHE: dict[Path, tuple[float, str]] = {}
+
+
+def _html_csp(path: Path, body: bytes) -> str:
+    mtime = path.stat().st_mtime
+    cached = _CSP_CACHE.get(path)
+    if cached and cached[0] == mtime:
+        return cached[1]
+    # The browser hashes the script text as parsed, and the HTML parser normalises CR and
+    # CRLF to LF before anything else happens. A file that lives with Windows line endings
+    # therefore hashes differently on disk than in the browser -- measured the hard way, as a
+    # page whose own script the policy refused.
+    hashes = " ".join(
+        "'sha256-" + base64.b64encode(hashlib.sha256(script).digest()).decode("ascii") + "'"
+        for script in re.findall(
+            rb"<script>(.*?)</script>", body.replace(b"\r\n", b"\n").replace(b"\r", b"\n"), re.S
+        )
+    )
+    policy = (
+        f"default-src 'self'; script-src 'self'{' ' + hashes if hashes else ''}; "
+        "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "
+        "connect-src 'self'; object-src 'none'; base-uri 'none'; "
+        "form-action 'self'; frame-ancestors 'none'"
+    )
+    _CSP_CACHE[path] = (mtime, policy)
+    return policy
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "qrsalvage"
 
     def log_message(self, *args) -> None:  # noqa: D102 - quiet by default
         pass
 
-    def _send(self, status: int, body: bytes, content_type: str) -> None:
+    def _host_allowed(self) -> bool:
+        """Refuse requests whose Host header is not the loopback the server answers on.
+
+        The socket only listens on 127.0.0.1, but that alone does not stop DNS rebinding: a
+        hostile page resolves its own domain to 127.0.0.1 and the browser then talks to this
+        server believing it is same-origin -- CORS never enters the picture. The Host header
+        still carries the attacker's domain, so it is the one thing to check.
+        """
+        host = (self.headers.get("Host") or "").rsplit(":", 1)[0].strip("[]").lower()
+        return host in ("127.0.0.1", "localhost", "::1")
+
+    def _refuse_host(self) -> None:
+        self._send(403, b"wrong host", "text/plain; charset=utf-8")
+
+    def _send(self, status: int, body: bytes, content_type: str, csp: str | None = None) -> None:
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
-        # The page never loads anything from elsewhere, so forbid it outright.
-        self.send_header(
-            "Content-Security-Policy", "default-src 'self' data: blob: 'unsafe-inline'"
-        )
+        # Nothing served here should ever be sniffed into something else, framed by another
+        # page, or leak its localhost URL to a site someone follows a link to.
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Content-Security-Policy", csp or "default-src 'none'")
         self.end_headers()
         self.wfile.write(body)
 
@@ -263,6 +312,9 @@ class Handler(BaseHTTPRequestHandler):
     }
 
     def do_GET(self) -> None:  # noqa: N802 - name fixed by BaseHTTPRequestHandler
+        if not self._host_allowed():
+            self._refuse_host()
+            return
         entry = self.STATIC.get(self.path)
         if entry is None:
             self._send(404, b"not found", "text/plain; charset=utf-8")
@@ -272,17 +324,24 @@ class Handler(BaseHTTPRequestHandler):
         if not path.is_file():
             self._send(500, f"{name} is missing".encode(), "text/plain; charset=utf-8")
             return
-        self._send(200, path.read_bytes(), content_type)
+        body = path.read_bytes()
+        csp = _html_csp(path, body) if content_type.startswith("text/html") else None
+        self._send(200, body, content_type, csp=csp)
 
     def _send_file(self, body: bytes, content_type: str, filename: str) -> None:
         self.send_response(200)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Content-Security-Policy", "default-src 'none'")
         self.end_headers()
         self.wfile.write(body)
 
     def do_POST(self) -> None:  # noqa: N802 - name fixed by BaseHTTPRequestHandler
+        if not self._host_allowed():
+            self._refuse_host()
+            return
         if self.path not in ("/api/solve", "/api/export", "/api/catalog"):
             self._send(404, b"not found", "text/plain; charset=utf-8")
             return
@@ -317,9 +376,8 @@ class Handler(BaseHTTPRequestHandler):
             # every other shell sees; the core neither knows nor cares that this one is a wire.
             self.send_response(200)
             self.send_header("Content-Type", "application/x-ndjson; charset=utf-8")
-            self.send_header(
-                "Content-Security-Policy", "default-src 'self' data: blob: 'unsafe-inline'"
-            )
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Content-Security-Policy", "default-src 'none'")
             self.end_headers()
             alive = True
 
