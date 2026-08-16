@@ -99,8 +99,8 @@ def _write_exports(args, result, image) -> None:
         print(f"pdf  -> {path}  ({args.size_mm:g} mm square)")
     if "json" in wanted:
         path = args.out / "result.json"
-        path.write_text(to_json(result, include_zigbee=args.zigbee), encoding="utf-8")
-        print(f"json -> {path}" + ("  (including the pairing secret)" if args.zigbee else ""))
+        path.write_text(to_json(result, split_payload=args.split), encoding="utf-8")
+        print(f"json -> {path}" + ("  (with the secrets split out)" if args.split else ""))
     if "html" in wanted:
         ok, encoded = cv2.imencode(".png", image)
         path = args.out / "report.html"
@@ -288,10 +288,12 @@ def main(argv: list[str] | None = None) -> int:
         "Raising it adds modules, so at a fixed printed size they get smaller",
     )
     solver.add_argument(
+        "--split-payload",
         "--zigbee",
+        dest="split",
         action="store_true",
-        help="split a Zigbee payload into fields in the json export. Off by default: the "
-        "install code is a pairing secret, not an identifier",
+        help="split a recognised payload (Zigbee, Matter, Wi-Fi) into fields in the json "
+        "export. Off by default: install codes, passcodes and network keys are secrets",
     )
     solver.add_argument(
         "--fuse",

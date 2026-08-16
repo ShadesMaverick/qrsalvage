@@ -188,10 +188,13 @@ Einzelfall durchgeht.
   ein Frame pro Druck. Taschenlampen-Knopf, wo der Browser sie hergibt; Stream wird beim
   Schließen freigegeben; verweigerte Berechtigung fällt freundlich auf den Dateiweg zurück.
   Ende-zu-Ende geprüft über einen gefälschten Kamera-Stream (Canvas mit driftendem Foto).
-- **Payload-Intelligenz für die Smart-Home-Nische.** `zigbee_fields` existiert; Matter
-  (`MT:...`) und WLAN (`WIFI:S:...;P:...`) fehlen. Nach der Rettung erklären, *was* der Code
-  ist und was man jetzt damit tut („Setup-PIN für Matter-Kopplung, in Home Assistant unter …")
-  — Klartext bleibt lokal, Aufschlüsselung opt-in wie bei Zigbee.
+- **Payload-Intelligenz für die Smart-Home-Nische — ERLEDIGT.** `matter_fields` decodiert den
+  Base38-Payload (Bitfelder, Verhoeff-Prüfziffer) und leitet den 11-stelligen manuellen
+  Pairing-Code ab — verankert am kanonischen Matter-Testvektor (MT:Y.K9042C00KA0648G00 →
+  3497-011-2332, Passcode 20202021, Discriminator 0xF00). `wifi_fields` parst WIFI:-Payloads
+  samt Escaping. Die Seite zeigt Hinweis und Felder unter dem Klartext; im JSON-Export opt-in
+  über `--split-payload` (`--zigbee` bleibt als Alias). Die echte EUI64 im Zigbee-Test ist
+  durch eine erfundene ersetzt.
 - **Der Spendenmoment.** Der Ask gehört auf die Erfolgskarte, klein und ehrlich („Lief
   komplett auf deinem Gerät. Lampe gerettet? 5 € halten das Werkzeug am Leben.") — nicht auf
   die Startseite. Für Einmalspenden Ko-fi/LiberaPay statt nur Patreon (Abo-Logik passt nicht

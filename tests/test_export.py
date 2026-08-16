@@ -16,11 +16,14 @@ from qrsalvage.core.decoding import reencode
 from qrsalvage.core.pipeline import solve
 from qrsalvage.export import (
     Layout,
+    matter_fields,
+    payload_fields,
     to_catalog_pdf,
     to_html_report,
     to_json,
     to_pdf,
     to_svg,
+    wifi_fields,
     zigbee_fields,
 )
 from qrsalvage.synth import Damage, render_photo
@@ -101,22 +104,59 @@ def test_json_carries_the_evidence_not_only_the_answer(result):
 
 
 def test_the_pairing_secret_stays_out_unless_asked_for(result):
-    zigbee_text = "Z:0123456789ABCDEF$I:00112233445566778899AABBCCDDEEFF1234%M:1189"
+    zigbee_text = "Z:AABBCCDDEEFF0011$I:00112233445566778899AABBCCDDEEFF1234%M:0007"
 
     plain = json.loads(to_json(result))
     assert "zigbee" not in plain
 
     fields = zigbee_fields(zigbee_text)
-    assert fields["eui64"] == "0123456789ABCDEF"
-    assert fields["eui64_colons"] == "F0:D1:B8:00:00:18:84:BB"
+    assert fields["eui64"] == "AABBCCDDEEFF0011"
+    assert fields["eui64_colons"] == "AA:BB:CC:DD:EE:FF:00:11"
     assert fields["install_code_crc"] == "1234"
-    assert fields["model"] == "1189"
+    assert fields["model"] == "0007"
     assert "secret" in fields["warning"]
 
 
 def test_zigbee_parsing_declines_anything_else():
     assert zigbee_fields("https://example.com") is None
     assert zigbee_fields("MT:-0PK4KKN16RN.L6EB3P00SOV0E7TI") is None
+
+
+def test_matter_payload_yields_the_manual_pairing_code():
+    """Anchored to the canonical Matter test vector, not to this implementation.
+
+    MT:Y.K9042C00KA0648G00 is the payload every chip-tool tutorial uses; its passcode
+    (20202021), discriminator (0xF00) and manual pairing code (34970112332) are published
+    values. Three independent anchors -- the manual code exercises the whole chain including
+    the Verhoeff check digit -- make a quietly transposed lookup table loud.
+    """
+    fields = matter_fields("MT:Y.K9042C00KA0648G00")
+    assert fields["setup_passcode"] == "20202021"
+    assert fields["discriminator"] == 0xF00
+    assert fields["manual_pairing_code"] == "3497-011-2332"
+    assert fields["vendor_id"] == 0xFFF1
+    assert fields["product_id"] == 0x8000
+    assert fields["commissioning_flow"] == "standard"
+    assert "BLE" in fields["discovery"]
+    assert "key" in fields["warning"]
+
+    assert matter_fields("MT:NOT-BASE38!!") is None
+    assert matter_fields("WIFI:S:x;;") is None
+
+
+def test_wifi_payload_honours_the_escaping():
+    fields = wifi_fields("WIFI:S:My\;Home;T:WPA;P:pa\\ss word;H:true;;")
+    assert fields["ssid"] == "My;Home"
+    assert fields["password"] == "pass word"
+    assert fields["security"] == "WPA"
+    assert fields["hidden"] is True
+    assert wifi_fields("plain text") is None
+
+
+def test_payload_kinds_are_recognised_and_split_only_on_request(result):
+    kind, fields = payload_fields("MT:Y.K9042C00KA0648G00")
+    assert kind == "matter" and "manual_pairing_code" in fields
+    assert payload_fields("QRSALVAGE-PLAIN") is None
 
 
 def test_html_report_is_self_contained(result):

@@ -309,7 +309,174 @@ def zigbee_fields(text: str) -> dict | None:
     return out
 
 
-def to_json(result, include_payload: bool = True, include_zigbee: bool = False) -> str:
+# --- what a recovered payload actually is ------------------------------------------------
+#
+# The person who just rescued a code faces the follow-up question at once: what is this, and
+# where do I type it? For the smart-home payloads this tool exists for, that question has a
+# precise answer, so it gets computed rather than left as an exercise.
+
+# Matter's onboarding payload is base38 over this exact alphabet (Matter spec 5.1.3).
+_BASE38 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-."
+
+# Verhoeff tables for the manual pairing code's check digit. A lookup-table checksum is the
+# most dangerous kind of code -- a transposed value does not crash -- so the whole chain below
+# is anchored to the canonical Matter test vector in the tests.
+_VERHOEFF_D = (
+    (0, 1, 2, 3, 4, 5, 6, 7, 8, 9),
+    (1, 2, 3, 4, 0, 6, 7, 8, 9, 5),
+    (2, 3, 4, 0, 1, 7, 8, 9, 5, 6),
+    (3, 4, 0, 1, 2, 8, 9, 5, 6, 7),
+    (4, 0, 1, 2, 3, 9, 5, 6, 7, 8),
+    (5, 9, 8, 7, 6, 0, 4, 3, 2, 1),
+    (6, 5, 9, 8, 7, 1, 0, 4, 3, 2),
+    (7, 6, 5, 9, 8, 2, 1, 0, 4, 3),
+    (8, 7, 6, 5, 9, 3, 2, 1, 0, 4),
+    (9, 8, 7, 6, 5, 4, 3, 2, 1, 0),
+)
+_VERHOEFF_P = (
+    (0, 1, 2, 3, 4, 5, 6, 7, 8, 9),
+    (1, 5, 7, 6, 2, 8, 3, 0, 9, 4),
+    (5, 8, 0, 3, 7, 9, 6, 1, 4, 2),
+    (8, 9, 1, 6, 0, 4, 3, 5, 2, 7),
+    (9, 4, 5, 3, 1, 2, 6, 8, 7, 0),
+    (4, 2, 8, 6, 5, 7, 3, 9, 0, 1),
+    (2, 7, 9, 3, 8, 0, 6, 4, 1, 5),
+    (7, 0, 4, 6, 9, 1, 3, 2, 5, 8),
+)
+_VERHOEFF_INV = (0, 4, 3, 2, 1, 5, 6, 7, 8, 9)
+
+
+def _verhoeff_digit(digits: str) -> int:
+    checksum = 0
+    for index, char in enumerate(reversed(digits)):
+        checksum = _VERHOEFF_D[checksum][_VERHOEFF_P[(index + 1) % 8][int(char)]]
+    return _VERHOEFF_INV[checksum]
+
+
+def _base38_decode(encoded: str) -> bytes:
+    """Matter's base38: five characters carry three bytes, the tail four-to-two or two-to-one."""
+    out = bytearray()
+    lengths = {5: 3, 4: 2, 2: 1}
+    for start in range(0, len(encoded), 5):
+        chunk = encoded[start : start + 5]
+        size = lengths.get(len(chunk))
+        if size is None:
+            raise ValueError("not a base38 length")
+        value = 0
+        for char in reversed(chunk):
+            value = value * 38 + _BASE38.index(char)
+        if value >> (8 * size):
+            # 38^5 overreaches three bytes, so alphabet-valid garbage can still overflow.
+            raise ValueError("not a base38 value")
+        out += value.to_bytes(size, "little")
+    return bytes(out)
+
+
+def matter_fields(text: str) -> dict | None:
+    """Unpack a Matter onboarding payload, if that is what this is.
+
+    The QR string hides the one thing a person with an unscannable code needs most: the
+    11-digit *manual pairing code* that every commissioner accepts typed in. It is derivable
+    from the discriminator and the passcode (Matter spec 5.1.4), so it gets derived -- that is
+    the difference between handing someone a rescued string and handing them a paired lamp.
+    """
+    if not text.startswith("MT:"):
+        return None
+    try:
+        # Concatenated multi-device payloads join segments with '*'; the first one carries us.
+        packed = _base38_decode(text[3:].split("*", 1)[0])
+        if len(packed) < 11:
+            return None
+        bits = int.from_bytes(packed[:11], "little")
+    except ValueError:
+        return None
+
+    version = bits & 0x7
+    vendor_id = (bits >> 3) & 0xFFFF
+    product_id = (bits >> 19) & 0xFFFF
+    flow = (bits >> 35) & 0x3
+    discovery = (bits >> 37) & 0xFF
+    discriminator = (bits >> 45) & 0xFFF
+    passcode = (bits >> 57) & 0x7FFFFFF
+    padding = (bits >> 84) & 0xF
+    if version != 0 or padding != 0:
+        return None  # not a payload this spec revision describes; better honest than wrong
+
+    # Manual pairing code, spec 5.1.4: 1 + 5 + 4 digits, then a Verhoeff check digit.
+    first = discriminator >> 10
+    middle = ((discriminator & 0x300) << 6) | (passcode & 0x3FFF)
+    last = passcode >> 14
+    digits = f"{first}{middle:05d}{last:04d}"
+    manual = digits + str(_verhoeff_digit(digits))
+
+    capabilities = [
+        name for bit, name in ((1, "SoftAP"), (2, "BLE"), (4, "on network")) if discovery & bit
+    ]
+    return {
+        "manual_pairing_code": f"{manual[:4]}-{manual[4:7]}-{manual[7:]}",
+        "setup_passcode": f"{passcode:08d}",
+        "discriminator": discriminator,
+        "vendor_id": vendor_id,
+        "product_id": product_id,
+        "commissioning_flow": {0: "standard", 1: "user intent", 2: "custom"}.get(flow, flow),
+        "discovery": ", ".join(capabilities) if capabilities else "none advertised",
+        "warning": "passcode and manual code commission the device. Treat them like keys.",
+    }
+
+
+def wifi_fields(text: str) -> dict | None:
+    """Split a WIFI: credential payload -- router labels wear off like every other label."""
+    if not text.upper().startswith("WIFI:"):
+        return None
+    fields: dict[str, str] = {}
+    key, buffer, index = "", [], 5
+    while index < len(text):
+        char = text[index]
+        if char == "\\" and index + 1 < len(text):
+            buffer.append(text[index + 1])
+            index += 2
+            continue
+        if char == ":" and not key and len(buffer) <= 2:
+            key = "".join(buffer)
+            buffer = []
+        elif char == ";":
+            if key:
+                fields[key.upper()] = "".join(buffer)
+            key, buffer = "", []
+        else:
+            buffer.append(char)
+        index += 1
+    if "S" not in fields:
+        return None
+    out = {"ssid": fields["S"], "security": fields.get("T", "open")}
+    if fields.get("P"):
+        out["password"] = fields["P"]
+    if fields.get("H", "").lower() == "true":
+        out["hidden"] = True
+    out["warning"] = "the password is the network key. Do not publish it."
+    return out
+
+
+PAYLOAD_HINTS = {
+    "zigbee": "A Zigbee install code. Add the device in Home Assistant (ZHA or Zigbee2MQTT) "
+    "and paste the install code together with the EUI-64 when asked for it.",
+    "matter": "A Matter onboarding code. Add the device in Home Assistant, Apple Home or "
+    "Google Home — and where scanning is not an option, type the manual pairing code instead.",
+    "wifi": "Wi-Fi credentials — network name and key, ready to join.",
+}
+
+
+def payload_fields(text: str) -> tuple[str, dict] | None:
+    """Recognise and split a payload: (kind, fields), or None for plain content."""
+    parsers = (("zigbee", zigbee_fields), ("matter", matter_fields), ("wifi", wifi_fields))
+    for kind, parser in parsers:
+        fields = parser(text)
+        if fields:
+            return kind, fields
+    return None
+
+
+def to_json(result, include_payload: bool = True, split_payload: bool = False) -> str:
     """The result and, just as importantly, how much it can be trusted."""
     out: dict = {
         "recovered": result.solved,
@@ -344,10 +511,11 @@ def to_json(result, include_payload: bool = True, include_zigbee: bool = False) 
     if include_payload and result.text is not None:
         out["payload"] = result.text
         out["payload_length"] = len(result.text)
-        if include_zigbee:
-            zigbee = zigbee_fields(result.text)
-            if zigbee:
-                out["zigbee"] = zigbee
+        recognised = payload_fields(result.text)
+        if recognised:
+            out["payload_kind"] = recognised[0]
+            if split_payload:
+                out[recognised[0]] = recognised[1]
     return json.dumps(out, indent=2) + "\n"
 
 

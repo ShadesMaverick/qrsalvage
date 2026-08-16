@@ -216,8 +216,11 @@
   label.size input { width: 5rem; font: inherit; padding: .45rem .5rem; border-radius: 7px;
                      border: 1px solid var(--line); background: var(--panel-in);
                      color: var(--fg); font-variant-numeric: tabular-nums; }
-  #zigbeeRow { display: flex; gap: .5rem; align-items: flex-start; margin-top: .9rem;
-               max-width: 46rem; }
+  #splitRow { display: flex; gap: .5rem; align-items: flex-start; margin-top: .9rem;
+              max-width: 46rem; }
+  .knowledge { margin-top: .9rem; padding-top: .8rem; border-top: 1px solid var(--line); }
+  .knowledge dl { margin-top: .6rem; font-size: .9rem; }
+  .knowledge .note { margin-top: .3rem; }
 </style>
 </head>
 <body>
@@ -324,10 +327,10 @@
         <button data-format="json">JSON</button>
         <button data-format="html">Report</button>
       </div>
-      <label class="note" id="zigbeeRow" style="display:none">
-        <input id="zigbee" type="checkbox">
-        split the Zigbee payload into fields in the JSON — off by default, the install code is a
-        pairing secret rather than an identifier
+      <label class="note" id="splitRow" style="display:none">
+        <input id="split" type="checkbox">
+        split the payload into fields in the JSON export — off by default: install codes,
+        passcodes and network keys are secrets rather than identifiers
       </label>
     </div>
 
@@ -962,9 +965,24 @@ function render(a) {
   const payload = $("payload");
   payload.classList.toggle("miss", !a.ok);
   if (a.ok) {
+    // The follow-up question, answered in place: what is this, and where does one type it.
+    // For Matter the derived manual pairing code is the star -- it exists precisely for the
+    // case where scanning is not an option, which is this tool's entire audience.
+    let knowledge = "";
+    if (a.payload_info) {
+      const rows = Object.entries(a.payload_info.fields)
+        .filter(([key]) => key !== "warning")
+        .map(([key, value]) =>
+          `<dt>${escapeHtml(key.replace(/_/g, " "))}</dt><dd>${escapeHtml(String(value))}</dd>`)
+        .join("");
+      knowledge =
+        `<div class="knowledge"><div class="note">${escapeHtml(a.payload_info.hint)}</div>
+         <dl>${rows}</dl>
+         <div class="note quiet">${escapeHtml(a.payload_info.fields.warning || "")}</div></div>`;
+    }
     payload.innerHTML =
       `<div class="label" style="color:var(--pink)">recovered · ${a.text.length} characters</div>
-       <code>${escapeHtml(a.text)}</code>
+       <code>${escapeHtml(a.text)}</code>${knowledge}
        <div class="actions"><button id="copy">Copy</button></div>`;
     $("copy").addEventListener("click", async () => {
       const button = $("copy");
@@ -1012,8 +1030,8 @@ function render(a) {
 
   token = a.token || null;
   $("exports").classList.toggle("hidden", !a.exportable);
-  // The Zigbee split is only offered when there is a Zigbee payload to split.
-  $("zigbeeRow").style.display = a.ok && a.text.startsWith("Z:") ? "flex" : "none";
+  // The split is only offered when there is a recognised payload to split.
+  $("splitRow").style.display = a.ok && a.payload_info ? "flex" : "none";
 }
 
 async function download(format) {
@@ -1026,7 +1044,7 @@ async function download(format) {
       format,
       size_mm: parseFloat($("sizeMm").value) || 40,
       ecc: $("ecc").value || null,
-      zigbee: $("zigbee").checked,
+      split: $("split").checked,
     }),
   });
   if (!response.ok) {

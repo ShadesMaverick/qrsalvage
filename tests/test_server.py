@@ -96,6 +96,32 @@ def test_a_single_image_may_still_arrive_under_the_old_key():
     assert "fusion" not in listed, "one photograph is not a fusion"
 
 
+def test_a_matter_code_arrives_with_its_manual_pairing_code():
+    """From photograph to the number a person types into Home Assistant, in one answer.
+
+    The whole audience of this tool is someone whose code cannot be scanned; for Matter the
+    derived manual pairing code is what they actually need, so the answer carries it."""
+    from qrsalvage.core.decoding import reencode
+    from qrsalvage.synth import Damage, render_photo
+
+    photo = render_photo(
+        reencode("MT:Y.K9042C00KA0648G00"), Damage(contrast=0.30, curvature=0.15), seed=2
+    )
+    ok, buffer = cv2.imencode(".png", photo)
+    assert ok
+    answer = solve_payload(
+        {"image": "data:image/png;base64," + base64.b64encode(buffer.tobytes()).decode("ascii")}
+    )
+
+    assert answer["ok"] is True
+    info = answer["payload_info"]
+    assert info["kind"] == "matter"
+    assert info["fields"]["manual_pairing_code"] == "3497-011-2332"
+    assert info["fields"]["setup_passcode"] == "20202021"
+    assert "Home Assistant" in info["hint"]
+    assert json.dumps(answer)
+
+
 def test_hand_placed_finders_are_accepted():
     """The escape hatch: three rough clicks instead of the automatic search."""
     automatic = solve_payload({"image": _data_url(FIXTURE)})

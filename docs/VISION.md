@@ -48,7 +48,7 @@ In dieser Reihenfolge, jede Stufe für sich nutzbar:
   greifen, direkt in `solve_many`. Die Fusion ist der stärkste gemessene Hebel
   (36–81 % einzeln → 93–100 % fusioniert), aber niemand macht von Hand drei Fotos — aus dem
   erklärungsbedürftigen Feature wird eine Geste. Läuft auf 127.0.0.1 und später auf HTTPS.
-- [ ] **2. Payload-Intelligenz für die Nische** *(Rettungsquote/Erlebnis)* — Matter (`MT:…`)
+- [x] **2. Payload-Intelligenz für die Nische** *(Rettungsquote/Erlebnis)* — Matter (`MT:…`)
   und WLAN (`WIFI:…`) zerlegen wie heute Zigbee, und nach der Rettung die Folgefrage
   beantworten: was ist das, und wo gebe ich es ein. Aufschlüsselung opt-in, Klartext bleibt
   lokal.
