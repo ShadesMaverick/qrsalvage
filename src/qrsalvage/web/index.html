@@ -46,6 +46,12 @@
     </div>
   </header>
 
+  <!-- The first line answers the search that brought somebody here, in their words, before the
+       project introduces itself. Nobody arrives curious; they arrive with a lamp that will not
+       pair and three reader apps already tried. -->
+  <p class="lead">A QR code that won't scan — scratched, faded, engraved, or wrapped around a
+    curved surface? Drop a photograph. The recovery runs on your device; nothing is uploaded.</p>
+
   <div id="drop">
     <p><strong id="dropTitle">Drop a photograph here</strong>
        <span id="dropMore">&nbsp;or click to choose one</span>
@@ -170,6 +176,68 @@
     </div>
     <div id="catalogThanks"></div>
   </div>
+
+  <!-- The questions people actually type into a search engine, as headings, answered honestly.
+       This section is both the help and the way of being found: the plan in docs/REACH.md is
+       to lie ready for the one moment somebody needs this, and these are the words of that
+       moment. No keyword stuffing -- every answer has to be worth reading to the person who
+       asked, or the whole section is spam with extra steps. Plain <details>, no script. -->
+  <section id="faq">
+    <h2>Common situations</h2>
+
+    <details>
+      <summary>My QR code won't scan — can anything still read it?</summary>
+      <p>Often, yes. A reader app needs the whole code to be clean; qrsalvage instead treats
+      the parts every QR code must contain as a calibration target, measures how damaged the
+      rest is, and uses the code's own error correction to reconstruct what is missing. It
+      reads codes well past the point where phone cameras give up — and tells you honestly
+      when too much is physically gone.</p>
+    </details>
+
+    <details>
+      <summary>The QR code is on a curved surface — a light bulb or a lamp</summary>
+      <p>This tool exists because of one of those. A code wrapped around a bulb defeats normal
+      readers because straight grid lines become curves; qrsalvage fits a bowed grid to the
+      surface before reading a single cell. Take several photographs from slightly different
+      angles — what the curvature hides in one, another still shows, and they are read
+      together.</p>
+    </details>
+
+    <details>
+      <summary>Zigbee install code or Matter pairing code unreadable</summary>
+      <p>These tiny engraved or printed device labels are the codes this tool sees most. After
+      a recovery it recognises what the payload is — a Zigbee install code, a Matter onboarding
+      code, Wi-Fi credentials — and shows the fields you actually need to type into your hub,
+      including the 11-digit Matter manual pairing code. A pairing code is a secret: it never
+      leaves your device here, and be careful where else you paste it.</p>
+    </details>
+
+    <details>
+      <summary>The code is engraved, scratched or faded — barely any contrast</summary>
+      <p>Laser engraving and wear defeat readers because dark and light modules become nearly
+      the same shade. qrsalvage estimates the two brightness levels from the parts of the code
+      whose values are fixed by the standard, then scores every other cell against them — so
+      even a few percent of contrast, spread unevenly across the label, can be enough. The
+      <a href="method.html">method page</a> shows this step by step, with real figures.</p>
+    </details>
+
+    <details>
+      <summary>Can I read a QR code from a photo without uploading it anywhere?</summary>
+      <p>Here, yes — and verifiably so. The entire recovery runs inside your browser; there is
+      no server that could receive your photograph, and the page's own security policy forbids
+      it from talking to one. That matters for device codes, which are pairing secrets rather
+      than harmless labels. The first visit downloads the recovery engine (about 29&nbsp;MB,
+      then cached), which is the honest price of nothing leaving your device.</p>
+    </details>
+
+    <details>
+      <summary>What if the code really is beyond saving?</summary>
+      <p>Then qrsalvage says so, and says why: it distinguishes a code it cannot <em>find</em>
+      from one whose data area is physically destroyed beyond what error correction can carry.
+      If several photographs agree the grid is clean but too many modules are simply gone, no
+      tool can recover it — and knowing that is worth more than a spinner that never ends.</p>
+    </details>
+  </section>
 
   <!-- Quiet on purpose. A person here has a problem to solve; the legal page is required to
        be reachable, not prominent. -->
