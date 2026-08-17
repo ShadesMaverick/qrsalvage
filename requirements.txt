@@ -13,3 +13,4 @@ zxing-cpp>=2.2
 # Werkzeuge
 pytest>=8.3
 ruff>=0.6
+mypy>=1.11

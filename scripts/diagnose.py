@@ -37,7 +37,7 @@ def main() -> int:
     print(f"image: {image.shape[1]} x {image.shape[0]} px\n")
 
     print(f"{'scale':>6} {'px':>11} {'channel':>8} {'blur':>5} {'finders':>8}  widths")
-    best = (0, None)
+    best: tuple[int, tuple[float, int, float] | None] = (0, None)
     for scale in args.scales:
         if scale != 1.0:
             resized = cv2.resize(image, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
@@ -58,7 +58,8 @@ def main() -> int:
                     cv2.imwrite(str(args.out / "binary_best.png"), binary)
 
     print()
-    if best[1] is None:
+    settings = best[1]
+    if settings is None:
         print("No combination found three finder patterns.")
         print("Look at the binary images: if the code is not visible there, the problem is the")
         print("photograph. If it is visible but broken up, the problem is the threshold.")
@@ -68,7 +69,7 @@ def main() -> int:
         print(f"-> {args.out / 'binary_default.png'}")
         return 2
 
-    scale, channel, blur = best[1]
+    scale, channel, blur = settings
     print(f"Best: scale {scale}, {CHANNELS[channel]} channel, blur {blur} -> {best[0]} finders")
     print(f"-> {args.out / 'binary_best.png'}")
     return 0

@@ -74,7 +74,7 @@ def render_photo(matrix: np.ndarray, damage: Damage, seed: int = 0) -> np.ndarra
     engraved = np.where(plane < 0.5, 1.0 - damage.raster_depth * raster, plane)
 
     # Contrast: the engraving is only slightly darker than the white plastic around it.
-    img = 1.0 - damage.contrast * (1.0 - engraved)
+    img: np.ndarray = 1.0 - damage.contrast * (1.0 - engraved)
 
     if damage.rotation_deg:
         rotation = cv2.getRotationMatrix2D((w / 2, h / 2), damage.rotation_deg, 1.0)

@@ -197,7 +197,9 @@ def _find_errors(locator: list[int], msg_len: int) -> list[int]:
     return sorted(found)
 
 
-def correct_block(msg: list[int], nsym: int, erasures: list[int] | None = None):
+def correct_block(
+    msg: list[int], nsym: int, erasures: list[int] | None = None
+) -> tuple[list[int], list[int], list[int]]:
     """Repair one codeword block. Returns (repaired, error positions, erasures used).
 
     `erasures` are positions whose value is unknown but whose location is certain -- exactly

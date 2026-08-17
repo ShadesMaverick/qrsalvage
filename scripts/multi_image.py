@@ -23,13 +23,14 @@ import argparse
 import math
 import time
 from dataclasses import replace
+from typing import Any
 
 import numpy as np
 
 from qrsalvage.core.decoding import reencode
 from qrsalvage.core.ensemble import fuse_images
 from qrsalvage.core.matrix import ModuleMatrix
-from qrsalvage.core.pipeline import MEMBER_BUDGET, _decode_chain, solve
+from qrsalvage.core.pipeline import MEMBER_BUDGET, SolveResult, _decode_chain, solve
 from qrsalvage.core.structure import structure_mask
 from qrsalvage.synth import Damage, render_photo
 
@@ -90,7 +91,12 @@ def trial(damage: Damage, count: int, budget: int, seed: int) -> tuple[int, dict
     alone = sum(int(m.solved) for m in members)
 
     usable = [m for m in members if m.matrix is not None]
-    usable.sort(key=lambda m: (m.wrong_known, -m.timing))
+
+    def reliability(member: SolveResult) -> tuple[int, float]:
+        assert member.wrong_known is not None and member.timing is not None
+        return member.wrong_known, -member.timing
+
+    usable.sort(key=reliability)
     outcomes = dict.fromkeys(RULES, False)
     if len(usable) < 2:
         return alone, outcomes
@@ -98,7 +104,7 @@ def trial(damage: Damage, count: int, budget: int, seed: int) -> tuple[int, dict
     modules = usable[0].modules
     same = [m for m in usable if m.modules == modules]
     known_dark, known_light = structure_mask(modules)
-    posteriors = [m.matrix.posterior for m in same]
+    posteriors = [m.matrix.posterior for m in same if m.matrix is not None]
 
     for rule in RULES:
         consensus = fuse_images(posteriors, known_dark, known_light, rule=rule)
@@ -132,7 +138,8 @@ def main() -> int:
         print(f"\n--- {axis} (all other damage held at the baseline) ---")
         print(f"{axis:>9} {'single image':>22} {header}")
         for level in args.levels or default_levels:
-            damage = replace(base, **{field: level})
+            changes: dict[str, Any] = {field: level}
+            damage = replace(base, **changes)
             alone_total = 0
             wins = dict.fromkeys(RULES, 0)
             start = time.perf_counter()

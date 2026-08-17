@@ -28,6 +28,8 @@ adressiert — so ist immer eindeutig, welcher Interpreter läuft.
 - Nur Bildregression: `.venv\Scripts\python.exe -m pytest -m regression`
 - Lint: `.venv\Scripts\python.exe -m ruff check .`
 - Format: `.venv\Scripts\python.exe -m ruff format .`
+- Typen: `.venv\Scripts\python.exe -m mypy` (Konfiguration in `pyproject.toml`; der Kern
+  verlangt vollständige Signaturen)
 
 Es gibt keinen Build-Schritt. Die Oberfläche ist eine statische HTML/JS-Datei, kein npm.
 
@@ -36,7 +38,7 @@ Es gibt keinen Build-Schritt. Die Oberfläche ist eine statische HTML/JS-Datei, 
 - Python 3.11 im lokalen `.venv` (nicht 3.14 — dafür fehlen OpenCV-Wheels; 3.12 und 3.13 sind
   auf diesem Rechner nur Karteileichen im py-Launcher, die Installationen fehlen)
 - OpenCV, NumPy, Pillow für Bildverarbeitung; zxing-cpp für Decodier-Versuche auf Bildern
-- pytest, ruff
+- pytest, ruff, mypy
 - Oberfläche: eine HTML-Datei mit Canvas, ausgeliefert von einem lokalen Python-Server
 
 ## Architektur

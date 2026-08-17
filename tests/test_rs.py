@@ -48,7 +48,9 @@ def _first_block(text: str):
     check symbols are the encoder's, not ours, and the test cannot pass by agreeing with itself.
     """
     matrix = reencode(text)
-    ecc, mask, _ = read_format(matrix)
+    header = read_format(matrix)
+    assert header is not None
+    ecc, mask, _ = header
     version = version_for_modules(matrix.shape[0])
     plan = block_plan(version, ecc)
     block = deinterleave(extract_codewords(matrix, mask), version, ecc)[0]
@@ -110,6 +112,7 @@ def test_erasures_reach_twice_as_far_as_errors():
 @pytest.mark.parametrize("version", VERSIONS)
 def test_placement_covers_exactly_the_data_modules(version):
     matrix = _sample(version)
+    assert matrix is not None
     n = matrix.shape[0]
     order = placement_order(n)
     assert len(set(order)) == len(order), "a position was handed out twice"
@@ -120,6 +123,7 @@ def test_placement_covers_exactly_the_data_modules(version):
 def test_extract_and_place_back_returns_the_same_matrix(version):
     """The inversion check: an order that is off by one shows up here immediately."""
     matrix = _sample(version)
+    assert matrix is not None
     header = read_format(matrix)
     assert header is not None, "an undamaged code must have readable format information"
     ecc, mask, distance = header
@@ -135,7 +139,10 @@ def test_extract_and_place_back_returns_the_same_matrix(version):
 @pytest.mark.parametrize("version", VERSIONS)
 def test_interleaving_is_invertible(version):
     matrix = _sample(version)
-    ecc, mask, _ = read_format(matrix)
+    assert matrix is not None
+    header = read_format(matrix)
+    assert header is not None
+    ecc, mask, _ = header
     codewords = extract_codewords(matrix, mask)[: block_plan(version, ecc).total_codewords]
     blocks = deinterleave(codewords, version, ecc)
     assert interleave(blocks, version, ecc) == codewords
@@ -145,7 +152,10 @@ def test_interleaving_is_invertible(version):
 def test_a_real_code_has_vanishing_syndromes(version):
     """The sharpest table test: if the block layout is wrong, this is where it shows."""
     matrix = _sample(version)
-    ecc, mask, _ = read_format(matrix)
+    assert matrix is not None
+    header = read_format(matrix)
+    assert header is not None
+    ecc, mask, _ = header
     plan = block_plan(version, ecc)
     codewords = extract_codewords(matrix, mask)[: plan.total_codewords]
     for block in deinterleave(codewords, version, ecc):
@@ -175,6 +185,7 @@ def test_repair_restores_damaged_modules():
 
     result = repair_progressive(damaged)
     assert result.ok, result.failure
+    assert result.matrix is not None
     assert np.array_equal(result.matrix, original)
     assert result.errors_corrected > 0
 
@@ -184,7 +195,9 @@ def test_erasures_rescue_what_errors_alone_cannot():
     text = "ERASURES-BEAT-ERRORS"
     original = reencode(text)
     n = original.shape[0]
-    ecc, _, _ = read_format(original)
+    header = read_format(original)
+    assert header is not None
+    ecc, _, _ = header
     plan = block_plan(version_for_modules(n), ecc)
 
     free = np.argwhere(~function_mask(n))
@@ -204,6 +217,7 @@ def test_erasures_rescue_what_errors_alone_cannot():
     with_hint = repair_progressive(damaged, posterior=posterior)
 
     assert with_hint.ok, with_hint.failure
+    assert with_hint.matrix is not None
     assert np.array_equal(with_hint.matrix, original)
     assert with_hint.erasures_used > 0
     if without_hint.ok:
@@ -222,7 +236,9 @@ def test_scattered_erasures_reach_what_no_prefix_can():
     original = reencode(text)
     n = original.shape[0]
     version = version_for_modules(n)
-    ecc, _, _ = read_format(original)
+    header = read_format(original)
+    assert header is not None
+    ecc, _, _ = header
     plan = block_plan(version, ecc)
     t = plan.ec_per_block
     positions = codeword_positions(n, version, ecc)[0]
@@ -244,8 +260,10 @@ def test_scattered_erasures_reach_what_no_prefix_can():
         flat = positions[index][0]
         posterior.flat[flat] = 0.51 if damaged.flat[flat] else 0.49
 
+    damaged_header = read_format(damaged)
+    assert damaged_header is not None
     block = deinterleave(
-        extract_codewords(damaged, read_format(damaged)[1])[: plan.total_codewords],
+        extract_codewords(damaged, damaged_header[1])[: plan.total_codewords],
         version,
         ecc,
     )[0]
@@ -265,4 +283,5 @@ def test_scattered_erasures_reach_what_no_prefix_can():
 
     scattered = repair_scattered(damaged, posterior, verify=verify)
     assert scattered.ok, scattered.failure
+    assert scattered.matrix is not None
     assert np.array_equal(scattered.matrix, original)

@@ -25,6 +25,7 @@ Python 3.11 or newer. The checks that gate every change:
 
 ```
 ruff check . && ruff format --check .
+mypy                        # the core requires complete signatures
 pytest                      # everything, a couple of minutes
 pytest -m "not regression"  # fast path
 ```

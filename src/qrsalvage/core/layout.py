@@ -136,10 +136,10 @@ def extract_codewords(matrix: np.ndarray, mask_pattern: int) -> list[int]:
 
     codewords: list[int] = []
     for i in range(0, len(bits) - 7, 8):
-        value = 0
+        word = 0
         for bit in bits[i : i + 8]:
-            value = (value << 1) | bit
-        codewords.append(value)
+            word = (word << 1) | bit
+        codewords.append(word)
     return codewords
 
 

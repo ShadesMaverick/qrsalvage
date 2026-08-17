@@ -41,12 +41,13 @@ def _native() -> tuple[DecodeFn, EncodeFn]:
     import zxingcpp
 
     qr = zxingcpp.BarcodeFormat.QRCode
+    qr_only = zxingcpp.BarcodeFormats(qr)
     # zxing-cpp's create_barcode takes its own level names.
     levels = {"L": "1", "M": "2", "Q": "3", "H": "4"}
 
     def decode(image: np.ndarray) -> str | None:
         try:
-            hits = zxingcpp.read_barcodes(image, formats=qr, try_invert=False)
+            hits = zxingcpp.read_barcodes(image, formats=qr_only, try_invert=False)
         except Exception:
             return None
         for hit in hits:

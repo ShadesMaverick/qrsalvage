@@ -106,7 +106,9 @@ def _assemble_pdf(objects: list[bytes]) -> bytes:
     return bytes(out)
 
 
-def _matrix_rectangles(matrix: np.ndarray, x0: float, y_top: float, unit: float, quiet: int):
+def _matrix_rectangles(
+    matrix: np.ndarray, x0: float, y_top: float, unit: float, quiet: int
+) -> list[str]:
     """Content-stream rectangles for one matrix, top-left corner at (x0, y_top)."""
     parts = []
     for r, row in enumerate(matrix):
@@ -197,7 +199,9 @@ def to_catalog_pdf(entries: list[dict], size_mm: float = 50.0, quiet: int = 4) -
 
     pages: list[bytes] = []
     for first in range(0, len(entries), per_page):
-        parts = ["0 0 0 rg"]
+        # Operators are plain ASCII; text literals come out of _pdf_text already WinAnsi-encoded,
+        # so the stream is a mix of both until the join at the end of the page.
+        parts: list[str | bytes] = ["0 0 0 rg"]
         for slot, entry in enumerate(entries[first : first + per_page]):
             top = A4_HEIGHT - margin - slot * row_height
             title_y = top - 16.0
@@ -448,7 +452,7 @@ def wifi_fields(text: str) -> dict | None:
         index += 1
     if "S" not in fields:
         return None
-    out = {"ssid": fields["S"], "security": fields.get("T", "open")}
+    out: dict[str, str | bool] = {"ssid": fields["S"], "security": fields.get("T", "open")}
     if fields.get("P"):
         out["password"] = fields["P"]
     if fields.get("H", "").lower() == "true":

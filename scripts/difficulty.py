@@ -18,6 +18,7 @@ import argparse
 import math
 import time
 from dataclasses import replace
+from typing import Any
 
 from qrsalvage.core.decoding import reencode
 from qrsalvage.core.pipeline import solve
@@ -91,7 +92,8 @@ def main() -> int:
             f"{'wrong (median)':>16} {'attempts':>9} {'sec':>6}"
         )
         for value in values:
-            damage = replace(BASELINE, **{field: value})
+            changes: dict[str, Any] = {field: value}
+            damage = replace(BASELINE, **changes)
             successes, median, attempts, seconds = measure(damage, args.samples, args.budget)
             low, high = wilson(successes, args.samples)
             rate = successes / args.samples

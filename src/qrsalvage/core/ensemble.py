@@ -98,7 +98,9 @@ def _logit(p: np.ndarray) -> np.ndarray:
     return np.log(p / (1 - p))
 
 
-def _pool(stack: np.ndarray, weights: np.ndarray | None = None):
+def _pool(
+    stack: np.ndarray, weights: np.ndarray | None = None
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Merge log-odds and shrink the result by how much the runs disagree.
 
     Averaging happens in log-odds, not in probabilities. The difference is not cosmetic: the

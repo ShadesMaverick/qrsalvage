@@ -60,7 +60,9 @@ class LevelFit:
         return np.maximum(self.light - self.dark, 1e-6)
 
 
-def sample_cells(warped: np.ndarray, modules: int, scale: int, inset_frac: float = 0.3):
+def sample_cells(
+    warped: np.ndarray, modules: int, scale: int, inset_frac: float = 0.3
+) -> tuple[np.ndarray, np.ndarray]:
     """Mean and spread per module cell.
 
     Only the core of each cell is measured. The borders carry the bleed from neighbouring

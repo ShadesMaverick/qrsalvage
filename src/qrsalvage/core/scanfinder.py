@@ -16,13 +16,15 @@ The two detectors are complementary, so the pipeline runs both and merges the re
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+
 import numpy as np
 
 # How far a single run may deviate from the expected module width, as a fraction of it.
 TOLERANCE = 0.5
 
 
-def _runs(line: np.ndarray):
+def _runs(line: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Run-length encode a boolean line. Returns (starts, lengths, values)."""
     if line.size == 0:
         return np.empty(0, int), np.empty(0, int), np.empty(0, bool)
@@ -50,7 +52,7 @@ def _matches(five: np.ndarray) -> float:
     return 0.0
 
 
-def _scan_line(line: np.ndarray):
+def _scan_line(line: np.ndarray) -> Iterator[tuple[float, float]]:
     """Yield (centre position, module width) for every finder signature along one line."""
     starts, lengths, values = _runs(line)
     if lengths.size < 5:
@@ -65,7 +67,7 @@ def _scan_line(line: np.ndarray):
             yield centre, module
 
 
-def _cluster(points, tolerance_factor: float = 0.7):
+def _cluster(points: list[tuple[float, float, float]], tolerance_factor: float = 0.7) -> list[dict]:
     """Merge candidates that describe the same finder.
 
     Every scan line through a finder produces its own candidate, so a clean finder arrives as a
@@ -104,9 +106,9 @@ def find_finders_scan(
     height, width = dark.shape
 
     horizontal: list[tuple[float, float, float]] = []
-    for y in range(0, height, step):
-        for centre, module in _scan_line(dark[y]):
-            horizontal.append((centre, float(y), module))
+    for row in range(0, height, step):
+        for centre, module in _scan_line(dark[row]):
+            horizontal.append((centre, float(row), module))
     if not horizontal:
         return []
 
@@ -127,7 +129,9 @@ def find_finders_scan(
     return [(c["x"], c["y"], c["module"] * 7.0) for c in strong]
 
 
-def merge_finders(*groups, tolerance: float = 0.6) -> list[tuple[float, float, float]]:
+def merge_finders(
+    *groups: list[tuple[float, float, float]], tolerance: float = 0.6
+) -> list[tuple[float, float, float]]:
     """Combine candidates from several detectors, dropping duplicates.
 
     Order matters: whatever the first detector found keeps its position, and later groups only

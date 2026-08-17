@@ -74,11 +74,11 @@ def main() -> int:
             f"{result.wrong_known}/{result.known_total}" if result.wrong_known is not None else "-"
         )
         timing = f"{result.timing * 100:.0f}%" if result.timing is not None else "-"
-        outcome = (
-            f"OK  {len(result.text)} chars, {result.candidates_tried} attempt(s)"
-            if result.solved
-            else f"--  {result.failure}"
-        )
+        if result.solved:
+            assert result.text is not None
+            outcome = f"OK  {len(result.text)} chars, {result.candidates_tried} attempt(s)"
+        else:
+            outcome = f"--  {result.failure}"
         print(
             f"{name:<44} {size:>11} {finders:>4} {str(version):>4} "
             f"{wrong:>12} {timing:>5} {seconds:5.1f}  {outcome}",

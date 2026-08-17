@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import time
 from dataclasses import replace
+from typing import Any
 
 from qrsalvage.core import sampling
 from qrsalvage.core.decoding import reencode
@@ -68,7 +69,8 @@ def main() -> int:
         print(f"\n--- {axis} ---")
         print(f"{axis:>9} " + " ".join(f"{label:>16}" for label, *_ in ARMS))
         for level in args.levels or default_levels:
-            damage = replace(BASELINE, **{field: level})
+            changes: dict[str, Any] = {field: level}
+            damage = replace(BASELINE, **changes)
             cells = []
             for _, beacon, neighbor in ARMS:
                 sampling.BEACON_WEIGHT = beacon

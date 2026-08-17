@@ -156,6 +156,7 @@ def cmd_solve(args: argparse.Namespace) -> int:
     if result.decoded_matrix is not None:
         cv2.imwrite(str(args.out / "reconstructed.png"), render(result.decoded_matrix))
     if result.solved:
+        assert result.text is not None
         cv2.imwrite(str(args.out / "clean.png"), render(reencode(result.text)))
         print(f"clean code -> {args.out / 'clean.png'}")
     _write_exports(args, result, image)
@@ -188,6 +189,7 @@ def cmd_catalog(args: argparse.Namespace) -> int:
             print(f"{path.name:35s} not recovered — {result.failure}")
             failed.append(path.name)
             continue
+        assert result.text is not None
         if result.text in seen:
             # A wild pile of photographs regularly holds two shots of the same label. The
             # catalogue is a register of codes, not of photographs, so the duplicate folds in.

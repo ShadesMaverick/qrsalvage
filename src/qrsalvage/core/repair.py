@@ -304,6 +304,7 @@ def repair_progressive(
         if not outcome.ok:
             last = outcome
             continue
+        assert outcome.matrix is not None  # ok is defined as exactly this
         if verify is None or verify(outcome.matrix):
             return outcome
         last = RepairResult(
