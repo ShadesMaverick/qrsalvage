@@ -214,6 +214,22 @@ Einzelfall durchgeht.
   unsichtbar, solange keine URLs eingetragen sind. **Eintragen in `index.html`, Konstante
   `DONATE` ganz oben im Skript**, sobald die Konten existieren — PayPal.me zuerst (in Deutschland der vertrauteste Knopf; Ko-fi wickelt intern ohnehin über PayPal ab), dazu Ko-fi und LiberaPay. Bewusst nicht auf
   der Startseite: Reziprozität hat einen Moment.
+- **Browser und nativ können an Kippstellen verschieden entscheiden (beobachtet August
+  2026).** Vier synthetische Aufnahmen desselben Codes (Kontrast 0,115, Wölbung 0,4, Fleck 0,4,
+  Seeds 1/4/5/6): nativ verwirft die Fusion die Mitglieder 1 und 3, fusioniert 2 und **löst**;
+  im Browser (Pyodide, WASM) verwirft sie nur ein Mitglied, fusioniert 3 und **scheitert**
+  (Übereinstimmung 79 %, 90 strittige Zellen). Dieselben Bytes, derselbe Code, dieselbe
+  Version — der Unterschied ist Fließkomma-Arithmetik der Plattform, die an einer knappen
+  Verwerfungsschwelle in verschiedene Richtungen kippt. Die Architektur-Invariante „ein Foto
+  verhält sich nicht anders, je nachdem wie die Anfrage reist" gilt transportseitig weiterhin
+  (identischer Code in api.py), aber nicht bis in die letzte Nachkommastelle der Plattform.
+  Einordnung: betrifft nur Fälle, die haarscharf an einer Schwelle liegen; klare Fälle
+  entscheiden beide gleich. Denkbare Abmilderung: Schwellen mit Hysterese versehen oder die
+  Verwerfung auf ganzzahlige Vergleichsgrößen stützen. **Fertig, wenn:** ein Regressionsfall
+  existiert, der auf beiden Plattformen gleich entscheidet, oder der Unterschied als bekannt
+  dokumentiert bleibt und die Fehlermeldung der Seite („mehr Fotos helfen") ihn ehrlich
+  abdeckt — was sie heute schon tut.
+
 - **Safari/iOS — statisch geprüft, UNGETESTET auf einem Gerät.** Ein Durchgang durch den
   Browser-Code gegen Safari-Verfügbarkeiten ergab genau einen echten Stolperstein, und der ist
   beseitigt: `worker.js` benutzte `OffscreenCanvas` (Safari 16.4) und `createImageBitmap`
