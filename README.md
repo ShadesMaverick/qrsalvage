@@ -1,3 +1,5 @@
+<img src="docs/logo/qrsalvage-mark-256.png" alt="" width="128" align="right">
+
 # qrsalvage
 
 [![CI](https://github.com/<owner>/qrsalvage/actions/workflows/ci.yml/badge.svg)](https://github.com/<owner>/qrsalvage/actions/workflows/ci.yml)

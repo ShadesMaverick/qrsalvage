@@ -17,6 +17,19 @@
       img-src 'self' data: blob:; connect-src 'self'; worker-src 'self'; child-src 'self';
       object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'">
 <title>qrsalvage</title>
+<!-- What a shared link looks like. This matters more than it seems: the plan for reaching the
+     people who need this leans on links in other projects' troubleshooting pages and on a
+     handful of posts, and every one of those renders a card rather than a URL. The image path
+     is relative, which most crawlers resolve; the ones that insist on an absolute URL need the
+     domain, so this gets revisited when there is one. -->
+<meta name="description" content="Recover damaged, curved, engraved or faded QR codes from a
+      photograph. Runs entirely in your browser -- nothing is uploaded.">
+<meta property="og:title" content="qrsalvage">
+<meta property="og:description" content="Recover damaged, curved, engraved or faded QR codes
+      from a photograph. Runs entirely in your browser -- nothing is uploaded.">
+<meta property="og:image" content="qrsalvage-social.png">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23232f3a'/%3E%3Crect x='8' y='3' width='7' height='7' fill='none' stroke='%23f2f4f5' stroke-width='1'/%3E%3Crect x='10' y='5' width='3' height='3' fill='%23f2f4f5'/%3E%3Crect x='5' y='4' width='2' height='2' fill='%23f07ea3'/%3E%3Crect x='2' y='7' width='2' height='2' fill='%23f07ea3'/%3E%3Crect x='5' y='10' width='2' height='2' fill='%23f2f4f5'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="style.css">
 </head>

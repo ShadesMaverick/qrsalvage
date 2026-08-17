@@ -271,6 +271,12 @@ def copy_page(target: Path) -> None:
         shutil.copyfile(source, target / name)
     shutil.copyfile(WEB / "backend-worker.js", target / "backend.js")
 
+    # The preview card lives with the other logo masters rather than in web/, because it is
+    # never requested by the page itself -- only by whatever is rendering a link to it.
+    shutil.copyfile(
+        ROOT / "docs" / "logo" / "qrsalvage-social.png", target / "qrsalvage-social.png"
+    )
+
     # Everything the page references is relative, so the site works from a domain root, from a
     # project subpath and straight off a filesystem alike. That rules out the obvious trick of
     # serving the method page from a directory of its own for a prettier URL: inside
