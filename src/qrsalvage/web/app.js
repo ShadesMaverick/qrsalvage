@@ -27,7 +27,7 @@ function thanksHtml() {
                 `<button>${escapeHtml(d.label)}</button></a>`)
     .join("");
   return `<div class="thanks"><img src="/axolotl.png" alt="">
-    <span>This ran <em>entirely on your machine</em> — nothing was uploaded, nothing ever is.
+    <span>${escapeHtml(window.qrBackend.privacyNote)}
     Saved your lamp? A small donation keeps the tool alive.</span>
     <span class="links">${links}</span></div>`;
 }
@@ -40,11 +40,47 @@ const canvas = $("photo"), ctx = canvas.getContext("2d");
 let loaded = [];    // { dataUrl, bitmap, name, result? (catalogue mode caches per photo) }
 let picking = false;
 let picked = [];
-let token = null;   // identifies the result the server is holding for export
+let token = null;   // identifies the result the backend is holding for export
 let seq = 0;        // solve sequence; a late answer from a superseded run must not render
 let timerId = null;
 let mode = "one";   // "one": several photographs of one code; "many": a catalogue
 let lastSolved = false;  // a fresh drop after a success starts a fresh recovery
+
+/* --- the backend: where the work happens -------------------------------------------- */
+/* window.qrBackend arrives from backend.js and is the page's only route to the recovery. The
+   page never learns which of the two it got -- the local Python server or the same Python in a
+   worker in this browser -- so everything that differs between the two is asked of it rather
+   than assumed here: what to call this place, how to phrase the privacy fact, how to introduce
+   its failures, and whether it needs a minute to start at all. */
+
+$("privacyNote").textContent = window.qrBackend.privacyNote;
+
+/* Booting is free on the local server and costs the better part of a minute in the browser,
+   where a Python runtime, NumPy and OpenCV have to arrive before anything can be recovered.
+   Reported in the ordinary status line: a page that looks broken for forty seconds is worse
+   than one that says what it is doing. In server mode this never fires. */
+window.qrBackend.onBoot((event) => {
+  if (event.done) {
+    if (!document.body.classList.contains("busy")) status.textContent = "";
+    return;
+  }
+  const seconds = event.seconds ? ` <span class="mono">${Number(event.seconds)} s</span>` : "";
+  status.innerHTML =
+    `<span class="spin"></span> starting the recovery engine in ${escapeHtml(window.qrBackend.mode)}` +
+    ` — ${escapeHtml(event.stage)}${seconds}` +
+    `<span class="quiet"> — once only, then it stays warm</span>`;
+});
+
+/** Wait until recovering is possible at all. Answers false if it never will be. */
+async function backendReady() {
+  try {
+    await window.qrBackend.ready;
+    return true;
+  } catch (err) {
+    status.textContent = window.qrBackend.failurePrefix + err;
+    return false;
+  }
+}
 
 /* --- camera: a burst while the hand moves ------------------------------------------- */
 /* The fusion of photographs from different angles is the strongest measured lever of the
@@ -125,7 +161,7 @@ async function captureBurst() {
     frame.getContext("2d").drawImage(video, 0, 0);
     loaded.push({
       // JPEG, not PNG: a camera frame is noise-limited anyway, and a 2560-wide PNG would
-      // make every recovery haul megabytes across the loopback for nothing.
+      // make every recovery haul megabytes to the backend for nothing.
       dataUrl: frame.toDataURL("image/jpeg", 0.92),
       bitmap: await createImageBitmap(frame),
       name: `camera ${loaded.length + 1}`,
@@ -332,40 +368,20 @@ async function solve(points) {
   if (!loaded.length) return;
   const my = ++seq;
   $("catalogPanel").classList.add("hidden");
+  if (!(await backendReady()) || my !== seq) return;
   busy(true);
   liveStart();
   let answer = null;
   try {
-    const response = await fetch("/api/solve", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        images: loaded.map((l) => l.dataUrl),
-        finder_points: points || null,
-        stream: true,
-      }),
-    });
-    // Newline-delimited JSON: every line but the last is a step of the actual recovery —
-    // the grid snapping into place, the versions competing, the probe counting. The last
-    // line is the result.
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      let cut;
-      while ((cut = buffer.indexOf("\n")) >= 0) {
-        const line = buffer.slice(0, cut).trim();
-        buffer = buffer.slice(cut + 1);
-        if (!line || my !== seq) continue;
-        const event = JSON.parse(line);
-        if (event.type === "result") { answer = event; } else { liveEvent(event); }
-      }
-    }
+    // Every event but the last is a step of the actual recovery — the grid snapping into
+    // place, the versions competing, the probe counting. The last one is the result, and it
+    // is what solve() answers with.
+    answer = await window.qrBackend.solve(
+      { images: loaded.map((l) => l.dataUrl), finder_points: points || null },
+      (event) => { if (my === seq) liveEvent(event); }
+    );
   } catch (err) {
-    if (my === seq) { busy(false); liveEnd(); status.textContent = "the local server did not answer: " + err; }
+    if (my === seq) { busy(false); liveEnd(); status.textContent = window.qrBackend.failurePrefix + err; }
     return;
   }
   if (my !== seq) return;  // superseded by a newer drop; this answer belongs to old inputs
@@ -507,6 +523,7 @@ async function catalogRun() {
   const my = ++seq;
   $("results").classList.add("hidden");
   $("catalogPanel").classList.remove("hidden");
+  if (!(await backendReady()) || my !== seq) return;
   document.body.classList.add("busy");
 
   // One photograph at a time, so the progress is real rather than a guess — and a photograph
@@ -519,16 +536,14 @@ async function catalogRun() {
       `<span class="quiet">${escapeHtml(item.name)}</span>`;
     catalogRender();
     try {
-      const response = await fetch("/api/solve", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ images: [item.dataUrl] }),
-      });
+      // A catalogue narrates its own progress card by card, so the events of the single
+      // recovery running right now have nowhere to go.
+      const answer = await window.qrBackend.solve({ images: [item.dataUrl] }, () => {});
       if (my !== seq) return;
-      item.result = await response.json();
+      item.result = answer;
     } catch (err) {
       if (my !== seq) return;
-      status.textContent = "the local server did not answer: " + err;
+      status.textContent = window.qrBackend.failurePrefix + err;
       document.body.classList.remove("busy");
       return;
     }
@@ -592,20 +607,20 @@ $("catalogPdf").addEventListener("click", async () => {
                    ecc: r.ecc || null, note: note.replace(/^ · /, "") });
   }
   if (!entries.length) return;
-  const response = await fetch("/api/catalog", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ entries, size_mm: parseFloat($("catalogSizeMm").value) || 50 }),
-  });
-  if (!response.ok) {
-    status.textContent = "catalogue failed: " +
-      ((await response.json()).failure || response.status);
+  let file;
+  try {
+    file = await window.qrBackend.file("catalog", {
+      entries,
+      size_mm: parseFloat($("catalogSizeMm").value) || 50,
+    });
+  } catch (err) {
+    status.textContent = "catalogue failed: " + err.message;
     return;
   }
-  const url = URL.createObjectURL(await response.blob());
+  const url = URL.createObjectURL(file.blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = "catalog.pdf";
+  link.download = file.filename || "catalog.pdf";
   link.click();
   URL.revokeObjectURL(url);
   $("catalogThanks").innerHTML = thanksHtml();
@@ -774,26 +789,23 @@ function render(a) {
 
 async function download(format) {
   if (!token) return;
-  const response = await fetch("/api/export", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
+  let file;
+  try {
+    file = await window.qrBackend.file("export", {
       token,
       format,
       size_mm: parseFloat($("sizeMm").value) || 40,
       ecc: $("ecc").value || null,
       split: $("split").checked,
-    }),
-  });
-  if (!response.ok) {
-    status.textContent = "export failed: " + ((await response.json()).failure || response.status);
+    });
+  } catch (err) {
+    status.textContent = "export failed: " + err.message;
     return;
   }
-  const name = (response.headers.get("Content-Disposition") || "").match(/"(.+)"/);
-  const url = URL.createObjectURL(await response.blob());
+  const url = URL.createObjectURL(file.blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = name ? name[1] : `qrsalvage.${format}`;
+  link.download = file.filename || `qrsalvage.${format}`;
   link.click();
   URL.revokeObjectURL(url);
 }
