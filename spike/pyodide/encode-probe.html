@@ -1,0 +1,117 @@
+<!doctype html>
+<!-- Probe: is there a synchronous encode path in zxing-wasm, the way there is for decode?
+
+     The worker spike armed the decode direction by capturing the embind options object from
+     one warmed-up wrapper call, which removed JSPI from the path. The product needs the other
+     direction too: every solved recovery re-encodes its text (the clean code), and the whole
+     A4 catalogue is re-encoded from text. If encoding has no synchronous surface, the browser
+     build needs a different answer for it -- so find out before building on the assumption.
+
+     ANSWER: yes, and simpler than the decode side. writeBarcodeFromText(text, options) is
+     already synchronous -- the wrapper's async signature is module readiness, nothing else.
+     Its `symbol` field is one byte per module (0 dark, 255 light), and it always carries the
+     four-module quiet zone regardless of withQuietZones, which only the SVG honours. So the
+     bridge strips the light border rather than trusting the flag; a QR code has dark modules
+     in its outermost rows and columns, which makes that exact.
+
+     The options object is captured the same way as on the reader side, and the level is
+     patched in per call; an empty level means "the encoder chooses", which is what the core
+     means by a level of None. Levels are honoured: at L the long test payload took 33 modules,
+     at H it took 45.
+
+     Verified against the native encoder afterwards, matrix for matrix over all four levels
+     plus the default -- identical. The hashes are kept in tests/test_oracle_bridge.py so the
+     two implementations cannot drift apart unnoticed.
+
+     Serve the repository root and open /spike/pyodide/encode-probe.html. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>zxing-wasm — encode surface probe</title>
+<style>
+  body { font: 14px/1.6 ui-monospace, monospace; background: #1b252e; color: #f2f4f5;
+         max-width: 70rem; margin: 2rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.1rem; color: #f07ea3; }
+  div { padding: .1rem 0; }
+  .ok { color: #8fd3b0; } .bad { color: #e0644a; } .t { color: #93a3b0; }
+</style>
+</head>
+<body>
+<h1>zxing-wasm — encode surface probe</h1>
+<div id="log"></div>
+<script type="module">
+const log = (text, cls) => {
+  const row = document.createElement("div");
+  row.textContent = text;
+  if (cls) row.className = cls;
+  document.getElementById("log").appendChild(row);
+};
+
+try {
+  const zxing = await import("https://cdn.jsdelivr.net/npm/zxing-wasm@2/full/+esm");
+  log("wrapper exports: " + Object.keys(zxing).sort().join(", "), "t");
+
+  const mod = await zxing.prepareZXingModule({ fireImmediately: true });
+  const writeish = Object.keys(mod)
+    .filter((k) => /write|create|encode/i.test(k))
+    .sort();
+  log("module members matching write/create/encode: " + (writeish.join(", ") || "none"), "t");
+  for (const name of writeish) log(`  ${name}: ${typeof mod[name]}`, "t");
+
+  // Same capture trick as the decode direction: call the async wrapper once, intercept the
+  // arguments it passes down, and see whether the underlying call returns without a promise.
+  const candidates = writeish.filter((k) => typeof mod[k] === "function");
+  const captured = {};
+  for (const name of candidates) {
+    const original = mod[name];
+    mod[name] = function (...args) {
+      captured[name] = args;
+      return original.apply(this, args);
+    };
+  }
+  const written = await zxing.writeBarcode("PROBE-12345", { format: "QRCode", ecLevel: "M" });
+  log("wrapper writeBarcode returned: " + Object.keys(written).sort().join(", "), "t");
+
+  for (const name of candidates) {
+    if (!captured[name]) continue;
+    log(`captured a call to ${name} with ${captured[name].length} argument(s)`, "ok");
+    captured[name].forEach((a, i) =>
+      log(`    arg ${i}: ${typeof a}${a && a.constructor ? " / " + a.constructor.name : ""}` +
+          (typeof a === "string" ? ` = ${JSON.stringify(a.slice(0, 40))}` : ""), "t"));
+  }
+
+  // The decisive test: replay one captured call directly and see whether the result is a
+  // promise (async underneath, unusable from synchronous Python) or a value (usable).
+  for (const name of candidates) {
+    if (!captured[name]) continue;
+    const original = Object.getPrototypeOf(mod) === null ? mod[name] : mod[name];
+    let value;
+    try {
+      value = original.apply(mod, captured[name]);
+    } catch (e) {
+      log(`replaying ${name} threw: ${e}`, "bad");
+      continue;
+    }
+    const isPromise = value && typeof value.then === "function";
+    log(`replay ${name} -> ${isPromise ? "PROMISE (async)" : "VALUE (synchronous!)"}`,
+        isPromise ? "bad" : "ok");
+    if (!isPromise && value) {
+      const keys = [];
+      for (const k in value) keys.push(k);
+      log(`    value type ${value.constructor ? value.constructor.name : typeof value}` +
+          (keys.length ? `, members: ${keys.slice(0, 12).join(", ")}` : ""), "t");
+      // What does it actually contain? A matrix, an SVG string, or an encoded image?
+      for (const probe of ["size", "length", "get", "text", "svg", "data", "width", "height"]) {
+        if (probe in value) log(`    has ${probe}: ${typeof value[probe]}`, "t");
+      }
+    }
+  }
+  document.title = "probe: done";
+} catch (error) {
+  log(String(error), "bad");
+  log(error && error.stack ? error.stack : "", "t");
+  document.title = "probe: error";
+}
+</script>
+</body>
+</html>

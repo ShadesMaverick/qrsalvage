@@ -356,11 +356,27 @@ def test_the_page_ships_hardened_headers(running_server):
     assert not regex.findall(rb"<script>", body), "the page grew an inline script"
     assert b'<script src="/app.js">' in body
 
-    connection.request("GET", "/app.js")
-    response = connection.getresponse()
-    assert response.status == 200
-    assert response.getheader("Content-Type", "").startswith("text/javascript")
-    assert b"use strict" in response.read()
+    # The page speaks to whichever backend.js is in place and never learns which one it got.
+    # It has to be loaded first: app.js reads window.qrBackend while it is being parsed.
+    assert b'<script src="/backend.js">' in body
+    assert body.index(b'<script src="/backend.js">') < body.index(b'<script src="/app.js">'), (
+        "backend.js must be in place before app.js runs"
+    )
+
+    served = {}
+    for script in ("/app.js", "/backend.js"):
+        connection.request("GET", script)
+        response = connection.getresponse()
+        served[script] = response.read()
+        assert response.status == 200, script
+        assert response.getheader("Content-Type", "").startswith("text/javascript"), script
+        assert b"use strict" in served[script], script
+
+    # This server hands out the HTTP backend; the worker one belongs to the static build, and
+    # its worker.js is not served here at all.
+    assert b"/api/solve" in served["/backend.js"]
+    connection.request("GET", "/worker.js")
+    assert connection.getresponse().status == 404
 
     # API answers and figures carry a policy that allows nothing at all.
     connection.request("GET", "/fig-known.svg")
