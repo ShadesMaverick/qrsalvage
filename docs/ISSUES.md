@@ -214,6 +214,25 @@ Einzelfall durchgeht.
   unsichtbar, solange keine URLs eingetragen sind. **Eintragen in `index.html`, Konstante
   `DONATE` ganz oben im Skript**, sobald die Konten existieren — PayPal.me zuerst (in Deutschland der vertrauteste Knopf; Ko-fi wickelt intern ohnehin über PayPal ab), dazu Ko-fi und LiberaPay. Bewusst nicht auf
   der Startseite: Reziprozität hat einen Moment.
+- **Statische Browser-Version — GEBAUT (August 2026).** `scripts/build_site.py` schreibt eine
+  in sich geschlossene `site/` (29 MB): Pyodide 0.28.0 (Kern-Tarball, Teilmenge über
+  `pyodide-lock.json` aufgelöst statt geraten), NumPy 2.2.5, OpenCV 4.11.0.86, zxing-wasm 2.2.4
+  aus dem npm-Tarball, das eigene Wheel. Ein einziger Fremd-URL musste weichen: zxing-wasm holt
+  seine `.wasm` per Default von jsDelivr — der Build patcht `locateFile` auf `import.meta.url`
+  und bricht ab, falls das Muster beim nächsten Pin nicht mehr passt. Gemessen im Browser:
+  Kaltstart unter 9 s über localhost, `engraved-curved-hard.png` in 10,7 s gelöst (nativ ~4 s),
+  225 Live-Ereignisse, SVG/PDF/Katalog-PDF im Browser erzeugt. Alle 46 Anfragen same-origin,
+  im Server-Log inklusive der Worker-Ressourcen gegengeprüft. CSP liegt als `<meta>` in der
+  Seite, weil ein statischer Host keine Header setzt; `connect-src 'self'` macht die
+  Privacy-Aussage erzwungen statt versprochen, `wasm-unsafe-eval` ist ihr Preis. Zwei
+  Architekturstücke haben das getragen: `api.py` (transportneutral, Server und Worker rufen
+  dieselben Funktionen) und die synchrone Encode-Richtung des Orakels — ohne die wäre die
+  Browser-Version ein reiner Leser gewesen, weil jeder Erfolg re-encodiert und der ganze
+  Katalog aus Re-Encodierungen besteht. **Offen:** Pages-Repo, `.domains` ausfüllen, DNS-CNAME,
+  echter Safari/iOS-Test, und die wurzelrelativen Pfade (`/style.css`, `/method`) setzen die
+  Seite auf einem Domain-Root voraus — unter einer Projekt-URL mit Unterpfad bräuchte es
+  relative Links.
+
 - **Statische Browser-Version (Codeberg Pages + eigene Domain) — SPIKE ERLEDIGT.** Die Naht
   ist gebaut (`core/oracle.py`: zxing-cpp lazy, per `oracle.use()` austauschbar; der Kern
   importiert nachweislich ohne die Bindung — Test in test_solver.py). Der Spike

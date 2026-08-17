@@ -56,7 +56,18 @@ In dieser Reihenfolge, jede Stufe für sich nutzbar:
 - [x] **3. Die Spendenkarte** *(Moment; URLs nachtragen, siehe ISSUES)* — der Ask auf der Erfolgskarte, klein, unter dem
   Klartext, zusammen mit der Privacy-Aussage: „Lief komplett auf deinem Gerät. Lampe
   gerettet? 5 € halten das Werkzeug am Leben." Nicht auf der Startseite.
-- [ ] **4. Pyodide-Spike, dann statische Seite** *(Reichweite)* — **Spike gelungen**
+- [x] **4. Statische Seite — GEBAUT und im Browser verifiziert.** `scripts/build_site.py`
+  schreibt `site/` (29 MB, alles selbst gehostet: Pyodide 0.28.0, NumPy 2.2.5, OpenCV 4.11,
+  zxing-wasm 2.2.4, das eigene Wheel). Gemessen: Kaltstart unter 9 s über localhost, das
+  schwere Fixture in **10,7 s** gelöst, 225 Live-Ereignisse, Exporte und Katalog-PDF entstehen
+  im Browser. Jede einzelne Anfrage ging an den eigenen Host — im Server-Log samt der
+  Worker-Ressourcen nachgewiesen. Die Aussage „das Foto verlässt dein Gerät nicht" ist damit
+  keine Zusage mehr, sondern durch `connect-src 'self'` erzwungen (CSP als `<meta>`, weil ein
+  statischer Host keine Header setzt). Der Weg dahin: `api.py` als transportneutrale Schicht,
+  die Server und Worker gemeinsam aufrufen, plus die Encode-Richtung des Orakels — gegen den
+  nativen Encoder matrixgleich geprüft (`tests/test_oracle_bridge.py`). **Rest bis
+  Veröffentlichung:** Pages-Repo, `.domains` ausfüllen, DNS, echter Safari/iOS-Test.
+  Die Vorgeschichte: **Spike gelungen**
   (`spike/pyodide/index.html`): der unveränderte Kern löst die harte Fixture im Browser in
   **12,4 s** (nativ ~4 s, Faktor ~3 — im prognostizierten Band), Ladezeit CPython+NumPy+OpenCV
   ~4 s vom CDN, alle 225 Progress-Events flossen durch. Die Orakel-Naht (`core/oracle.py`)

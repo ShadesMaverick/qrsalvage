@@ -17,6 +17,7 @@ rates are involved, and is safe to run repeatedly.
 | `diagnose.py` | Why did a photograph fail — is the code invisible, or is the preprocessing tuned for the wrong scale? Writes the binarisations so failure can be looked at. |
 | `make_fixtures.py` | Regenerate the public synthetic corpus in `fixtures/` (never edit fixtures by hand). |
 | `add_private_fixture.py` | Add a real, solved photograph to the gitignored local corpus, with provenance flags. |
+| `build_site.py` | What does the published static site consist of, and does any part of it reach a remote host once it is loaded? Vendors the pinned runtime into `site/`, then audits every shipped script, page and data file for absolute URLs and prints what it found. |
 
 Reading the numbers: rates need intervals (twelve samples cannot distinguish 8 % from 33 %),
 and `known cells wrong` moves before the success rate does — it is the honest metric for

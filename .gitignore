@@ -29,3 +29,8 @@ idea_for_icon/
 dist/
 build/
 idea.png
+
+# Die gebaute Website und der Download-Cache ihrer Laufzeit: beide reproduzierbar
+# aus scripts/build_site.py, beide zu gross fuer die Historie.
+site/
+vendor-cache/
