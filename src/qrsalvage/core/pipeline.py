@@ -7,6 +7,7 @@ of anything but library code.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
 import cv2
@@ -49,7 +50,11 @@ ENSEMBLE_MODES = ("off", "sampling", "geometry")
 BOW_REFINE = True
 
 
-def _emit(progress, event: str, **data) -> None:
+# The progress callback a shell injects: (event name, JSON-ready payload). See _emit.
+ProgressFn = Callable[[str, dict], None]
+
+
+def _emit(progress: ProgressFn | None, event: str, **data: object) -> None:
     """Report one step of the recovery to whoever is watching.
 
     The core stays library-pure: it neither prints nor knows who listens -- the callback is
@@ -106,6 +111,40 @@ GOOD_MODULE_PX = (7.0, 16.0)
 TARGET_MODULE_PX = 11.0
 MAX_DIMENSION = 4000
 
+# One prepared working image: (image actually used, gray, binary, finder candidates, transform
+# back to the original's coordinates as (offset_x, offset_y, factor)).
+_Prepared = tuple[
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    list[tuple[float, float, float]],
+    tuple[float, float, float],
+]
+
+# One row of the scale pyramid in _search_scales: (pyramid index, finder width spread, finder
+# count, scale used, image at that scale, gray, binary, finder candidates).
+_ScaleAttempt = tuple[
+    int,
+    float,
+    int,
+    float,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    list[tuple[float, float, float]],
+]
+
+# One complete pass at one polarity: a _Prepared plus the fitted grids and the polarity used.
+_Attempt = tuple[
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    list[tuple[float, float, float]],
+    list[GridFit],
+    bool,
+    tuple[float, float, float],
+]
+
 
 def detect_finders(binary: np.ndarray) -> list[tuple[float, float, float]]:
     """Both detectors, merged.
@@ -119,7 +158,9 @@ def detect_finders(binary: np.ndarray) -> list[tuple[float, float, float]]:
     return merge_finders(find_finders(binary), find_finders_scan(binary))
 
 
-def _search_scales(bgr: np.ndarray, scales=SCALES, invert: bool = False):
+def _search_scales(
+    bgr: np.ndarray, scales: tuple[float, ...] = SCALES, invert: bool = False
+) -> _Prepared:
     """Look for the finders across a small scale pyramid and keep the best resolution.
 
     `prepare` is tuned for roughly nine pixels per module -- the adaptive threshold block is
@@ -135,7 +176,7 @@ def _search_scales(bgr: np.ndarray, scales=SCALES, invert: bool = False):
 
     Returns the image actually used, so every coordinate downstream refers to it.
     """
-    attempts = []
+    attempts: list[_ScaleAttempt] = []
     for index, scale in enumerate(scales):
         used_scale = min(scale, 1.0)
         if scale >= 1.0:
@@ -166,7 +207,7 @@ def _search_scales(bgr: np.ndarray, scales=SCALES, invert: bool = False):
     # usually means a false candidate crept in; then resolution. Getting this order wrong is
     # not academic -- an earlier version preferred a single finder at full resolution over
     # three finders at 60 percent, and lost images that were perfectly recoverable.
-    def rank(attempt):
+    def rank(attempt: _ScaleAttempt) -> tuple[bool, float, int]:
         index, spread, count, *_ = attempt
         return (count < 3, round(spread, 2), index)
 
@@ -174,7 +215,9 @@ def _search_scales(bgr: np.ndarray, scales=SCALES, invert: bool = False):
     return _rescale_to_working_range(bgr, candidate, gray, binary, finders, invert, used_scale)
 
 
-def _prepare_with_hints(bgr: np.ndarray, points, invert: bool):
+def _prepare_with_hints(
+    bgr: np.ndarray, points: list[tuple[float, float]], invert: bool
+) -> _Prepared:
     """Bring a hand-marked photograph into the working range before measuring it.
 
     The escape hatch used to skip the resolution correction the automatic path gets, and
@@ -225,7 +268,13 @@ def _prepare_with_hints(bgr: np.ndarray, points, invert: bool):
     return work, gray, binary, snap_to_finders(binary, shifted), (float(x0), float(y0), factor)
 
 
-def _attempt(bgr: np.ndarray, sizes, invert: bool, finder_points, progress=None):
+def _attempt(
+    bgr: np.ndarray,
+    sizes: Sequence[int],
+    invert: bool,
+    finder_points: list[tuple[float, float]] | None,
+    progress: ProgressFn | None = None,
+) -> _Attempt:
     """One complete pass at one polarity: find the code, then fit every candidate grid."""
     if finder_points is not None:
         used, gray, binary, finders, transform = _prepare_with_hints(bgr, finder_points, invert)
@@ -243,7 +292,7 @@ def _attempt(bgr: np.ndarray, sizes, invert: bool, finder_points, progress=None)
         inverted=invert,
     )
 
-    def on_fit(fit) -> None:
+    def on_fit(fit: GridFit) -> None:
         _emit(
             progress,
             "grid",
@@ -275,7 +324,7 @@ def _attempt(bgr: np.ndarray, sizes, invert: bool, finder_points, progress=None)
     return used, gray, binary, finders, fits, invert, transform
 
 
-def _error_rate(attempt) -> float:
+def _error_rate(attempt: _Attempt) -> float:
     """Fraction of known cells the best grid of an attempt gets wrong. 1.0 if it found none."""
     fits = attempt[4]
     if not fits:
@@ -284,7 +333,15 @@ def _error_rate(attempt) -> float:
     return best.wrong_known / max(best.known_total, 1)
 
 
-def _rescale_to_working_range(original, candidate, gray, binary, finders, invert=False, base=1.0):
+def _rescale_to_working_range(
+    original: np.ndarray,
+    candidate: np.ndarray,
+    gray: np.ndarray,
+    binary: np.ndarray,
+    finders: list[tuple[float, float, float]],
+    invert: bool = False,
+    base: float = 1.0,
+) -> _Prepared:
     """Once the finders are found, redo the work at a resolution the preprocessing suits.
 
     The last element of the return value is the transform from working-image coordinates back
@@ -352,7 +409,9 @@ def _rescale_to_working_range(original, candidate, gray, binary, finders, invert
     return resized, retry_gray, retry_binary, retry_finders, (float(x0), float(y0), factor)
 
 
-def snap_to_finders(binary: np.ndarray, points, radius: float = 60.0):
+def snap_to_finders(
+    binary: np.ndarray, points: list[tuple[float, float]], radius: float = 60.0
+) -> list[tuple[float, float, float]]:
     """Treat hand-placed centres as hints and snap them onto real finder patterns.
 
     Nobody clicks a module centre to the pixel, and a few pixels of slack are enough to spoil
@@ -363,7 +422,7 @@ def snap_to_finders(binary: np.ndarray, points, radius: float = 60.0):
     which is still better than refusing to proceed.
     """
     candidates = find_finders(binary, min_size=8)
-    snapped = []
+    snapped: list[tuple[float, float, float]] = []
     for x, y in points:
         near = [
             (abs(cx - x) + abs(cy - y), cx, cy, size)
@@ -379,7 +438,11 @@ def snap_to_finders(binary: np.ndarray, points, radius: float = 60.0):
 
 
 def fit_grid(
-    gray: np.ndarray, finders, sizes=DEFAULT_SIZES, start_delta: float = 3.0, on_step=None
+    gray: np.ndarray,
+    finders: list[tuple[float, float, float]],
+    sizes: Sequence[int] = DEFAULT_SIZES,
+    start_delta: float = 3.0,
+    on_step: Callable[[GridFit], None] | None = None,
 ) -> list[GridFit]:
     """Fit a grid for every candidate size and score it against the known cells.
 
@@ -413,7 +476,7 @@ def fit_grid(
 
 
 def _decode_chain(
-    mm: ModuleMatrix, budget: int, progress=None
+    mm: ModuleMatrix, budget: int, progress: ProgressFn | None = None
 ) -> tuple[SearchResult, RepairResult | None]:
     """Turn a module matrix into text, cheapest route first.
 
@@ -439,6 +502,7 @@ def _decode_chain(
         on_step=lambda count: _emit(progress, "repair", method="ladder", step=count),
     )
     if repair_result.ok:
+        assert repair_result.matrix is not None  # ok is defined as exactly this
         text = decode_matrix(repair_result.matrix)
         if text:
             found = SearchResult(text=text, candidates_tried=2, matrix=repair_result.matrix)
@@ -453,6 +517,7 @@ def _decode_chain(
         on_step=lambda tried: _emit(progress, "repair", method="scattered", step=tried),
     )
     if scattered.ok:
+        assert scattered.matrix is not None  # ok is defined as exactly this
         text = decode_matrix(scattered.matrix)
         if text:
             return SearchResult(text=text, candidates_tried=3, matrix=scattered.matrix), scattered
@@ -469,13 +534,13 @@ def _decode_chain(
 def solve(
     bgr: np.ndarray,
     crop: tuple[int, int, int, int] | None = None,
-    sizes=DEFAULT_SIZES,
+    sizes: Sequence[int] = DEFAULT_SIZES,
     budget: int = 4000,
     band: float = 0.15,
     ensemble: str = "off",
     finder_points: list[tuple[float, float]] | None = None,
     invert: bool | None = None,
-    progress=None,
+    progress: ProgressFn | None = None,
 ) -> SolveResult:
     """Recover a QR code from a photograph. Never raises, always reports.
 
@@ -557,7 +622,7 @@ def solve(
     if BOW_REFINE:
         ox_, oy_, f_ = transform
 
-        def on_bow(fit) -> None:
+        def on_bow(fit: GridFit) -> None:
             shifted(
                 "grid",
                 {
@@ -650,14 +715,14 @@ MEMBER_BUDGET = 200
 def solve_many(
     images: list[np.ndarray],
     crop: tuple[int, int, int, int] | None = None,
-    sizes=DEFAULT_SIZES,
+    sizes: Sequence[int] = DEFAULT_SIZES,
     budget: int = 4000,
     band: float = 0.15,
     rule: str = DEFAULT_FUSION,
     min_agreement: float = 0.75,
     member_budget: int = MEMBER_BUDGET,
     invert: bool | None = None,
-    progress=None,
+    progress: ProgressFn | None = None,
 ) -> SolveResult:
     """Recover one code from several photographs of it.
 
@@ -682,7 +747,7 @@ def solve_many(
     for index, image in enumerate(images):
         _emit(progress, "member", index=index, total=len(images))
 
-        def tagged(event: str, data: dict, _index=index) -> None:
+        def tagged(event: str, data: dict, _index: int = index) -> None:
             _emit(progress, event, member=_index, **data)
 
         member = solve(
@@ -706,12 +771,22 @@ def solve_many(
     # fusion rejects them itself and *records* it. An earlier version filtered them out here,
     # and the page then reported "1 photograph fused" to someone who had just given it two,
     # with no word about where the other one went.
-    usable.sort(key=lambda m: (m.wrong_known, -m.timing))
+    def fusion_rank(member: SolveResult) -> tuple[int, float]:
+        # usable is filtered on matrix, and solve() sets matrix, wrong_known and timing together.
+        assert member.wrong_known is not None and member.timing is not None
+        return member.wrong_known, -member.timing
+
+    usable.sort(key=fusion_rank)
     best = usable[0]
+    assert best.modules is not None  # a member with a matrix always carries its grid's size
 
     known_dark, known_light = structure_mask(best.modules)
+    posteriors: list[np.ndarray] = []
+    for member in usable:
+        assert member.matrix is not None  # usable is filtered on exactly this
+        posteriors.append(member.matrix.posterior)
     consensus = fuse_images(
-        [m.matrix.posterior for m in usable],
+        posteriors,
         known_dark,
         known_light,
         rule=rule,

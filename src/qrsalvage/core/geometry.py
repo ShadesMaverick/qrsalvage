@@ -7,7 +7,9 @@ here -- whereas on the bit level there is nothing to climb.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
+from typing import cast
 
 import cv2
 import numpy as np
@@ -34,7 +36,9 @@ def find_finders(binary: np.ndarray, min_size: int = 20) -> list[tuple[float, fl
     A finder is three nested squares, so it appears as a contour with two levels of nesting.
     Candidates at the same location are merged.
     """
-    contours, hierarchy = cv2.findContours(binary, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    contours, found = cv2.findContours(binary, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    # cv2's stubs promise an array, but an image without any contours yields None.
+    hierarchy = cast("np.ndarray | None", found)
     if hierarchy is None:
         return []
     hierarchy = hierarchy[0]
@@ -60,7 +64,9 @@ def find_finders(binary: np.ndarray, min_size: int = 20) -> list[tuple[float, fl
     return merged
 
 
-def select_finder_triple(candidates, limit: int = 10):
+def select_finder_triple(
+    candidates: list[tuple[float, float, float]], limit: int = 10
+) -> list[tuple[float, float, float]]:
     """Pick the three candidates that actually look like one code's finders.
 
     Taking the three largest is wrong, and it fails on exactly the photographs people bring:
@@ -112,7 +118,9 @@ def select_finder_triple(candidates, limit: int = 10):
     return best if best is not None else list(pool[:3])
 
 
-def third_finder_candidates(a, b) -> list[tuple[float, float, float]]:
+def third_finder_candidates(
+    a: tuple[float, float, float], b: tuple[float, float, float]
+) -> list[tuple[float, float, float]]:
     """Where the missing third finder could be, given two that were found.
 
     A QR code is square, so two finder centres already fix the geometry up to a small number of
@@ -145,7 +153,9 @@ def third_finder_candidates(a, b) -> list[tuple[float, float, float]]:
     return [(float(p[0]), float(p[1]), width) for p in candidates]
 
 
-def order_finders(finders):
+def order_finders(
+    finders: list[tuple[float, float, float]],
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Order three finders into (top-left, top-right, bottom-left).
 
     Top-left is the one at the right angle; which of the other two is top-right follows from
@@ -160,6 +170,7 @@ def order_finders(finders):
         score = abs(float(np.dot(v1, v2))) / norm
         if score < best_score:
             best_score, best = score, (i, j, k)
+    assert best is not None  # every triple scores finite, so the first iteration already sets it
     i, j, k = best
     top_left, a, b = points[i], points[j], points[k]
     cross = (a - top_left)[0] * (b - top_left)[1] - (a - top_left)[1] * (b - top_left)[0]
@@ -186,7 +197,14 @@ def initial_corners(
     )
 
 
-def _score(warped, corners, modules, scale, known_dark, known_light) -> GridFit:
+def _score(
+    warped: np.ndarray,
+    corners: np.ndarray,
+    modules: int,
+    scale: int,
+    known_dark: np.ndarray,
+    known_light: np.ndarray,
+) -> GridFit:
     """Score one rectification against the cells whose value the standard fixes."""
     means, spread = sample_cells(warped, modules, scale)
     fit = estimate_levels(means, spread, known_dark, known_light)
@@ -211,13 +229,22 @@ def _score(warped, corners, modules, scale, known_dark, known_light) -> GridFit:
     )
 
 
-def evaluate(gray, corners, modules, scale, known_dark, known_light) -> GridFit:
+def evaluate(
+    gray: np.ndarray,
+    corners: np.ndarray,
+    modules: int,
+    scale: int,
+    known_dark: np.ndarray,
+    known_light: np.ndarray,
+) -> GridFit:
     """Score one corner placement against the cells whose value the standard fixes."""
     warped = warp(gray, corners, modules, scale)
     return _score(warped, corners, modules, scale, known_dark, known_light)
 
 
-def _bowed_warp(gray, corners, bow: np.ndarray, modules, scale):
+def _bowed_warp(
+    gray: np.ndarray, corners: np.ndarray, bow: np.ndarray, modules: int, scale: int
+) -> np.ndarray:
     """Rectify with a homography plus two separable quadratic bows.
 
     The mathematical gap this closes: a homography maps straight lines to straight lines, and a
@@ -266,14 +293,14 @@ def _bowed_warp(gray, corners, bow: np.ndarray, modules, scale):
 
 
 def refine_bow(
-    gray,
+    gray: np.ndarray,
     fit: GridFit,
-    known_dark,
-    known_light,
+    known_dark: np.ndarray,
+    known_light: np.ndarray,
     scale: int = 12,
     start_delta: float = 3.0,
     min_delta: float = 0.1,
-    on_step=None,
+    on_step: Callable[[GridFit], None] | None = None,
 ) -> GridFit:
     """Let the fitted grid bow, after the flat refinement has done all a plane can do.
 
@@ -328,7 +355,14 @@ def refine_bow(
 
 
 def refine_corners(
-    gray, corners, modules, scale, known_dark, known_light, start_delta: float = 3.0, on_step=None
+    gray: np.ndarray,
+    corners: np.ndarray,
+    modules: int,
+    scale: int,
+    known_dark: np.ndarray,
+    known_light: np.ndarray,
+    start_delta: float = 3.0,
+    on_step: Callable[[GridFit], None] | None = None,
 ) -> GridFit:
     """Nudge the four corners until the known cells sit as well as they can.
 

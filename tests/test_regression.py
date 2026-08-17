@@ -48,6 +48,7 @@ def test_fixture_is_solved(meta_path: Path):
     result = solve(image, crop=crop)
 
     assert result.solved, f"not solved ({result.failure})"
+    assert result.text is not None
     digest = hashlib.sha256(result.text.encode()).hexdigest()
     assert digest == meta["expected_sha256"], "decoded, but with the wrong content"
 

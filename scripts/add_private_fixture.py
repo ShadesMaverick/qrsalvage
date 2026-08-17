@@ -64,6 +64,7 @@ def main() -> int:
     if not result.solved:
         print(f"not solved, so there is nothing to expect: {result.failure}")
         return 2
+    assert result.text is not None
 
     shutil.copyfile(args.image, destination)
     meta = {

@@ -76,7 +76,9 @@ def test_pdf_is_structurally_valid():
     assert pdf.startswith(b"%PDF-1.4")
     assert pdf.rstrip().endswith(b"%%EOF")
 
-    start = int(re.search(rb"startxref\s+(\d+)", pdf).group(1))
+    trailer = re.search(rb"startxref\s+(\d+)", pdf)
+    assert trailer is not None
+    start = int(trailer.group(1))
     assert pdf[start : start + 4] == b"xref"
 
     offsets = [int(m) for m in re.findall(r"^(\d{10}) 00000 n $", pdf[start:].decode(), re.M)]
@@ -89,9 +91,10 @@ def test_pdf_is_structurally_valid():
 
 
 def test_pdf_size_scales_with_the_request():
-    small = re.search(rb"/MediaBox \[0 0 ([\d.]+)", to_pdf(MATRIX, size_mm=20.0)).group(1)
-    large = re.search(rb"/MediaBox \[0 0 ([\d.]+)", to_pdf(MATRIX, size_mm=80.0)).group(1)
-    assert float(large) == pytest.approx(float(small) * 4, rel=1e-6)
+    small = re.search(rb"/MediaBox \[0 0 ([\d.]+)", to_pdf(MATRIX, size_mm=20.0))
+    large = re.search(rb"/MediaBox \[0 0 ([\d.]+)", to_pdf(MATRIX, size_mm=80.0))
+    assert small is not None and large is not None
+    assert float(large.group(1)) == pytest.approx(float(small.group(1)) * 4, rel=1e-6)
 
 
 def test_json_carries_the_evidence_not_only_the_answer(result):
@@ -110,6 +113,7 @@ def test_the_pairing_secret_stays_out_unless_asked_for(result):
     assert "zigbee" not in plain
 
     fields = zigbee_fields(zigbee_text)
+    assert fields is not None
     assert fields["eui64"] == "AABBCCDDEEFF0011"
     assert fields["eui64_colons"] == "AA:BB:CC:DD:EE:FF:00:11"
     assert fields["install_code_crc"] == "1234"
@@ -131,6 +135,7 @@ def test_matter_payload_yields_the_manual_pairing_code():
     the Verhoeff check digit -- make a quietly transposed lookup table loud.
     """
     fields = matter_fields("MT:Y.K9042C00KA0648G00")
+    assert fields is not None
     assert fields["setup_passcode"] == "20202021"
     assert fields["discriminator"] == 0xF00
     assert fields["manual_pairing_code"] == "3497-011-2332"
@@ -146,6 +151,7 @@ def test_matter_payload_yields_the_manual_pairing_code():
 
 def test_wifi_payload_honours_the_escaping():
     fields = wifi_fields("WIFI:S:My\;Home;T:WPA;P:pa\\ss word;H:true;;")
+    assert fields is not None
     assert fields["ssid"] == "My;Home"
     assert fields["password"] == "pass word"
     assert fields["security"] == "WPA"
@@ -154,7 +160,9 @@ def test_wifi_payload_honours_the_escaping():
 
 
 def test_payload_kinds_are_recognised_and_split_only_on_request(result):
-    kind, fields = payload_fields("MT:Y.K9042C00KA0648G00")
+    parsed = payload_fields("MT:Y.K9042C00KA0648G00")
+    assert parsed is not None
+    kind, fields = parsed
     assert kind == "matter" and "manual_pairing_code" in fields
     assert payload_fields("QRSALVAGE-PLAIN") is None
 
@@ -186,7 +194,9 @@ def test_catalog_pdf_puts_three_entries_on_a_page():
     # The cross-reference table has to be honest here too.
     import re as regex
 
-    start = int(regex.search(rb"startxref\s+(\d+)", pdf).group(1))
+    trailer = regex.search(rb"startxref\s+(\d+)", pdf)
+    assert trailer is not None
+    start = int(trailer.group(1))
     assert pdf[start : start + 4] == b"xref"
 
 

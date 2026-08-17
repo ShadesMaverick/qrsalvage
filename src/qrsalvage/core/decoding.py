@@ -8,6 +8,7 @@ order in which to question it, cheapest doubts first.
 from __future__ import annotations
 
 import heapq
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -53,7 +54,7 @@ class SearchResult:
     matrix: np.ndarray | None = None
 
 
-def _subsets_by_cost(costs: np.ndarray, budget: int):
+def _subsets_by_cost(costs: np.ndarray, budget: int) -> Iterator[tuple[int, ...]]:
     """Enumerate subsets in ascending order of total cost.
 
     Best-first search over a heap: each subset already emitted spawns exactly two successors --
@@ -79,7 +80,11 @@ def _subsets_by_cost(costs: np.ndarray, budget: int):
 
 
 def ordered_search(
-    mm: ModuleMatrix, max_cells: int = 22, budget: int = 4000, scale: int = 4, on_step=None
+    mm: ModuleMatrix,
+    max_cells: int = 22,
+    budget: int = 4000,
+    scale: int = 4,
+    on_step: Callable[[int], None] | None = None,
 ) -> SearchResult:
     """Probe the matrix at its least certain cells, cheapest doubts first.
 
@@ -92,8 +97,8 @@ def ordered_search(
         return SearchResult(text=text, candidates_tried=1, matrix=base)
 
     cost_field = mm.flip_cost()
-    order = np.argsort(cost_field, axis=None)
-    order = [int(i) for i in order if np.isfinite(cost_field.flat[i])][:max_cells]
+    ranked = np.argsort(cost_field, axis=None)
+    order = [int(i) for i in ranked if np.isfinite(cost_field.flat[i])][:max_cells]
     if not order:
         return SearchResult(text=None, candidates_tried=1)
 

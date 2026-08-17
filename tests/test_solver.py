@@ -73,6 +73,7 @@ def test_inverted_polarity_is_found_not_assumed():
     # Forcing the wrong polarity has to fail loudly rather than quietly return nonsense.
     forced = solve(photo, invert=False)
     assert forced.text != TEXT
+    assert forced.wrong_known is not None and result.known_total is not None
     assert forced.wrong_known > result.known_total * 0.1
 
 

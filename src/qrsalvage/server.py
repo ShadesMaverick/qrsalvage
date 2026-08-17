@@ -71,7 +71,7 @@ def solve_payload(payload: dict, progress=None) -> dict:
     single photograph: three clicks describe one framing, not several.
     """
     encoded = payload.get("images") or [payload["image"]]
-    images = []
+    images: list[np.ndarray] = []
     for entry in encoded:
         raw = base64.b64decode(entry.split(",", 1)[-1])
         image = cv2.imdecode(np.frombuffer(raw, dtype=np.uint8), cv2.IMREAD_COLOR)
@@ -128,6 +128,8 @@ def solve_payload(payload: dict, progress=None) -> dict:
             "disagreeing": result.fusion.disagreeing,
         }
     if result.modules is not None:
+        # The pipeline measures timing whenever it commits to a grid size.
+        assert result.timing is not None
         out.update(
             version=result.version,
             modules=result.modules,
@@ -154,6 +156,7 @@ def solve_payload(payload: dict, progress=None) -> dict:
     if result.decoded_matrix is not None:
         out["reconstructed_png"] = _png_data_url(result.decoded_matrix, scale=12)
     if result.solved:
+        assert result.text is not None
         out["clean_png"] = _png_data_url(reencode(result.text), scale=12)
 
     token = uuid.uuid4().hex
