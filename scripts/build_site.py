@@ -270,11 +270,12 @@ def copy_page(target: Path) -> None:
         shutil.copyfile(source, target / name)
     shutil.copyfile(WEB / "backend-worker.js", target / "backend.js")
 
-    # The page links to /method, which a server can route and a static host cannot. A directory
-    # of that name costs twenty kilobytes and makes the extensionless link work everywhere; the
-    # page's own asset references are absolute, so the copy behaves exactly like the original.
-    (target / "method").mkdir(exist_ok=True)
-    shutil.copyfile(WEB / "method.html", target / "method" / "index.html")
+    # Everything the page references is relative, so the site works from a domain root, from a
+    # project subpath and straight off a filesystem alike. That rules out the obvious trick of
+    # serving the method page from a directory of its own for a prettier URL: inside
+    # /method/ the relative figure and stylesheet references would climb one level too few.
+    # A second URL for one page would have been a duplicate to explain to search engines
+    # anyway, so method.html is simply the address.
 
 
 def write_domains(target: Path) -> None:
@@ -299,8 +300,8 @@ def update_gitignore() -> None:
     if not missing:
         return
     block = (
-        "\n# Die gebaute Website und der Download-Cache ihrer Laufzeit: beide reproduzierbar\n"
-        "# aus scripts/build_site.py, beide zu gross fuer die Historie.\n"
+        "\n# The built site and the download cache of its runtime: both reproducible from\n"
+        "# scripts/build_site.py, both far too large for the history.\n"
         + "".join(f"{entry}\n" for entry in missing)
     )
     path.write_text(text.rstrip("\n") + "\n" + block, encoding="utf-8", newline="")

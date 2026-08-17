@@ -220,11 +220,13 @@ def test_every_figure_the_method_page_asks_for_is_served(running_server):
 
     connection.request("GET", "/method")
     page = connection.getresponse().read().decode("utf-8")
-    referenced = re.findall(r'<img src="(/[^"]+)"', page)
+    # References are relative so that one build serves from a root, a subpath or a filesystem.
+    # From /method the browser resolves them against the root, which is what this asks for.
+    referenced = re.findall(r'<img src="([^":]+)"', page)
     assert referenced, "the method page references no figures at all"
 
     for path in referenced:
-        connection.request("GET", path)
+        connection.request("GET", "/" + path.lstrip("/"))
         response = connection.getresponse()
         body = response.read()
         assert response.status == 200, f"{path} is referenced but not served"
@@ -354,14 +356,20 @@ def test_the_page_ships_hardened_headers(running_server):
     import re as regex
 
     assert not regex.findall(rb"<script>", body), "the page grew an inline script"
-    assert b'<script src="/app.js">' in body
+    assert b'<script src="app.js">' in body
 
     # The page speaks to whichever backend.js is in place and never learns which one it got.
     # It has to be loaded first: app.js reads window.qrBackend while it is being parsed.
-    assert b'<script src="/backend.js">' in body
-    assert body.index(b'<script src="/backend.js">') < body.index(b'<script src="/app.js">'), (
+    assert b'<script src="backend.js">' in body
+    assert body.index(b'<script src="backend.js">') < body.index(b'<script src="app.js">'), (
         "backend.js must be in place before app.js runs"
     )
+
+    # Every reference is relative, which is what lets one build serve from a domain root, from
+    # a project subpath and off a filesystem. A leading slash would work here and break there,
+    # which is the kind of difference that is only ever discovered after publishing.
+    for absolute in (rb'src="/', rb'href="/'):
+        assert absolute not in body, f"the page grew a root-relative reference: {absolute!r}"
 
     served = {}
     for script in ("/app.js", "/backend.js"):

@@ -18,18 +18,18 @@
       object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'">
 <title>qrsalvage</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23232f3a'/%3E%3Crect x='8' y='3' width='7' height='7' fill='none' stroke='%23f2f4f5' stroke-width='1'/%3E%3Crect x='10' y='5' width='3' height='3' fill='%23f2f4f5'/%3E%3Crect x='5' y='4' width='2' height='2' fill='%23f07ea3'/%3E%3Crect x='2' y='7' width='2' height='2' fill='%23f07ea3'/%3E%3Crect x='5' y='10' width='2' height='2' fill='%23f2f4f5'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
 <main>
   <header>
     <!-- The axolotl has room here. The favicon keeps the abstract mark: at sixteen pixels the
          creature is a smudge, while a finder pattern breaking apart still reads. -->
-    <img src="/axolotl.png" alt="" width="132">
+    <img src="axolotl.png" alt="" width="132">
     <div>
       <h1>qrsalvage</h1>
       <p class="tagline">recover QR codes from what's left of them
-        &nbsp;·&nbsp; <a href="/method">how it works</a></p>
+        &nbsp;·&nbsp; <a href="method.html">how it works</a></p>
     </div>
   </header>
 
@@ -161,7 +161,7 @@
 
 <!-- Which of the two backends this is decides where the recovery runs: the local Python
      server, or the same Python inside this browser. It has to be in place before app.js. -->
-<script src="/backend.js"></script>
-<script src="/app.js"></script>
+<script src="backend.js"></script>
+<script src="app.js"></script>
 </body>
 </html>

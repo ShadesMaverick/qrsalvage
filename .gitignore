@@ -4,12 +4,13 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .ruff_cache/
+.mypy_cache/
 
-# Arbeitsstaende des Tools (Zwischenergebnisse, keine Fixtures)
+# Scratch output of a run -- intermediate results, never fixtures
 out/
 *.grid.json
 
-# Lokale Claude-Code-Einstellungen
+# Local Claude Code settings
 CLAUDE.local.md
 .claude/settings.local.json
 
@@ -17,20 +18,20 @@ CLAUDE.local.md
 .idea/
 *.egg-info/
 
-# Private Testfaelle: echte Fotos und ihre Ergebnisse verlassen den Rechner nicht.
-# Das oeffentliche Korpus in fixtures/ ist synthetisch, siehe scripts/make_fixtures.py
+# Private test cases: real photographs and their results never leave the machine.
+# The public corpus in fixtures/ is synthetic -- see scripts/make_fixtures.py
 fixtures-local/
 
-# Logo-Entwuerfe: noch nicht final und mit Wasserzeichen des Generators.
-# Das fertige Logo kommt nach docs/, wenn es steht.
+# Logo drafts: not final, and watermarked by the generator.
+# The finished logo goes to docs/ once it exists.
 idea_for_icon/
 
-# Build-Artefakte
+# Build artefacts
 dist/
 build/
 idea.png
 
-# Die gebaute Website und der Download-Cache ihrer Laufzeit: beide reproduzierbar
-# aus scripts/build_site.py, beide zu gross fuer die Historie.
+# The built site and the download cache of its runtime: both reproducible from
+# scripts/build_site.py, both far too large for the history.
 site/
 vendor-cache/

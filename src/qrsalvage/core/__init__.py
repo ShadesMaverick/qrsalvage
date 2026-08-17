@@ -1,1 +1,1 @@
-"""Bibliotheksreiner Kern: keine Ausgabe, kein Dateizugriff, keine UI-Abhaengigkeit."""
+"""The library-pure core: prints nothing, touches no files, knows no interface."""
