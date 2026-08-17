@@ -14,6 +14,10 @@ out/
 CLAUDE.local.md
 .claude/settings.local.json
 
+# The running note of what is left to do by hand -- account chores, a postal address, DNS.
+# None of that belongs in a public repository.
+NOTE.md
+
 # IDE
 .idea/
 *.egg-info/
