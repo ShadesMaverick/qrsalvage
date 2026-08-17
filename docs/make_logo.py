@@ -1,240 +1,164 @@
-"""Build the logo artwork: a real QR code that disintegrates, and the small mark.
+"""Cut the logo out of its draft and write it at the sizes it is actually used in.
 
-The draft logo had a drawn QR code in it. For this project of all projects that is the wrong
-detail to fake -- correctness is the entire pitch, and the people most likely to look closely
-are exactly the ones who would notice.
+The artwork began as a generated draft: one 1408x768 picture with the creature, the wordmark
+and a tagline arranged on a dark gradient -- plus the generator's watermark in a corner, which
+is exactly why that file is gitignored and never shipped. This script is the step from that
+draft to assets that can be published: watermark gone, background gone, proportions chosen for
+where each file goes rather than inherited from whatever the generator happened to output.
 
-Making it real and making it look destroyed are not in conflict, provided the destruction goes
-in the right direction. Modules are *added* outside the code rather than removed from inside
-it, beyond a clean four-module quiet zone. The code stays perfectly scannable while appearing
-to break apart, and the script decodes its own output before writing it, so a broken logo
-cannot ship quietly.
+The interesting part is the cut-out. Distance from the background colour alone would have eaten
+the black outlines of the pixel art, which are as dark as the backdrop; instead the background
+is found by flooding inwards from the border, so anything enclosed by the white keyline stays
+opaque no matter how dark it is. The edge then gets a one-pixel ramp from the same distance
+measure, because a hard alpha edge on pixel art reads as a jagged halo on a light page.
 
-Usage:
-    python docs/make_logo.py --text "https://github.com/you/qrsalvage"
+The input lives in idea_for_icon/, which is gitignored -- so this script cannot be re-run from
+a clean checkout, and that is on purpose: the draft carries someone else's watermark. Its
+outputs in docs/logo/ are the master copies from here on.
+
+    python docs/make_logo.py
 """
 
 from __future__ import annotations
 
-import argparse
 from pathlib import Path
 
 import cv2
 import numpy as np
-import zxingcpp
-
-from qrsalvage.core.decoding import reencode, render
-from qrsalvage.export import to_svg
+from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
+DRAFT = ROOT / "idea_for_icon" / "frist_idea.png"
+OUT = ROOT / "docs" / "logo"
 
-INK = "#f2f4f5"
-ACCENT = "#f07ea3"
-GROUND = "#1b252e"
+# The page's own background, so a logo placed on an opaque card matches the site exactly.
+SITE_BG = (27, 37, 46)
 
-QUIET = 4  # modules of clean space the standard wants, and scanners rely on
-SCATTER = 7  # modules of debris beyond that, where nothing can interfere
-
-
-def disintegrate(matrix: np.ndarray, seed: int = 0, reach: float = 3.2):
-    """Place the code on a larger canvas and scatter debris off its left and top edges.
-
-    Returns (canvas, accent mask). Density falls off exponentially with distance, which is what
-    makes it read as disintegration rather than as noise: near the code the fragments are dense
-    enough to look like they came from it, and they thin out rather than stopping at a line.
-    """
-    rng = np.random.default_rng(seed)
-    n = matrix.shape[0]
-    pad = QUIET + SCATTER
-    size = n + 2 * pad
-
-    canvas = np.zeros((size, size), dtype=bool)
-    canvas[pad : pad + n, pad : pad + n] = matrix
-
-    accent = np.zeros_like(canvas)
-    for r in range(size):
-        for c in range(size):
-            # Distance out of the code, in modules, but only counting left and upward.
-            left = max(0, pad - c)
-            up = max(0, pad - r)
-            depth = max(left, up)
-            if depth <= QUIET:
-                continue  # the quiet zone stays clear, which is what keeps this scannable
-            density = float(np.exp(-(depth - QUIET) / reach))
-            if rng.random() < density * 0.55:
-                canvas[r, c] = True
-                # A third of the debris takes the accent colour, so the eye follows the
-                # dissolution rather than reading it as dirt.
-                accent[r, c] = rng.random() < 0.34
-    return canvas, accent
+# How far a pixel must sit from the backdrop before it counts as artwork at all.
+INK = 60
 
 
-def to_two_colour_svg(canvas: np.ndarray, accent: np.ndarray, size_px: int = 512) -> str:
-    """Render the canvas as SVG with the debris picked out in the accent colour."""
-    n = canvas.shape[0]
-    unit = size_px / n
-    rects = []
-    for r in range(n):
-        for c in range(n):
-            if not canvas[r, c]:
-                continue
-            colour = ACCENT if accent[r, c] else INK
-            rects.append(
-                f'<rect x="{c * unit:.3f}" y="{r * unit:.3f}" '
-                f'width="{unit:.3f}" height="{unit:.3f}" fill="{colour}"/>'
-            )
-    return (
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{size_px}" height="{size_px}" '
-        f'viewBox="0 0 {size_px} {size_px}" shape-rendering="crispEdges">'
-        f"{''.join(rects)}</svg>\n"
+def _artwork_alpha(rgb: np.ndarray) -> np.ndarray:
+    """Alpha for the drawing: everything the outside cannot reach, plus a soft rim."""
+    backdrop = np.median(rgb.reshape(-1, 3), axis=0)
+    distance = np.abs(rgb.astype(np.int16) - backdrop).sum(axis=2)
+
+    # Flood from every border pixel through backdrop-like colour. What the flood cannot reach
+    # is enclosed by the keyline and belongs to the drawing -- including its black outlines,
+    # which a plain colour threshold would have punched holes through.
+    height, width = distance.shape
+    background = (distance <= INK).astype(np.uint8)
+    outside = np.zeros((height + 2, width + 2), np.uint8)
+    filled = background.copy()
+    for x in range(width):
+        for y in (0, height - 1):
+            if filled[y, x]:
+                cv2.floodFill(filled, outside, (x, y), 2)
+    for y in range(height):
+        for x in (0, width - 1):
+            if filled[y, x]:
+                cv2.floodFill(filled, outside, (x, y), 2)
+
+    alpha = np.where(filled == 2, 0.0, 1.0)
+    # One pixel of ramp where the drawing meets the backdrop, so the edge is not a staircase.
+    rim = np.clip((distance - INK * 0.4) / (INK * 0.6), 0.0, 1.0)
+    return (np.minimum(alpha, np.maximum(rim, alpha * 0.0 + (filled != 2))) * 255).astype(np.uint8)
+
+
+def _tight(rgba: np.ndarray) -> np.ndarray:
+    rows = np.flatnonzero(rgba[..., 3].any(axis=1))
+    cols = np.flatnonzero(rgba[..., 3].any(axis=0))
+    return rgba[rows[0] : rows[-1] + 1, cols[0] : cols[-1] + 1]
+
+
+def _pad_to_square(image: Image.Image, size: int, margin: float = 0.06) -> Image.Image:
+    """Centre on a square canvas, scaled to leave a little air on the longest side."""
+    inner = int(size * (1 - 2 * margin))
+    scale = inner / max(image.size)
+    scaled = image.resize(
+        (max(1, round(image.width * scale)), max(1, round(image.height * scale))),
+        Image.LANCZOS,
     )
-
-
-MARK = f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16">
-<rect width="16" height="16" fill="{GROUND}"/>
-<rect x="8" y="3" width="7" height="7" fill="none" stroke="{INK}" stroke-width="1"/>
-<rect x="10" y="5" width="3" height="3" fill="{INK}"/>
-<rect x="5" y="4" width="2" height="2" fill="{ACCENT}"/>
-<rect x="2" y="7" width="2" height="2" fill="{ACCENT}"/>
-<rect x="5" y="10" width="2" height="2" fill="{INK}"/>
-<rect x="1" y="12" width="1" height="1" fill="#93a3b0"/>
-<rect x="7" y="1" width="1" height="1" fill="#93a3b0"/>
-</svg>
-"""
-
-
-def extract_axolotl(source: Path, target: Path, height: int = 132) -> bool:
-    """Cut the creature out of the draft artwork and key its background to transparency.
-
-    The draft is a flat image on a solid ground with a generator's watermark in the corner.
-    What the interface needs is the creature alone, at header size, on whatever background the
-    page happens to have. The ground is keyed by colour distance rather than by a hard
-    threshold, so the anti-aliased pixels along the outline fade instead of leaving a halo --
-    which is what makes a cut-out look pasted on.
-    """
-    art = cv2.imread(str(source))
-    if art is None:
-        return False
-
-    h, w = art.shape[:2]
-    # The creature occupies the middle of the draft; the wordmark below and the watermark in
-    # the corner are not wanted.
-    crop = art[int(h * 0.12) : int(h * 0.64), int(w * 0.31) : int(w * 0.69)]
-
-    ground = np.median(
-        np.concatenate([crop[:6].reshape(-1, 3), crop[:, :6].reshape(-1, 3)]), axis=0
-    )
-    distance = np.linalg.norm(crop.astype(np.float32) - ground, axis=2)
-    alpha = np.clip((distance - 26.0) / 34.0, 0.0, 1.0)
-
-    scale = height / crop.shape[0]
-    resized = cv2.resize(crop, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
-    alpha_resized = cv2.resize(alpha, (resized.shape[1], resized.shape[0]), cv2.INTER_AREA)
-
-    rgba = np.dstack([resized, (alpha_resized * 255).astype(np.uint8)])
-    cv2.imwrite(str(target), rgba)
-    return True
-
-
-# Where the drawn code sits inside the cropped artwork, as fractions of it. Measured off the
-# draft once; if the artwork is ever redrawn these move.
-FAKE_CODE_BOX = (0.585, 0.030, 0.975, 0.560)
-
-
-def prepare_for_compositing(source: Path, out: Path, canvas: np.ndarray, height: int = 560):
-    """Render the real code at the exact size and position the drawn one occupies.
-
-    Deliberately no automatic replacement. The creature overlaps the code in the draft, so
-    clearing that rectangle takes its head off -- which is what happened on the first attempt.
-    Separating the two by colour is not reliable either: the drawn code is white on dark and
-    so is most of the animal.
-
-    What a script can do honestly is the measuring. The fragment comes out at the exact pixel
-    size of the drawn one and with a transparent background, so the remaining work is to drop
-    it on a layer beneath the creature at the printed coordinates and erase whatever of the old
-    one still shows around the edges.
-    """
-    art = cv2.imread(str(source), cv2.IMREAD_UNCHANGED)
-    if art is None:
-        return None
-
-    h, w = art.shape[:2]
-    crop = art[int(h * 0.12) : int(h * 0.64), int(w * 0.31) : int(w * 0.69)]
-    scale = height / crop.shape[0]
-    artwork = cv2.resize(crop, None, fx=scale, fy=scale, interpolation=cv2.INTER_NEAREST)
-    cv2.imwrite(str(out / "logo-artwork.png"), artwork)
-
-    ah, aw = artwork.shape[:2]
-    x0, y0 = int(FAKE_CODE_BOX[0] * aw), int(FAKE_CODE_BOX[1] * ah)
-    x1, y1 = int(FAKE_CODE_BOX[2] * aw), int(FAKE_CODE_BOX[3] * ah)
-
-    # Nearest-neighbour so the modules stay square-edged and match the pixel art around them.
-    side = min(x1 - x0, y1 - y0)
-    fragment = render(canvas, scale=1, quiet=0).astype(np.uint8)
-    fragment = cv2.resize(fragment, (side, side), interpolation=cv2.INTER_NEAREST)
-    rgba = np.dstack(
-        [
-            np.full((side, side), 245, np.uint8),
-            np.full((side, side), 244, np.uint8),
-            np.full((side, side), 242, np.uint8),
-            255 - fragment,  # dark modules opaque, the rest transparent
-        ]
-    )
-    cv2.imwrite(str(out / "logo-fragment.png"), rgba)
-    return (x0, y0, x1 - x0, y1 - y0), side, artwork.shape[:2]
+    canvas = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    canvas.paste(scaled, ((size - scaled.width) // 2, (size - scaled.height) // 2), scaled)
+    return canvas
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--text",
-        default="qrsalvage - recover QR codes from what's left of them",
-        help="what the logo's code encodes. Use the project URL once it exists",
-    )
-    parser.add_argument("--seed", type=int, default=7)
-    parser.add_argument("--out", type=Path, default=ROOT / "docs")
-    args = parser.parse_args()
+    if not DRAFT.is_file():
+        raise SystemExit(f"{DRAFT} is missing -- the draft is gitignored and local to one machine")
+    OUT.mkdir(parents=True, exist_ok=True)
 
-    args.out.mkdir(parents=True, exist_ok=True)
-    matrix = reencode(args.text)
-    canvas, accent = disintegrate(matrix, seed=args.seed)
+    rgb = np.array(Image.open(DRAFT).convert("RGB"))
+    alpha = _artwork_alpha(rgb)
+    rgba = np.dstack([rgb, alpha])
 
-    # Prove it before writing it. A logo that stopped scanning would be the one defect this
-    # project cannot afford, and it would be invisible to review.
-    check = render(canvas, scale=8, quiet=2)
-    hits = [h.text for h in zxingcpp.read_barcodes(check) if h.text]
-    if args.text not in hits:
-        print(f"the disintegrated code does not scan back: {hits}")
-        return 1
+    # The three bands the draft is built from, measured rather than assumed: the creature, the
+    # wordmark under it, and the tagline under that. The fourth thing in the file -- the
+    # generator's watermark, alone in the bottom right -- is simply never included in a crop.
+    solid = alpha > 8
+    profile = solid.sum(axis=1)
+    creature = rgba[:500]
+    wordmark = rgba[500:605]
+    tagline = rgba[605:660]
+    print(f"draft {rgb.shape[1]}x{rgb.shape[0]}, opaque pixels {int(solid.sum()):,}")
+    print(f"  rows carrying ink: {int((profile > 3).sum())}")
 
-    (args.out / "logo-code.svg").write_text(to_two_colour_svg(canvas, accent), encoding="utf-8")
-    cv2.imwrite(str(args.out / "logo-code.png"), render(canvas, scale=16, quiet=0))
-    (args.out / "mark.svg").write_text(MARK, encoding="utf-8")
-    (args.out / "code-plain.svg").write_text(to_svg(matrix, size_mm=40.0), encoding="utf-8")
+    creature_img = Image.fromarray(_tight(creature))
+    lockup_img = Image.fromarray(_tight(np.vstack([creature, wordmark])))
 
-    web = ROOT / "src" / "qrsalvage" / "web"
-    web.mkdir(parents=True, exist_ok=True)
-    draft = ROOT / "idea.png"
-    if extract_axolotl(draft, web / "axolotl.png"):
-        print(f"  -> {web / 'axolotl.png'}  (cut from {draft.name}, background keyed out)")
-    else:
-        print(f"  !! {draft.name} not found, the interface keeps the abstract mark")
+    written = []
 
-    placement = prepare_for_compositing(draft, args.out, canvas)
-    if placement:
-        (x, y, bw, bh), side, (ah, aw) = placement
-        print(f"  -> {args.out / 'logo-artwork.png'}  ({aw}x{ah} px, the draft at working size)")
-        print(f"  -> {args.out / 'logo-fragment.png'}  (the real code, {side}x{side} px)")
-        print(f"     the drawn code occupies {bw}x{bh} px at x={x}, y={y}")
-        print("     put the fragment on a layer BENEATH the creature; it overlaps the code, so")
-        print("     a rectangular swap would cut into it")
+    # The mark alone, square: repository avatar, and the source a favicon is generated from.
+    for size in (1024, 512, 256, 128):
+        path = OUT / f"qrsalvage-mark-{size}.png"
+        _pad_to_square(creature_img, size).save(path)
+        written.append(path)
 
-    print(f"encodes: {args.text!r}")
-    print(f"code    : version {(matrix.shape[0] - 17) // 4}, {matrix.shape[0]} modules")
-    print(f"canvas  : {canvas.shape[0]} modules, {int(canvas.sum() - matrix.sum())} of debris")
-    print("scans back: yes")
-    for name in ("logo-code.svg", "logo-code.png", "mark.svg", "code-plain.svg"):
-        print(f"  -> {args.out / name}")
+    # The lockup, transparent, for a README header on either a light or a dark background.
+    lockup = lockup_img.copy()
+    lockup.thumbnail((1200, 1200), Image.LANCZOS)
+    lockup.save(OUT / "qrsalvage-lockup.png")
+    written.append(OUT / "qrsalvage-lockup.png")
+
+    # The social preview, opaque and in the ratio every platform crops to: 1.91:1. This is the
+    # one that has a background, because a transparent PNG on someone else's timeline is a
+    # lottery between white and black. Laid out across rather than stacked: the draft's own
+    # arrangement is nearly square and leaves a third of this canvas empty on either side,
+    # where a preview is read at thumbnail size and wants to fill the space it is given.
+    card = Image.new("RGBA", (1200, 628), SITE_BG + (255,))
+    beast = creature_img.copy()
+    beast.thumbnail((520, 470), Image.LANCZOS)
+    words = Image.fromarray(_tight(wordmark))
+    words.thumbnail((560, 200), Image.LANCZOS)
+    line = Image.fromarray(_tight(tagline))
+    line.thumbnail((560, 90), Image.LANCZOS)
+
+    text_height = words.height + 18 + line.height
+    block_width = max(words.width, line.width)
+    gap = 56
+    left = (1200 - (beast.width + gap + block_width)) // 2
+    card.paste(beast, (left, (628 - beast.height) // 2), beast)
+    text_top = (628 - text_height) // 2
+    text_left = left + beast.width + gap
+    card.paste(words, (text_left, text_top), words)
+    card.paste(line, (text_left, text_top + words.height + 18), line)
+    card.convert("RGB").save(OUT / "qrsalvage-social.png")
+    written.append(OUT / "qrsalvage-social.png")
+
+    # The page header asset, at twice its displayed width so it stays sharp on dense screens.
+    header = creature_img.copy()
+    header.thumbnail((354, 354), Image.LANCZOS)
+    header.save(OUT / "axolotl@2x.png")
+    written.append(OUT / "axolotl@2x.png")
+
+    print()
+    for path in written:
+        with Image.open(path) as check:
+            print(
+                f"  {path.relative_to(ROOT).as_posix():<34} {check.size[0]:>5}x{check.size[1]:<5}"
+                f" {path.stat().st_size / 1024:>7.1f} KB"
+            )
     return 0
 
 
