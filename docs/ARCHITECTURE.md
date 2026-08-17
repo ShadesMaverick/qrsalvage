@@ -79,7 +79,9 @@ Break any of these and the project stops being itself:
 
 | Seam | Where | What it decouples |
 |---|---|---|
-| **Oracle** | `core/oracle.py`, swap with `oracle.use()` | the single native dependency (zxing-cpp); the browser build hands in the same oracle compiled to WASM |
+| **Oracle** | `core/oracle.py`, swap with `oracle.use()` | the single native dependency (zxing-cpp); the browser build hands in the same oracle compiled to WASM, both directions synchronous |
+| **Request layer** | `api.py` | what a shell asks for from how the request travelled; the local server and the browser worker call these same functions, so their answers cannot diverge |
+| **Backend** | `web/backend-server.js` / `web/backend-worker.js`, one of them installed as `backend.js` | the page from where the work happens — loopback HTTP or Pyodide in a worker |
 | **Progress** | `progress=` callback on `solve()`/`solve_many()` | live reporting from the core without the core knowing who listens; feeds the CLI, the NDJSON stream and the worker unchanged |
 | **Fusion** | `ensemble.fuse_images`, rules in `FUSION_RULES` | how several photographs of one code are combined |
 | **Payload intelligence** | `export.payload_fields` | recognising what a recovered text *is* (Zigbee, Matter, Wi-Fi) |
@@ -93,8 +95,10 @@ Break any of these and the project stops being itself:
 | improve the grid on curved surfaces | `geometry.refine_corners` / `refine_bow` (read the measured results in its docstring first) |
 | improve the per-cell probabilities | `sampling.estimate_levels` / `posterior_dark`; calibration measured by `scripts/calibration.py` |
 | change what the repair may try | `repair.py`; the decode chain order is `pipeline._decode_chain` |
-| add an export format | `export.py`, wired in `cli.py` and `server.py` |
-| change the web page | `web/index.html` + `web/app.js` + `web/style.css` — static files, no build step, served only by `server.py` |
+| add an export format | `export.py`, wired into the request layer in `api.py` (both web shells inherit it) |
+| change the web page | `web/index.html` + `web/app.js` + `web/style.css` — static files, no build step; served by `server.py` locally and copied verbatim into the published site |
+| change what a shell may ask for | `api.py` — never one of the two backends, or the paths drift |
+| work on the published site | `scripts/build_site.py` assembles `site/`; `web/worker.js` is the browser's shell over the core |
 | add a payload type | `export.payload_fields` + a `*_fields` parser + `PAYLOAD_HINTS` |
 | touch anything user-visible about waiting | the progress events (`pipeline._emit` call sites) and their consumers |
 

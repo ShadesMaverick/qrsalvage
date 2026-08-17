@@ -3,6 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- The policy travels inside the page because the published build has no server to send a
+     header: a static host serves files and nothing else. The local server still sends its own
+     stricter header, and a browser applies both, so each environment ends up with the tightest
+     policy it can support rather than the loosest one either could.
+     'wasm-unsafe-eval' is what the browser build costs: CPython and OpenCV arrive as
+     WebAssembly and have to be compiled. It permits compiling wasm and nothing else -- plain
+     eval() and new Function() stay forbidden, which is the part that matters. connect-src
+     'self' is the load-bearing line here: it is what makes "your photograph does not leave
+     this device" enforced by the browser instead of promised by us. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self';
+      script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline';
+      img-src 'self' data: blob:; connect-src 'self'; worker-src 'self'; child-src 'self';
+      object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'">
 <title>qrsalvage</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23232f3a'/%3E%3Crect x='8' y='3' width='7' height='7' fill='none' stroke='%23f2f4f5' stroke-width='1'/%3E%3Crect x='10' y='5' width='3' height='3' fill='%23f2f4f5'/%3E%3Crect x='5' y='4' width='2' height='2' fill='%23f07ea3'/%3E%3Crect x='2' y='7' width='2' height='2' fill='%23f07ea3'/%3E%3Crect x='5' y='10' width='2' height='2' fill='%23f2f4f5'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="/style.css">

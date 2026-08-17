@@ -30,6 +30,9 @@ adressiert — so ist immer eindeutig, welcher Interpreter läuft.
 - Format: `.venv\Scripts\python.exe -m ruff format .`
 - Typen: `.venv\Scripts\python.exe -m mypy` (Konfiguration in `pyproject.toml`; der Kern
   verlangt vollständige Signaturen)
+- Statische Seite bauen: `.venv\Scripts\python.exe scripts\build_site.py` (schreibt `site/`,
+  ~29 MB, Laufzeit selbst gehostet), testen mit
+  `.venv\Scripts\python.exe -m http.server 8833 --directory site --bind 127.0.0.1`
 
 Es gibt keinen Build-Schritt. Die Oberfläche ist eine statische HTML/JS-Datei, kein npm.
 
@@ -63,8 +66,14 @@ Es gibt keinen Build-Schritt. Die Oberfläche ist eine statische HTML/JS-Datei, 
 - `src/qrsalvage/synth.py` — künstlich verdorbene Fälle mit bekannter Antwort
 - `src/qrsalvage/cli.py` — Textinterface, zugleich der Agentenweg. Alles Ausgeben und Schreiben
   passiert hier, nie im Kern.
-- `src/qrsalvage/server.py` + `web/index.html` — lokale Oberfläche, nur auf 127.0.0.1,
-  eine statische Datei ohne Build-Schritt
+- `src/qrsalvage/api.py` — was eine Schale fragt und was sie zurückbekommt: dict rein, reine
+  JSON-Typen raus. Kennt kein HTTP. Server und Browser-Worker rufen dieselben Funktionen auf —
+  daran hängt, dass ein Foto sich nicht anders verhält, je nachdem wie die Anfrage gereist ist
+- `src/qrsalvage/server.py` + `web/` — lokale Oberfläche, nur auf 127.0.0.1; drei statische
+  Dateien ohne Build-Schritt. `web/backend-server.js` und `web/backend-worker.js` sind zwei
+  austauschbare Fassungen desselben Vertrags: welche als `backend.js` an ihrem Platz liegt,
+  entscheidet, ob die Seite mit dem Server oder mit `web/worker.js` (Pyodide im Browser)
+  arbeitet. Die Seite erfährt es nie
 - `fixtures/` — synthetisches, öffentliches Korpus (`scripts/make_fixtures.py`)
 - `fixtures-local/` — echte Fotos, gitignoriert, verlassen den Rechner nicht
 - `tests/`, `scripts/` (Messwerkzeuge, kein Produktionscode)
