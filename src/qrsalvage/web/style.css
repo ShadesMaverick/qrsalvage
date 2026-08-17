@@ -226,3 +226,11 @@
   .thanks em { color: var(--pink-soft); font-style: normal; }
   .knowledge dl { margin-top: .6rem; font-size: .9rem; }
   .knowledge .note { margin-top: .3rem; }
+
+/* The footer is a legal obligation before it is a design element, so it stays legible and
+   stops there -- no columns, no repeated navigation, nothing competing with the work. */
+footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line);
+         display: flex; flex-wrap: wrap; gap: .5rem; align-items: baseline;
+         font-size: .85rem; color: var(--muted); }
+footer a { color: var(--muted); }
+footer a:hover { color: var(--fg); }

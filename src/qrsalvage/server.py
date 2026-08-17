@@ -105,6 +105,8 @@ class Handler(BaseHTTPRequestHandler):
         "/index.html": ("index.html", "text/html; charset=utf-8"),
         "/method": ("method.html", "text/html; charset=utf-8"),
         "/method.html": ("method.html", "text/html; charset=utf-8"),
+        "/legal": ("legal.html", "text/html; charset=utf-8"),
+        "/legal.html": ("legal.html", "text/html; charset=utf-8"),
         "/axolotl.png": ("axolotl.png", "image/png"),
         "/style.css": ("style.css", "text/css; charset=utf-8"),
         "/app.js": ("app.js", "text/javascript; charset=utf-8"),

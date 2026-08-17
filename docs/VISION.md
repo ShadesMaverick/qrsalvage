@@ -78,10 +78,13 @@ In dieser Reihenfolge, jede Stufe für sich nutzbar:
   Safari-Blockade damit architektonisch beseitigt (Realtest auf Safari steht aus). Noch
   offen: Assets selbst hosten statt CDN (Versionen pinnen), Encode-Richtung des Orakels,
   Pages-Repo, `.domains`, DNS.
-- [ ] **5. Veröffentlichung auf Codeberg** — Übersetzung der Docstrings (ISSUES 1), README
-  final, `CONTRIBUTING`, die echte EUI64 in `tests/test_export.py` durch eine erfundene
-  ersetzen, Impressum + Datenschutzerklärung für die öffentliche Seite (trivial: „keine
-  Datenerhebung, Verarbeitung im Browser").
+- [ ] **5. Veröffentlichung auf Codeberg** — erledigt: Übersetzung (kein Deutsch mehr in
+  `src/`, `tests/`, `scripts/`), `CONTRIBUTING`, erfundene EUI64 im Test, und
+  `web/legal.html` mit Impressum und Datenschutzerklärung, verlinkt aus der Fußzeile beider
+  Seiten. **Was noch fehlt und nur du tun kannst:** die vier TODO-Felder in `legal.html`
+  (Name, Anschrift, E-Mail, Hoster-Link) — ein Test schlägt an, solange sie stehen; die
+  Spenden-URLs in `app.js`; README-Badges auf den echten Repository-Pfad; Pages-Repo,
+  `.domains` und DNS; ein echter Safari/iOS-Test.
 - [ ] **6. Reichweite in der Nische** — der ausgearbeitete Plan steht in `REACH.md`:
   Startseite auf die Suchintention drehen, Links in fremder Troubleshooting-Doku
   (Zigbee2MQTT, ZHA), echte Hilfe in Foren-Threads, dann je ein Launch-Post
