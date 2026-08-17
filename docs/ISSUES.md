@@ -214,6 +214,18 @@ Einzelfall durchgeht.
   unsichtbar, solange keine URLs eingetragen sind. **Eintragen in `index.html`, Konstante
   `DONATE` ganz oben im Skript**, sobald die Konten existieren — PayPal.me zuerst (in Deutschland der vertrauteste Knopf; Ko-fi wickelt intern ohnehin über PayPal ab), dazu Ko-fi und LiberaPay. Bewusst nicht auf
   der Startseite: Reziprozität hat einen Moment.
+- **Safari/iOS — statisch geprüft, Gerätetest steht aus.** Ein Durchgang durch den
+  Browser-Code gegen Safari-Verfügbarkeiten ergab genau einen echten Stolperstein, und der ist
+  beseitigt: `worker.js` benutzte `OffscreenCanvas` (Safari 16.4) und `createImageBitmap`
+  ausschließlich, um einen Aufwärm-Aufruf des Orakels zu ermöglichen — dessen Ergebnis nie
+  jemanden interessiert hat. Jetzt tut es ein leeres `ImageData`; damit verlangt der Worker
+  nichts Neueres als den Module-Worker selbst (Safari 15). In Chrome nachgeprüft: Orakel
+  scharf, hartes Fixture in 11,7 s gelöst. Was der statische Blick *nicht* beantworten kann und
+  nur ein Gerät klärt: ob iOS die Speichergrenze eines Tabs bei ~30 MB WASM plus NumPy/OpenCV
+  hält. Der Kamera-Modus braucht einen sicheren Kontext, ist über eine LAN-Adresse per `http://`
+  also nicht prüfbar — er wird erst mit dem HTTPS-Deployment testbar. Der Taschenlampen-Knopf
+  existiert auf iOS ohnehin nicht und blendet sich dort korrekt aus.
+
 - **Statische Browser-Version — GEBAUT (August 2026).** `scripts/build_site.py` schreibt eine
   in sich geschlossene `site/` (29 MB): Pyodide 0.28.0 (Kern-Tarball, Teilmenge über
   `pyodide-lock.json` aufgelöst statt geraten), NumPy 2.2.5, OpenCV 4.11.0.86, zxing-wasm 2.2.4

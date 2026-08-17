@@ -23,7 +23,7 @@ function thanksHtml() {
   const targets = DONATE.filter((d) => d.url);
   if (!targets.length) return "";
   const links = targets
-    .map((d) => `<a href="${d.url}" target="_blank" rel="noopener">` +
+    .map((d) => `<a href="${escapeHtml(d.url)}" target="_blank" rel="noopener noreferrer">` +
                 `<button>${escapeHtml(d.label)}</button></a>`)
     .join("");
   return `<div class="thanks"><img src="axolotl.png" alt="">
