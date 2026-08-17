@@ -71,16 +71,25 @@ def _tight(rgba: np.ndarray) -> np.ndarray:
     return rgba[rows[0] : rows[-1] + 1, cols[0] : cols[-1] + 1]
 
 
-def _pad_to_square(image: Image.Image, size: int, margin: float = 0.06) -> Image.Image:
-    """Centre on a square canvas, scaled to leave a little air on the longest side."""
-    inner = int(size * (1 - 2 * margin))
-    scale = inner / max(image.size)
-    scaled = image.resize(
-        (max(1, round(image.width * scale)), max(1, round(image.height * scale))),
-        Image.LANCZOS,
+def _fit(image: Image.Image, width: int, height: int, coverage: float) -> Image.Image:
+    """Scale so the drawing takes `coverage` of whichever canvas edge constrains it first.
+
+    Written in terms of how much of the canvas the artwork should occupy rather than a maximum
+    size, because a maximum silently becomes a full bleed the moment the artwork is wider than
+    it is tall -- which is how the first cut of these files ended up with a six percent margin
+    on one axis and none at all on the other.
+    """
+    scale = min(width * coverage / image.width, height * coverage / image.height)
+    return image.resize(
+        (max(1, round(image.width * scale)), max(1, round(image.height * scale))), Image.LANCZOS
     )
-    canvas = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    canvas.paste(scaled, ((size - scaled.width) // 2, (size - scaled.height) // 2), scaled)
+
+
+def _centre(image: Image.Image, width: int, height: int, coverage: float) -> Image.Image:
+    """Place the drawing on a transparent canvas of the given shape, with air around it."""
+    scaled = _fit(image, width, height, coverage)
+    canvas = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    canvas.paste(scaled, ((width - scaled.width) // 2, (height - scaled.height) // 2), scaled)
     return canvas
 
 
@@ -110,14 +119,21 @@ def main() -> int:
     written = []
 
     # The mark alone, square: repository avatar, and the source a favicon is generated from.
+    # The drawing is half again as wide as it is tall, so a square will always carry more air
+    # above and below than beside -- but it must not be pressed against the left and right
+    # edges to hide that, which only reads as cramped.
     for size in (1024, 512, 256, 128):
         path = OUT / f"qrsalvage-mark-{size}.png"
-        _pad_to_square(creature_img, size).save(path)
+        _centre(creature_img, size, size, 0.78).save(path)
         written.append(path)
 
     # The lockup, transparent, for a README header on either a light or a dark background.
-    lockup = lockup_img.copy()
-    lockup.thumbnail((1200, 1200), Image.LANCZOS)
+    # A transparent PNG has no margin of its own, so whatever is placed next to it sits flush
+    # against the drawing. The breathing room has to be baked in.
+    inner = _fit(lockup_img, 1000, 1000, 1.0)
+    pad = round(inner.width * 0.08)
+    lockup = Image.new("RGBA", (inner.width + 2 * pad, inner.height + 2 * pad), (0, 0, 0, 0))
+    lockup.paste(inner, (pad, pad), inner)
     lockup.save(OUT / "qrsalvage-lockup.png")
     written.append(OUT / "qrsalvage-lockup.png")
 
@@ -127,22 +143,22 @@ def main() -> int:
     # arrangement is nearly square and leaves a third of this canvas empty on either side,
     # where a preview is read at thumbnail size and wants to fill the space it is given.
     card = Image.new("RGBA", (1200, 628), SITE_BG + (255,))
-    beast = creature_img.copy()
-    beast.thumbnail((520, 470), Image.LANCZOS)
-    words = Image.fromarray(_tight(wordmark))
-    words.thumbnail((560, 200), Image.LANCZOS)
-    line = Image.fromarray(_tight(tagline))
-    line.thumbnail((560, 90), Image.LANCZOS)
+    beast = _fit(creature_img, 470, 440, 1.0)
+    words = _fit(Image.fromarray(_tight(wordmark)), 470, 165, 1.0)
+    line = _fit(Image.fromarray(_tight(tagline)), 470, 74, 1.0)
 
-    text_height = words.height + 18 + line.height
-    block_width = max(words.width, line.width)
-    gap = 56
-    left = (1200 - (beast.width + gap + block_width)) // 2
+    # Composed from a stated margin outwards rather than from maximum sizes inwards, so the
+    # content cannot creep up on the edges the way it did before.
+    lead = round(words.height * 0.34)
+    text_height = words.height + lead + line.height
+    gap = round(beast.width * 0.20)
+    total = beast.width + gap + max(words.width, line.width)
+    left = (1200 - total) // 2
     card.paste(beast, (left, (628 - beast.height) // 2), beast)
     text_top = (628 - text_height) // 2
     text_left = left + beast.width + gap
     card.paste(words, (text_left, text_top), words)
-    card.paste(line, (text_left, text_top + words.height + 18), line)
+    card.paste(line, (text_left, text_top + words.height + lead), line)
     card.convert("RGB").save(OUT / "qrsalvage-social.png")
     written.append(OUT / "qrsalvage-social.png")
 
