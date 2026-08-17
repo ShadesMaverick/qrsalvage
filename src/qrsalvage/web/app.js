@@ -15,7 +15,7 @@ const $ = (id) => document.getElementById(id);
 const DONATE = [
   // PayPal first: for a German audience it is the button people recognise and already have.
   { label: "PayPal", url: "" },      // e.g. "https://paypal.me/yourname"
-  { label: "Ko-fi", url: "" },       // e.g. "https://ko-fi.com/yourname"
+  { label: "Ko-fi", url: "https://ko-fi.com/shadesmaverick" },
   { label: "LiberaPay", url: "" },   // e.g. "https://liberapay.com/yourname"
 ];
 
