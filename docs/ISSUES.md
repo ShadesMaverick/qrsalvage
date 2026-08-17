@@ -214,7 +214,7 @@ Einzelfall durchgeht.
   unsichtbar, solange keine URLs eingetragen sind. **Eintragen in `index.html`, Konstante
   `DONATE` ganz oben im Skript**, sobald die Konten existieren — PayPal.me zuerst (in Deutschland der vertrauteste Knopf; Ko-fi wickelt intern ohnehin über PayPal ab), dazu Ko-fi und LiberaPay. Bewusst nicht auf
   der Startseite: Reziprozität hat einen Moment.
-- **Safari/iOS — statisch geprüft, Gerätetest steht aus.** Ein Durchgang durch den
+- **Safari/iOS — statisch geprüft, UNGETESTET auf einem Gerät.** Ein Durchgang durch den
   Browser-Code gegen Safari-Verfügbarkeiten ergab genau einen echten Stolperstein, und der ist
   beseitigt: `worker.js` benutzte `OffscreenCanvas` (Safari 16.4) und `createImageBitmap`
   ausschließlich, um einen Aufwärm-Aufruf des Orakels zu ermöglichen — dessen Ergebnis nie
@@ -223,7 +223,11 @@ Einzelfall durchgeht.
   scharf, hartes Fixture in 11,7 s gelöst. Was der statische Blick *nicht* beantworten kann und
   nur ein Gerät klärt: ob iOS die Speichergrenze eines Tabs bei ~30 MB WASM plus NumPy/OpenCV
   hält. Der Kamera-Modus braucht einen sicheren Kontext, ist über eine LAN-Adresse per `http://`
-  also nicht prüfbar — er wird erst mit dem HTTPS-Deployment testbar. Der Taschenlampen-Knopf
+  also nicht prüfbar — er wird erst mit dem HTTPS-Deployment testbar. **Stand August 2026: kein
+  iOS-Gerät verfügbar, der Test ist nicht gelaufen.** Das ist die einzige Aussage über das
+  Produkt, die derzeit unbelegt ist; sie gehört entsprechend zurückhaltend formuliert, solange
+  das so bleibt. Wege, das zu schließen: ein fremdes Gerät, ein Gerätetest-Dienst im Browser,
+  oder ein früher Nutzer, der berichtet. Der Taschenlampen-Knopf
   existiert auf iOS ohnehin nicht und blendet sich dort korrekt aus.
 
 - **Statische Browser-Version — GEBAUT (August 2026).** `scripts/build_site.py` schreibt eine
