@@ -38,7 +38,10 @@
   <header>
     <!-- The axolotl has room here. The favicon keeps the abstract mark: at sixteen pixels the
          creature is a smudge, while a finder pattern breaking apart still reads. -->
-    <img src="axolotl.png" alt="" width="132">
+    <!-- No width attribute: the stylesheet sets the height and the width has to follow the
+         image's own ratio. Height from CSS plus width from an attribute was exactly the pair
+         that once squashed the creature to two thirds of its height. -->
+    <img src="axolotl.png" alt="">
     <div>
       <h1>qrsalvage</h1>
       <p class="tagline">recover QR codes from what's left of them
