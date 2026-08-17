@@ -50,14 +50,13 @@ async function armOracle(zxing) {
     readerOptions = args[3];
     return readOriginal.apply(this, args);
   };
-  const warm = await zxing.writeBarcode("WARMUP", { format: "QRCode" });
-  const bitmap = await createImageBitmap(warm.image);
-  const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
-  canvas.getContext("2d").drawImage(bitmap, 0, 0);
-  await zxing.readBarcodes(canvas.getContext("2d").getImageData(0, 0, bitmap.width, bitmap.height), {
-    formats: ["QRCode"],
-    tryInvert: false,
-  });
+  // A blank image is enough. Nothing about the warmup's result matters -- the only purpose is
+  // to make the wrapper build its options object once so it can be captured. Reading a real
+  // barcode here would mean rendering one, which used to cost an OffscreenCanvas and with it
+  // Safari 16.4 as the floor for the whole tool; a bare ImageData asks for nothing newer than
+  // the module worker already does.
+  const blank = new ImageData(new Uint8ClampedArray(32 * 32 * 4), 32, 32);
+  await zxing.readBarcodes(blank, { formats: ["QRCode"], tryInvert: false });
   mod.readBarcodesFromPixmap = readOriginal;
 
   // The writer's options object, captured the same way and reused with the level patched in.
