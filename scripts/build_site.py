@@ -90,6 +90,7 @@ PYODIDE_PACKAGES = ("numpy", "opencv-python")
 PAGE_FILES = (
     "index.html",
     "method.html",
+    "legal.html",
     "app.js",
     "worker.js",
     "style.css",

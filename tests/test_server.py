@@ -209,6 +209,38 @@ def test_it_serves_the_page_and_nothing_else(running_server):
     connection.close()
 
 
+def test_the_legal_page_is_reachable_and_still_has_blanks_to_fill(running_server):
+    """A page nobody links to does not satisfy an obligation to be reachable.
+
+    German law requires an operator to be identifiable from the published site, and a donation
+    button removes any argument about whether that applies here. So the front page has to link
+    it, the page has to answer, and -- until someone fills in a name and a postal address that
+    can receive mail -- the placeholders have to be loud enough that publishing with them still
+    in place would be a decision rather than an oversight.
+    """
+    host, port = running_server
+    connection = http.client.HTTPConnection(host, port, timeout=10)
+
+    connection.request("GET", "/")
+    front = connection.getresponse().read()
+    assert b'href="legal.html"' in front, "the front page does not link the legal page"
+
+    connection.request("GET", "/legal.html")
+    response = connection.getresponse()
+    page = response.read().decode("utf-8")
+    assert response.status == 200
+    assert response.getheader("Content-Type", "").startswith("text/html")
+    assert "Impressum" in page and "Datenschutz" in page
+
+    # The claim the whole project rests on belongs here in plain words, not only in a README.
+    assert "verlassen Ihr Gerät nicht" in page
+
+    # Fails once, loudly, on the day the operator's details are entered -- at which point this
+    # assertion has done its job and should be turned around to forbid the placeholders.
+    assert "TODO" in page, "placeholders are gone: invert this assertion to guard the real data"
+    connection.close()
+
+
 def test_every_figure_the_method_page_asks_for_is_served(running_server):
     """A missing figure is invisible from the outside: the page still renders, just emptier.
 
