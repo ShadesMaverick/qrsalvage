@@ -37,7 +37,8 @@ Sekunden nach einer Rettung. Der Hebel ist deshalb
 **Rettungsquote × Reichweite × richtig platzierter Moment**
 
 und nicht die Breite der Featureliste. Jede der folgenden Aufgaben zahlt auf genau einen
-dieser drei Faktoren ein.
+dieser drei Faktoren ein. Der Faktor Reichweite ist in `REACH.md` ausgearbeitet — samt der
+Zahl, die realistisch dabei herauskommt.
 
 ## Fahrplan
 
@@ -70,10 +71,12 @@ In dieser Reihenfolge, jede Stufe für sich nutzbar:
   final, `CONTRIBUTING`, die echte EUI64 in `tests/test_export.py` durch eine erfundene
   ersetzen, Impressum + Datenschutzerklärung für die öffentliche Seite (trivial: „keine
   Datenerhebung, Verarbeitung im Browser").
-- [ ] **6. Reichweite in der Nische** — Home-Assistant-Forum und r/homeassistant mit der
-  Gründungsgeschichte („etliche Reader scheiterten an der Wölbung meiner Lampe, also…"),
-  Show HN. Die Methodenseite und die Live-Ansicht sind der Glaubwürdigkeitsbeweis; die
-  HA-Community hat eine belegte Spendenkultur.
+- [ ] **6. Reichweite in der Nische** — der ausgearbeitete Plan steht in `REACH.md`:
+  Startseite auf die Suchintention drehen, Links in fremder Troubleshooting-Doku
+  (Zigbee2MQTT, ZHA), echte Hilfe in Foren-Threads, dann je ein Launch-Post
+  (Show HN, r/homeassistant) mit der Gründungsgeschichte. Kernsatz: niemand sucht qrsalvage,
+  alle suchen ihr Problem — wir werben nicht, wir liegen bereit. Dort steht auch die ehrliche
+  Ertragserwartung (100–300 €/Jahr) und was wir bewusst *nicht* tun.
 
 Danach, bewusst nachrangig (verbreitert statt vertieft):
 
