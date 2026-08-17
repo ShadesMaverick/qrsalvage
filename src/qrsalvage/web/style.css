@@ -29,7 +29,7 @@
 
   /* --- identity ------------------------------------------------------------------- */
   header { display: flex; align-items: center; gap: 1rem; margin-bottom: .2rem; }
-  header img { flex: none; height: 66px; image-rendering: pixelated; }
+  header img { flex: none; height: 76px; width: auto; image-rendering: pixelated; }
   h1 {
     font: 600 1.55rem/1 var(--mono); letter-spacing: .04em; margin: 0;
   }
