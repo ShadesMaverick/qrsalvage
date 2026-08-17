@@ -26,7 +26,7 @@ function thanksHtml() {
     .map((d) => `<a href="${d.url}" target="_blank" rel="noopener">` +
                 `<button>${escapeHtml(d.label)}</button></a>`)
     .join("");
-  return `<div class="thanks"><img src="/axolotl.png" alt="">
+  return `<div class="thanks"><img src="axolotl.png" alt="">
     <span>${escapeHtml(window.qrBackend.privacyNote)}
     Saved your lamp? A small donation keeps the tool alive.</span>
     <span class="links">${links}</span></div>`;
