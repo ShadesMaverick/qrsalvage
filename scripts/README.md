@@ -7,11 +7,13 @@ rates are involved, and is safe to run repeatedly.
 
 | Script | Question it answers |
 |---|---|
-| `difficulty.py` | How does the success rate degrade along one damage axis (contrast, curvature, resolution, stain), all else held at baseline? The primary regression instrument. |
+| `difficulty.py` | How does the success rate degrade along one damage axis (contrast, curvature, resolution, stain, tear), all else held at baseline? The primary regression instrument. |
 | `calibration.py` | Does the posterior mean what it says? Reliability of claimed confidence, split into border (known cells) and middle (data cells) — the split is the point. |
 | `multi_image.py` | What do several photographs of one code buy over a single one, and under which fusion rule? Single images scored at the same budget, paired trials. |
 | `ab_bow.py` | Flat homography against the bowed grid on curved surfaces; the flat axis is the control. |
 | `ab_sigma.py` | The two spatial uncertainty terms on and off against localized damage (they measured useless; weights ship at zero — this is the instrument that says so). |
+| `ab_robust.py` | The robust level estimate on and off against known cells that lie (torn edge, stain); the contrast axis is the control. Result at `ROBUST_LEVELS` in `sampling.py`. |
+| `ab_restart.py` | The coarse restart of a badly seated grid on and off, on the axes that actually displace grids (curvature, resolution, tear); reports how often it fires, because an escalation that never triggers cannot help. Result at `geometry.restart_coarse`. |
 | `ab_ensemble.py` | Single measurement against the within-image ensembles (both measured useless; documented in `ensemble.py`). |
 | `batch.py` | Run the solver over a folder of images and tabulate outcomes. |
 | `diagnose.py` | Why did a photograph fail — is the code invisible, or is the preprocessing tuned for the wrong scale? Writes the binarisations so failure can be looked at. |

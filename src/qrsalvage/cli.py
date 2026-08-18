@@ -230,7 +230,12 @@ def cmd_synth(args: argparse.Namespace) -> int:
     args.out.mkdir(parents=True, exist_ok=True)
     photo, _ = make_case(
         args.text,
-        Damage(curvature=args.curvature, contrast=args.contrast, stain=args.stain),
+        Damage(
+            curvature=args.curvature,
+            contrast=args.contrast,
+            stain=args.stain,
+            tear=args.tear,
+        ),
         seed=args.seed,
     )
     path = args.out / f"synth_{args.seed}.png"
@@ -339,6 +344,7 @@ def main(argv: list[str] | None = None) -> int:
     synth.add_argument("--curvature", type=float, default=0.25)
     synth.add_argument("--contrast", type=float, default=0.28)
     synth.add_argument("--stain", type=float, default=0.0)
+    synth.add_argument("--tear", type=float, default=0.0)
     synth.add_argument("--seed", type=int, default=0)
     synth.add_argument("--out", type=Path, default=Path("out"))
     synth.set_defaults(func=cmd_synth)

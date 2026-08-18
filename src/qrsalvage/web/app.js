@@ -443,6 +443,7 @@ function liveEvent(e) {
     const member = e.member !== undefined ? `photograph ${e.member + 1} · ` : "";
     const extra =
       e.type === "grid" && e.phase === "bow" ? " — letting it bow" :
+      e.type === "grid" && e.phase === "restart" ? " — the grid sat badly, trying a wider step" :
       e.type === "probe" ? ` — ${e.tried} of ${e.budget} attempts` :
       e.type === "repair" ? (e.method === "ladder" ? ` — ${e.step} erasures` : ` — ${e.step} sets`) :
       e.type === "member" ? ` — ${e.index + 1} of ${e.total}` : "";

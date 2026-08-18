@@ -93,7 +93,8 @@ Break any of these and the project stops being itself:
 |---|---|
 | improve detection of damaged finders | `geometry.find_finders`, `scanfinder.py`, merged in `pipeline.detect_finders` |
 | improve the grid on curved surfaces | `geometry.refine_corners` / `refine_bow` (read the measured results in its docstring first) |
-| improve the per-cell probabilities | `sampling.estimate_levels` / `posterior_dark`; calibration measured by `scripts/calibration.py` |
+| rescue a grid that seated on the wrong thing | `geometry.restart_coarse`, triggered in `pipeline.solve` past `COARSE_RESTART_THRESHOLD`; measured by `scripts/ab_restart.py` |
+| improve the per-cell probabilities | `sampling.estimate_levels` / `posterior_dark`; calibration measured by `scripts/calibration.py`, robustness against lying known cells by `scripts/ab_robust.py` |
 | change what the repair may try | `repair.py`; the decode chain order is `pipeline._decode_chain` |
 | add an export format | `export.py`, wired into the request layer in `api.py` (both web shells inherit it) |
 | change the web page | `web/index.html` + `web/app.js` + `web/style.css` — static files, no build step; served by `server.py` locally and copied verbatim into the published site |

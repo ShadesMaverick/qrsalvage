@@ -35,6 +35,42 @@ BEACON_WEIGHT = 0.0
 NEIGHBOR_WEIGHT = 0.0
 SPATIAL_BLUR = 1.2  # in cells; roughly the scale at which stains outgrow single modules
 
+# The robust level estimate, and the failure that forced it. On a photograph of a torn
+# printout, the fitted grid overhung the torn paper edge, so a column of known-dark cells
+# measured bright paper. Those outliers dragged the two quadratic fields until they crossed;
+# the contrast clamp then bottomed out at 1e-6, the contrast-normalised residuals exploded,
+# and base_sigma came out at 2.9 million -- which flattened the posterior of 555 of 841 cells
+# to a coin toss on an image whose actual contrast was fine (dark median 102, light median
+# 197). Three defences, together: known cells whose residual is an extreme outlier are
+# excluded from the field fit, the contrast floor is a fraction of the median contrast
+# instead of an absolute epsilon, and the scatter is estimated by MAD, which a handful of
+# outliers cannot inflate.
+#
+# MEASURED RESULT (scripts/ab_robust.py, 16 images per level and arm), and it is not a
+# success-rate story. Control axis contrast: 16/16, 16/16, 15/16 -- identical in both arms,
+# which is what a control has to show. Stain: 14/14, 11 -> 12, 8 -> 9; one image in sixteen
+# at two levels, well inside the noise. Tear: 14/14, 14/14, 6/6 -- identical, and that axis
+# breaks through lost finder detection rather than through this term anyway.
+#
+# What the term does buy is the honesty of the numbers the escalation reads. On the
+# photograph above it cut the uncertain cells from 555 to 37 while the image's actual
+# contrast was never in doubt; a posterior flattened to 0.5 also destroys the flip-cost
+# ordering, so the probe spends its whole budget ranking cells at random. The constructed
+# case in test_lying_known_cells_cannot_flatten_the_posterior goes from 775 of 841 cells
+# uncertain to none. And one concrete recovery: the fusion suite's hard case (stain 0.50,
+# group 7) had all three photographs failing alone before and now solves from a single one,
+# which is why that test needed a harder case (0.55, group 2).
+#
+# THE COST, measured: 2.4x the level fits on a clean image, 2.9x on a stained one, for 40 to
+# 50 percent more wall clock. The rejection loop runs inside the grid search, where most
+# candidate placements are legitimately wrong and therefore look full of outliers. The
+# obvious repair -- reject robustly only once the grid is settled -- needs the search path
+# and the final sampling separated first; today both run through geometry._score.
+ROBUST_LEVELS = True
+CONTRAST_FLOOR = 0.15  # of the median contrast
+OUTLIER_SIGMAS = 3.5
+MIN_KNOWN_PER_CLASS = 12  # never thin a field's support below this; 6 parameters need slack
+
 
 @dataclass(frozen=True)
 class LevelFit:
@@ -131,20 +167,47 @@ def estimate_levels(
     Only the *excess* spread counts. A dot-raster engraving gives every cell a baseline of
     internal variation, and charging every module for it would flatten the signal instead of
     sharpening it. The baseline is taken from the known cells, where it can be measured.
+
+    The estimate must also survive known cells that lie. A least-squares fit hands a few
+    grossly wrong known cells -- a grid column overhanging a torn paper edge, a stain across
+    a finder -- enough leverage to bend the fields until they cross, and a scatter taken as a
+    standard deviation is inflated by exactly the outliers it should have flagged. See the
+    note at :data:`ROBUST_LEVELS` for the observed failure and the three defences. The loop
+    below converges in two or three rounds on damaged images and runs exactly once on clean
+    ones, where no residual crosses the threshold.
     """
-    dark = _fit_quadratic(means, known_dark)
-    light = _fit_quadratic(means, known_light)
-    contrast = np.maximum(light - dark, 1e-6)
-    known = known_dark | known_light
+    use_dark, use_light = known_dark, known_light
+    for _ in range(4):
+        dark = _fit_quadratic(means, use_dark)
+        light = _fit_quadratic(means, use_light)
+        if ROBUST_LEVELS:
+            floor = CONTRAST_FLOOR * max(float(np.median(light - dark)), 1.0)
+        else:
+            floor = 1e-6
+        contrast = np.maximum(light - dark, floor)
+        residual_dark = (means - dark) / contrast
+        residual_light = (means - light) / contrast
+        residuals = np.concatenate([residual_dark[use_dark], residual_light[use_light]])
+        if not ROBUST_LEVELS:
+            base_sigma = max(float(np.std(residuals)) or 0.1, 0.02)
+            break
+        centred = np.abs(residuals - np.median(residuals))
+        base_sigma = max(
+            1.4826 * float(np.median(centred)) or float(np.std(residuals)) or 0.1, 0.02
+        )
+        drop_dark = use_dark & (np.abs(residual_dark) > OUTLIER_SIGMAS * base_sigma)
+        drop_light = use_light & (np.abs(residual_light) > OUTLIER_SIGMAS * base_sigma)
+        if not (drop_dark.any() or drop_light.any()):
+            break
+        if (
+            int((use_dark & ~drop_dark).sum()) < MIN_KNOWN_PER_CLASS
+            or int((use_light & ~drop_light).sum()) < MIN_KNOWN_PER_CLASS
+        ):
+            break
+        use_dark = use_dark & ~drop_dark
+        use_light = use_light & ~drop_light
 
-    residuals = np.concatenate(
-        [
-            ((means - dark) / contrast)[known_dark],
-            ((means - light) / contrast)[known_light],
-        ]
-    )
-    base_sigma = max(float(np.std(residuals)) or 0.1, 0.02)
-
+    known = use_dark | use_light
     baseline = float(np.median(spread[known])) if known.any() else 0.0
     excess = np.maximum(spread - baseline, 0.0) / contrast
     variance = base_sigma**2 + (SPREAD_WEIGHT * excess) ** 2
