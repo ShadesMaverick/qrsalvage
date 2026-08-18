@@ -37,6 +37,12 @@ AXES: dict[str, tuple[str, tuple[float, ...]]] = {
     "resolution": ("module_px", (9.0, 8.0, 7.0, 6.0, 5.0, 4.0)),
     "stain": ("stain", (0.0, 0.10, 0.20, 0.30, 0.40, 0.50)),
     "tear": ("tear", (0.0, 0.20, 0.40, 0.60, 0.80, 1.00)),
+    # Every level here has been measured; the axis deliberately stops at 3.0 rather than
+    # running on into ground nobody has looked at. Expect it to stay flat: a corner-local
+    # displacement is largely absorbable by a homography, which has four corners to move,
+    # and up to 3.0 it costs about 4 percent of the known cells and no recoveries at all.
+    # A flat axis is a statement about the damage, not a broken instrument.
+    "curl": ("curl", (0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0)),
 }
 
 

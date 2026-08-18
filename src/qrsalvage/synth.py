@@ -38,13 +38,21 @@ class Damage:
     # white on black. Common enough on hardware labels, and invisible to a pipeline that
     # assumes dark modules.
     inverted: bool = False
-    # A torn paper edge along the code's left flank, from a photographed real case: the
-    # curled edge shades the quiet zone with a soft gray strip about as dark as a module
-    # column, and the curl displaces the nearby modules -- most at the bottom-left corner,
-    # not at all across the rest of the code. Both halves matter: the strip offers the
-    # geometry a false dark column to lock onto, and the displacement is exactly the kind
-    # a homography (and an edge-pinned bow) cannot express.
+    # The two halves of a torn paper edge along the code's left flank, from a photographed
+    # real case. They are separate parameters because they break the pipeline in different
+    # places, and a composite axis could not attribute either: measured, `tear` alone takes
+    # out finder detection while `curl` alone leaves it intact and displaces the grid. Set
+    # both to reproduce the photograph; set one to measure what it does.
+    #
+    # `tear` is the optical half: the curled edge shades the quiet zone with a soft gray
+    # strip about as dark as a module column, offering the geometry a false dark column to
+    # lock onto right where the left finders' dark edge belongs.
     tear: float = 0.0
+    # `curl` is the geometric half: the lift of the curled edge displaces the modules nearest
+    # to it, most at the bottom-left corner and not at all across the rest of the code. That
+    # shape is exactly what neither a homography nor the edge-pinned bow can express -- the
+    # bow's bumps vanish at the borders, which is where this damage lives.
+    curl: float = 0.0
 
 
 def _cylinder_map(shape: tuple[int, int], curvature: float):
@@ -85,16 +93,22 @@ def render_photo(matrix: np.ndarray, damage: Damage, seed: int = 0) -> np.ndarra
     img: np.ndarray = 1.0 - damage.contrast * (1.0 - engraved)
 
     if damage.tear > 0:
-        # The shadow strip of the curled torn edge: a soft gray band hugging the code's
-        # left flank, eating most of the quiet zone. At full strength its centre is as
-        # dark as a module, which is what makes it a trap -- a dark column exactly where
-        # the finder patterns' left edge is expected.
-        edge = quiet * px
-        centre = edge - 0.8 * px
-        profile = np.clip(1.0 - np.abs(xx - centre) / (1.6 * px), 0.0, 1.0)
-        # Capped below full module darkness: the real strip is a shadow, not ink. At full
-        # strength an ink-dark bar breaks the finder search instead of the geometry, and
-        # the finder search failing is a different, less interesting way to lose.
+        # The penumbra of the curled torn edge: a soft, several-module-wide gradient in the
+        # quiet zone, peaking *outside* the code and reaching in only with its tail.
+        #
+        # The first version of this was a narrow triangular bar centred 0.8 modules outside
+        # the edge, and it failed as an instrument for a measured reason: its support ran
+        # straight over the finder's outer rings, so it destroyed finder detection long
+        # before it could mislead any geometry. At tear 1.0 the detector found one finder
+        # instead of three. A real torn edge does not cast a bar -- it is out of focus and
+        # its shadow spans several modules, which is what lets the finders survive it.
+        #
+        # Gaussian rather than triangular for the same reason: a hard edge is a feature the
+        # binarisation can latch onto in its own right, and the point here is a gradient.
+        centre = (quiet - 1.5) * px
+        sigma = 1.5 * px
+        profile = np.exp(-((xx - centre) ** 2) / (2.0 * sigma**2))
+        # Capped below full module darkness: the real strip is a shadow, not ink.
         img = np.clip(img - damage.tear * damage.contrast * 0.85 * profile, 0.0, 1.0)
 
     if damage.rotation_deg:
@@ -105,14 +119,18 @@ def render_photo(matrix: np.ndarray, damage: Damage, seed: int = 0) -> np.ndarra
         map_x, map_y = _cylinder_map((h, w), damage.curvature)
         img = cv2.remap(img, map_x, map_y, cv2.INTER_LINEAR, borderValue=1.0)
 
-    if damage.tear > 0:
+    if damage.curl > 0:
         # The curl of the torn edge: a horizontal displacement that peaks at the
         # bottom-left corner and decays within a few modules of the edge. Zero along the
         # top and the far side -- so no homography can absorb it, and the bow cannot
         # either, because its bumps vanish exactly at the edges where this lives.
+        #
+        # Applied after the cylinder rather than with it, because the two are different
+        # surfaces: the cylinder bends the whole sheet, this lifts one edge of it. Scaled in
+        # modules, so the damage means the same thing at any module_px.
         depth = yy / np.float32(max(h - 1, 1))
         reach = np.exp(-np.maximum(xx - quiet * px, 0.0) / np.float32(4.0 * px))
-        curl_x = (xx - damage.tear * 1.5 * px * depth * reach).astype(np.float32)
+        curl_x = (xx - damage.curl * 1.5 * px * depth * reach).astype(np.float32)
         img = cv2.remap(img, curl_x, yy, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
 
     # Glare: a broad bright lobe across the image.

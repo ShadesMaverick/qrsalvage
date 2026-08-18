@@ -398,8 +398,10 @@ def restart_coarse(
     MEASURED ON THE SYNTHETIC CORPUS: nothing at all (scripts/ab_restart.py, 16 images per
     level and arm). Curvature 0.70 and module size 5 px solve completely in both arms without
     the escalation ever firing; curvature 0.85 and 0.95 fire on all 16 images and rescue none;
-    module size 4.5 and 4 px, and the tear axis at 0.8 and 1.0, are level in both arms too.
-    Every level, identical.
+    module size 4.5 and 4 px, and the torn-edge axis at 0.8 and 1.0, are level in both arms
+    too. Every level, identical. (The torn-edge run predates both the split of that damage
+    into an optical and a geometric half and the reshaping of its shadow, so it describes the
+    axis as it then was rather than as it is now.)
 
     That is a statement about the corpus rather than about the escalation, and worth reading
     carefully before deleting either. A trapped descent and an unfittable surface both show up
