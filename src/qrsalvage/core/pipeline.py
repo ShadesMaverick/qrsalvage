@@ -245,8 +245,17 @@ def _prepare_with_hints(
     which prepare() tolerates.
     """
     pts = np.array(points, dtype=np.float64)
-    sides = sorted(float(np.linalg.norm(pts[i] - pts[j])) for i, j in ((0, 1), (0, 2), (1, 2)))
-    span = (sides[0] + sides[1]) / 2.0
+    if len(pts) == 2:
+        # A marked pair instead of a triple: the third finder is destroyed or outside the
+        # frame, which is exactly when marking it is impossible. The two centres still say how
+        # large the code is -- assuming they are adjacent, which the diagonal pair breaks by a
+        # factor of root two. That lands the rescale at eight instead of eleven pixels per
+        # module, still inside the band prepare() is built for, so the ambiguity is tolerable
+        # rather than resolved.
+        span = float(np.linalg.norm(pts[0] - pts[1]))
+    else:
+        sides = sorted(float(np.linalg.norm(pts[i] - pts[j])) for i, j in ((0, 1), (0, 2), (1, 2)))
+        span = (sides[0] + sides[1]) / 2.0
     module_px = span / 22.0  # the middle of DEFAULT_SIZES, minus the 7 finder modules
 
     if span < 1.0 or GOOD_MODULE_PX[0] <= module_px <= GOOD_MODULE_PX[1]:
@@ -256,7 +265,9 @@ def _prepare_with_hints(
     # Crop to the marked code first. The clicks bound it, and preparing twelve megapixels in
     # order to use one is what made this path minutes-slow. The margin covers the code's
     # reach past the finder centres plus the quiet zone, at the smallest version (0.55 spans).
-    margin = 0.6 * span
+    # A pair leaves one whole side of the code outside its bounding box -- the third corner
+    # sits a full span away, on whichever side, so the margin has to cover that too.
+    margin = 0.6 * span if len(pts) >= 3 else 1.25 * span
     x0 = max(0, int(pts[:, 0].min() - margin))
     y0 = max(0, int(pts[:, 1].min() - margin))
     x1 = min(bgr.shape[1], int(pts[:, 0].max() + margin))
@@ -326,8 +337,15 @@ def _attempt(
         # recognises it -- both happen on real damage. The geometry is still determined up to
         # six discrete choices, so all of them are fitted and the known cells decide. This path
         # costs six times a normal fit, which is why it is a fallback.
+        #
+        # Candidates outside the image are skipped for the automatic pairs only. Those pairs
+        # are unvetted, and a far-out third fits a garbage grid onto border pixels. A
+        # hand-marked pair is the opposite case: the person marked two centres precisely
+        # because the third is destroyed or beyond the frame, so for them every geometric
+        # reading is fitted and the known cells decide, as everywhere else.
         for third in third_finder_candidates(finders[0], finders[1]):
-            if not (0 <= third[0] < gray.shape[1] and 0 <= third[1] < gray.shape[0]):
+            in_frame = 0 <= third[0] < gray.shape[1] and 0 <= third[1] < gray.shape[0]
+            if finder_points is None and not in_frame:
                 continue
             fits.extend(fit_grid(gray, [*finders[:2], third], sizes, start_delta=max(delta, 8.0)))
 
@@ -562,10 +580,12 @@ def solve(
     - ``"geometry"``  several independently fitted grids. More expensive, but the spread hits
                       the actual source of error.
 
-    `finder_points` overrides the automatic finder search with three centre coordinates in any
-    order. This is the escape hatch for photographs where the search fails -- a cluttered
-    background, a finder eaten by a stain. Only the positions matter; the grid fit derives the
-    module size from their spacing and refines from there, so clicking them roughly is enough.
+    `finder_points` overrides the automatic finder search with two or three centre coordinates
+    in any order. This is the escape hatch for photographs where the search fails -- a
+    cluttered background, a finder eaten by a stain. Only the positions matter; the grid fit
+    derives the module size from their spacing and refines from there, so clicking them
+    roughly is enough. Two points mean the third finder cannot be marked at all -- destroyed,
+    or outside the frame -- and every geometric reading of the pair is fitted instead.
     """
     if ensemble not in ENSEMBLE_MODES:
         raise ValueError(f"unknown ensemble mode: {ensemble!r}")
@@ -574,6 +594,11 @@ def solve(
         x0, y0, x1, y1 = crop
         bgr = bgr[y0:y1, x0:x1]
         crop_offset = (float(x0), float(y0))
+        if finder_points is not None:
+            # Hand-marked centres live in the coordinates of the image the caller gave --
+            # the same frame every reported finder is mapped back into. The crop is an
+            # internal narrowing and must not change what the numbers mean.
+            finder_points = [(x - x0, y - y0) for x, y in finder_points]
 
     # Events from inside the attempt carry working-image coordinates already mapped back to
     # the (cropped) input; the crop offset is the one shift the attempt cannot know about.
@@ -739,6 +764,7 @@ def solve_many(
     min_agreement: float = 0.75,
     member_budget: int = MEMBER_BUDGET,
     invert: bool | None = None,
+    finder_points: list[tuple[float, float]] | None = None,
     progress: ProgressFn | None = None,
 ) -> SolveResult:
     """Recover one code from several photographs of it.
@@ -757,7 +783,13 @@ def solve_many(
         return SolveResult(text=None, failure="no images given")
     if len(images) == 1:
         return solve(
-            images[0], crop=crop, sizes=sizes, budget=budget, invert=invert, progress=progress
+            images[0],
+            crop=crop,
+            sizes=sizes,
+            budget=budget,
+            invert=invert,
+            finder_points=finder_points,
+            progress=progress,
         )
 
     members = []
@@ -767,8 +799,16 @@ def solve_many(
         def tagged(event: str, data: dict, _index: int = index) -> None:
             _emit(progress, event, member=_index, **data)
 
+        # The same hand-marked centres for every photograph, like the crop: both assume the
+        # framings match, and mixed framings are the caller's to align beforehand.
         member = solve(
-            image, crop=crop, sizes=sizes, budget=member_budget, invert=invert, progress=tagged
+            image,
+            crop=crop,
+            sizes=sizes,
+            budget=member_budget,
+            invert=invert,
+            finder_points=finder_points,
+            progress=tagged,
         )
         members.append(member)
         if member.solved:

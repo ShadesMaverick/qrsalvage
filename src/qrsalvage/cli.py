@@ -132,6 +132,16 @@ def _report_fusion(fusion) -> None:
 
 
 def cmd_solve(args: argparse.Namespace) -> int:
+    finders = None
+    if args.finders:
+        if len(args.finders) not in (4, 6):
+            print("--finders takes two or three centres, so 4 or 6 numbers: X Y X Y [X Y]")
+            return 1
+        finders = [
+            (float(x), float(y))
+            for x, y in zip(args.finders[0::2], args.finders[1::2], strict=True)
+        ]
+
     images = []
     for path in args.image:
         image = cv2.imread(str(path))
@@ -144,11 +154,17 @@ def cmd_solve(args: argparse.Namespace) -> int:
     crop = tuple(args.crop) if args.crop else None
     sizes = args.sizes or DEFAULT_SIZES
     if len(images) == 1:
-        result = solve(images[0], crop=crop, sizes=sizes, budget=args.budget)
+        result = solve(images[0], crop=crop, sizes=sizes, budget=args.budget, finder_points=finders)
     else:
         print(f"{len(images)} photographs of one code\n")
         result = solve_many(
-            images, crop=crop, sizes=sizes, budget=args.budget, band=args.band, rule=args.fuse
+            images,
+            crop=crop,
+            sizes=sizes,
+            budget=args.budget,
+            band=args.band,
+            rule=args.fuse,
+            finder_points=finders,
         )
     _report(result, args.out, args.band)
     image = images[0]
@@ -273,6 +289,18 @@ def main(argv: list[str] | None = None) -> int:
         help="applies to every image given, so crop mixed framings beforehand",
     )
     solver.add_argument("--sizes", nargs="*", type=int, help="candidate sizes in modules")
+    solver.add_argument(
+        "--finders",
+        nargs="*",
+        type=float,
+        metavar="N",
+        help="finder centres by hand, as X Y pairs in pixels of the (uncropped) image: three "
+        "pairs when all corners are visible, two when one finder is destroyed or lies outside "
+        "the frame -- the geometrically possible positions of the third are then all fitted "
+        "and the known cells decide. The escape hatch for photographs where the automatic "
+        "search grabs an artefact; rough coordinates are enough, each centre snaps onto the "
+        "nearest real pattern",
+    )
     solver.add_argument("--budget", type=int, default=4000, help="max decode attempts when probing")
     solver.add_argument("--band", type=float, default=0.15, help="uncertainty band for the grid")
     solver.add_argument("--out", type=Path, default=Path("out"))
