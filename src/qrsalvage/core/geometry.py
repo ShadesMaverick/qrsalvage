@@ -16,6 +16,31 @@ import numpy as np
 
 from .sampling import estimate_levels, posterior_dark, sample_cells, warp
 
+# How much the grid objective listens to the cells the standard does not fix. Zero reproduces
+# the known-cell-only objective exactly. See the note at its use in _score for what it
+# measures and why it can only ever be an addition; scripts/ab_coherence.py for what it buys.
+#
+# The value comes from the photograph that motivated the term -- a torn printout whose grid
+# settled half a module into the shadow of the paper edge. Measured on it, sweeping the
+# weight with the coarse restart disabled so the fine descent has to do the work alone: at 0
+# and 0.2 the descent stays stuck (21 and 16 of 244 known cells wrong, no recovery); from 0.4
+# it escapes and decodes on the first attempt; at 0.6 it does so with no uncertain cell left
+# at all. 0.6 is the first value with margin above the threshold rather than sitting on it.
+#
+# Note what this replaces rather than adds to: COARSE_RESTART rescued the same photograph by
+# searching harder, this one by making the wrong placement stop being a local optimum. The
+# restart stays because it costs nothing when it does not fire, but it is no longer what
+# carries this case.
+#
+# MEASURED ON THE SYNTHETIC AXES (scripts/ab_coherence.py, w=0.0 against w=0.6): level within
+# noise everywhere. Contrast 8/8, 7/8, 7/8 in both arms; curvature 8/8, 8/8, 0/8 in both (the
+# 0.85 failures pick a wrong size in both arms -- that level is unfittable, not misled);
+# stain 6/8, 5/8, 4/8 in both. Resolution first looked like a regression (6/8 to 4/8 at
+# 5 px, n=8) and dissolved on re-measurement with n=16: 9/16 without, 11/16 with. The term
+# converts no synthetic case and spoils none; what it is for is the trapped-descent geometry
+# above, which the synthetic corpus cannot reproduce (see restart_coarse on why).
+COHERENCE_WEIGHT = 0.6
+
 
 @dataclass(frozen=True)
 class GridFit:
@@ -205,7 +230,10 @@ def _score(
     known_dark: np.ndarray,
     known_light: np.ndarray,
 ) -> GridFit:
-    """Score one rectification against the cells whose value the standard fixes."""
+    """Score one rectification against the cells whose value the standard fixes.
+
+    Plus, optionally, against the cells whose value it does not -- see COHERENCE_WEIGHT.
+    """
     means, spread = sample_cells(warped, modules, scale)
     fit = estimate_levels(means, spread, known_dark, known_light)
     posterior = posterior_dark(means, fit)
@@ -215,6 +243,24 @@ def _score(
     # against, unlike the integer error count.
     margin = np.where(known_dark, fit.threshold - means, means - fit.threshold) / fit.contrast
     quality = float(np.tanh(margin[known] * 4.0).mean())
+
+    if COHERENCE_WEIGHT > 0.0 and (~known).any():
+        # What the known cells cannot say. They ring the code, so the objective has been deaf
+        # to the several hundred data cells in the middle -- and a grid half a module out of
+        # phase is visible in every one of them: each cell straddles two modules, so its core
+        # mixes dark and light, its mean lands near the threshold and its internal spread
+        # rises. Seated correctly, the same cells read cleanly one way or the other.
+        #
+        # The posterior already carries both halves of that signal (distance from the
+        # threshold through the mean, uncertainty through the spread-fed sigma), so mean
+        # confidence over the unknown cells is the whole term, bounded in [0, 1] like the
+        # known-cell term it is added to.
+        #
+        # It cannot replace the known-cell term, only add to it: coherence alone is maximised
+        # by any grid that lands wholly inside a uniform area, which the known cells are what
+        # rules out. Hence a weight, and hence a measurement of it.
+        quality += COHERENCE_WEIGHT * float(np.abs(2.0 * posterior[~known] - 1.0).mean())
+
     hard = means < fit.threshold
     wrong = int((hard[known] != known_dark[known]).sum())
 

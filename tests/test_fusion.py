@@ -31,11 +31,17 @@ BASE = Damage(contrast=0.18, curvature=0.30, module_px=8.0)
 # does fusing three rescue what three cannot do individually. A stain sits somewhere else in
 # every photograph, so each loses a different part of the code while the others still hold it.
 # That is the case this path exists for, and these values were found by searching for one the
-# single-image path provably cannot solve. The search has to be redone whenever the solver
-# gets stronger: the robust level estimate (ROBUST_LEVELS in sampling.py) solved the previous
-# case (0.50, group 7) from a single image -- along with every other group at stain 0.50.
+# single-image path provably cannot solve.
+#
+# The search has to be redone whenever the solver gets stronger, and it has been twice now, so
+# treat this failing as a result rather than a chore: the robust level estimate (ROBUST_LEVELS
+# in sampling.py) read the case at 0.50/group 7 from one photograph -- as it did every other
+# group at that stain -- and the grid coherence term (COHERENCE_WEIGHT in geometry.py) then
+# read 0.55/group 2 the same way. Each time, work aimed at something else moved a case out of
+# "needs three photographs" and into "needs one", which is the clearest evidence either change
+# produced. When this precondition next breaks, the first question is which change earned it.
 HARD_STAIN = 0.55
-HARD_GROUP = 2
+HARD_GROUP = 7
 
 
 def photographs(stain: float, group: int, count: int = 3) -> list[np.ndarray]:
