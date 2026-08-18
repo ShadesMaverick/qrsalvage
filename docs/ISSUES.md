@@ -485,11 +485,50 @@ quadratische Anpassung wegrechnen. Das echte Foto trifft das Fenster, weil sein 
 ist: weich genug für die Finder, lokal genug an der Codekante. Über die Schattenform allein ist
 das synthetisch nicht erreichbar.
 
-**Nächster Kandidat, falls es jemand erneut versucht:** nicht weiter an der Schattenform drehen,
-sondern den Attraktor woanders herholen — etwa eine zweite, um eine Modulbreite versetzte
-*Codekante*, wie sie ein stehengebliebener Rest des abgerissenen Nachbaretiketts erzeugt. Die
-berührt die Finder gar nicht und ist trotzdem lokal. Bis dahin gilt: Der grobe Neustart hat
-genau einen Beleg, und der ist ein Foto.
+**Dritter Versuch: der Reststreifen — ebenfalls gescheitert, und zwar wie vorhergesagt.**
+
+Die Idee war, den Attraktor nicht weiter zu formen, sondern woanders herzuholen: `remnant`
+druckt einen stehengebliebenen Streifen des Nachbaretiketts in die Ruhezone — gleiche Presse,
+gleiche Modulteilung, zwei Module breit, durch genau ein freies Modul vom Code getrennt. Der
+Gedanke: Er berührt die Finder nicht und legt trotzdem Modulstruktur dorthin, wo die äußerste
+Spalte eines verschobenen Gitters sonst weißes Papier findet.
+
+Die Vorhersage wurde **vor** dem Lauf notiert und hat gehalten: Der Lichtspalt, der die Finder
+rettet, nimmt dem Attraktor zugleich die Wirkung. Gemessen (6 Bilder je Zelle):
+
+| remnant | curl | Finder | falsch (Median) | Zellen >5 % | ohne | mit Neustart |
+|---|---|---|---|---|---|---|
+| 0,0 | 0,0 | 6/6 | 0,0 % | 0 | 6/6 | 6/6 |
+| 0,0 | 2,0 | 6/6 | 1,2 % | 0 | 6/6 | 6/6 |
+| 0,0 | 3,0 | 6/6 | 4,5 % | 0 | 6/6 | 6/6 |
+| 0,6 | 0,0 | 6/6 | 0,0 % | 0 | 6/6 | 6/6 |
+| 0,6 | 2,0 | 6/6 | 1,6 % | 0 | 6/6 | 6/6 |
+| 0,6 | 3,0 | 6/6 | 2,9 % | 0 | 6/6 | 6/6 |
+| 1,0 | 0,0 | 6/6 | 0,0 % | 0 | 6/6 | 6/6 |
+| 1,0 | 2,0 | 6/6 | 1,6 % | 0 | 6/6 | 6/6 |
+| 1,0 | 3,0 | 6/6 | 2,9 % | 0 | 6/6 | 6/6 |
+
+Keine Zelle überschreitet die Schwelle, keine löst schlechter, alle Arme identisch. Der
+Streifen ist für die Pipeline schlicht nicht vorhanden.
+
+**Warum diese Linie erschöpft ist.** Drei Versuche, drei Mal derselbe Wall: Die
+Qualitätsfunktion sieht den linken Rand ausschließlich über die Finder — in den mittleren
+Zeilen ist Spalte 0 Datenfeld und damit unbekannt, ein Attraktor dort bewegt nichts. Wirken
+kann er nur neben einem Finder; steht er dort dicht genug, um zu wirken, verschmilzt er in der
+Binarisierung mit dessen äußerem Ring und zerstört die Erkennung (Schattenbalken); hält man ihn
+mit einem Spalt fern, bleibt er wirkungslos (Reststreifen); und ein Verlauf, der beides
+umgehen soll, wird von adaptiver Schwelle und quadratischen Niveaufeldern weggerechnet
+(Penumbra). **Ohne Änderung an der Zielfunktion selbst — etwa dass sie auch unbekannte Zellen
+auf Modulraster-Kohärenz prüft — ist die Falle synthetisch nicht erreichbar.** Wer es erneut
+versucht, sollte dort ansetzen und nicht am Schadensbild.
+
+**Nebenbefund, unbeabsichtigt und positiv:** Die Pipeline ist von Modulraster-Störstruktur
+direkt neben dem Code vollkommen unbeeindruckt — bei voller Streifenschwärze und einem Modul
+Abstand bleiben Findererkennung, Versionswahl und Gitteranpassung unverändert. Das ist eine
+Robustheitseigenschaft, die vorher niemand geprüft hatte, und `remnant` ist ab jetzt das
+Instrument, das sie festhält.
+
+Bis auf Weiteres gilt: Der grobe Neustart hat genau einen Beleg, und der ist ein Foto.
 
 **(c) Der Bogen-Term kann Randversatz prinzipiell nicht ausdrücken — DOKUMENTIERT.** Seine
 Beulen `4t(1-t)` verschwinden an den Rändern; das ist Absicht (Schutz gegen das Verbiegen der
