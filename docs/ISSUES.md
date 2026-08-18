@@ -543,3 +543,56 @@ Parametrisierung des Warps.
 
 
 
+
+---
+
+## 9. Unterkante ohne Anker: das Alignment-Muster als vierter Fixpunkt
+
+**Labels:** `enhancement`, `geometry`
+
+Befund vom Foto einer abgeriebenen Gebrauchsanleitung (untere ~5 Modulreihen samt BL-Finder
+weg, v4/33): Zwei Gitter treffen **beide 220 von 220 sichtbaren Strukturzellen fehlerfrei**
+und lesen trotzdem 197 Datenzellen verschieden — nur eines decodiert. Die Lage der Bodenkante
+ist bei zerstörter Unterkante durch keine einzige Strukturzelle festgelegt; der Kohärenzterm
+allein trennt die Skalenhypothesen nicht (gemessen: Handkonstruktion mit Faktor 1,06 löst,
+die senkrechte Konstruktion mit 1,00 nicht, beide sehen im Objective gleich gut aus).
+
+Der aussichtsreichste Anker: **das Alignment-Muster.** Ab Version 2 sitzt es bei
+(n-7, n-7) — beim genannten Foto Reihe 26 von 33, also *oberhalb* des zerstörten Streifens.
+Ein 5x5-Muster mit festem Zentrum legt die Skala der Bodenkante fest, wo Finder fehlen.
+Heutiger Ausweg auf der Eskalationsleiter: `--finders` mit drei Punkten, den dritten
+konstruiert (so wurde das Foto gelöst). Zweiter Kandidat, falls das Alignment auch zerstört
+ist: Skalenhypothesen (0,94–1,06) je durch die volle Decode-Kette schicken und den Decoder
+entscheiden lassen — teuer, aber nur als Eskalation nach Fehlschlag.
+
+**Fertig, wenn:** das Foto (liegt im Batch-Protokoll, Reddit-Fund „damaged-qr-encoding-url")
+vollautomatisch löst, und die worn-Achse bei 0,12+ messbar über die heutigen 9/16 steigt.
+
+---
+
+## 10. Strukturierter Abrieb ist kein Featureless-Fall
+
+**Labels:** `enhancement`, `sampling`
+
+Dasselbe Foto, zweiter Befund: Der obere Rand des Schadstreifens ist kein leeres Papier,
+sondern Restpigment mit Modulresten (Spalten 8–21 über drei Reihen, Konfidenzen 0,2–0,5).
+Das Zählargument in `sampling.featureless_depth` kann solche Flächen prinzipiell nicht
+markieren — sie *sind* nicht einfarbig. Ihre Zellen erreichen Reed-Solomon als konfidente
+Fehler (doppelt so teuer wie Erasures). Ideen, beide ungemessen: lokale Kontrastkarte
+(Fensterspannweite der means gegen den Feldkontrast) als zweite, von der Einfarbigkeit
+unabhängige Verdachtsquelle; oder die bekannten falschen Strukturzellen als Beacons mit
+größerem Radius als die gescheiterten 1,2-Zellen-Blurs (`BEACON_WEIGHT`, dort dokumentiert).
+
+---
+
+## 11. Winzige Codes mit Fremdkante: die 4,5-px-Klasse
+
+**Labels:** `limits`, `documentation`
+
+Produktfoto eines Bosch-Sensors: Code ~100 px im Bild (4,5 px/Modul), lasergraviert,
+perspektivisch gekippt, eine Gehäusekante läuft durch die Codefläche. Gemessen: Hochskalieren
+(2–6-fach, cubic und lanczos, drei Crops) bringt die Fehlrate nie unter 15,9 %, die
+Versionswahl springt zwischen 21 und 37 Modulen. Unterhalb von etwa 5 px/Modul plus
+Fremdstruktur ist die Information im Foto erschöpft — das gehört als ehrliche Grenze in die
+Dokumentation (REACH/README), nicht in die Pipeline. Der richtige Rat an Nutzer: näher
+fotografieren, mehrere Fotos, Fusion.

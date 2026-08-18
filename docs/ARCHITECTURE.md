@@ -22,13 +22,15 @@ The interactive explainer of exactly this pipeline: `qrsalvage serve`, then `/me
 photograph(s)
    │  preprocess.py      illumination correction, binarisation
    ▼
-finder candidates       geometry.py + scanfinder.py   (two detectors, merged)
-   │
+finder candidates       geometry.py + scanfinder.py   (two detectors, merged;
+   │                     an implausible triple additionally tries its best pair)
    ▼
 grid per candidate size  geometry.py    coordinate descent on the known cells,
-   │                                    then a 4-parameter bow for curved surfaces
+   │                                    then a per-edge bow (8 parameters, Coons-style)
+   │                                    for curved and domed surfaces
    ▼
-probability per module   sampling.py    two brightness fields + per-cell uncertainty
+probability per module   sampling.py    two brightness fields + per-cell uncertainty;
+   │                                    featureless patches damped towards unknown
    │                                    (fuse_images in ensemble.py merges photographs here)
    ▼
 three-state matrix       matrix.py      dark / light / unknown  ← the core invariant
@@ -91,10 +93,12 @@ Break any of these and the project stops being itself:
 
 | I want to … | Look at |
 |---|---|
-| improve detection of damaged finders | `geometry.find_finders`, `scanfinder.py`, merged in `pipeline.detect_finders` |
-| improve the grid on curved surfaces | `geometry.refine_corners` / `refine_bow` (read the measured results in its docstring first) |
+| improve detection of damaged finders | `geometry.find_finders`, `scanfinder.py`, merged in `pipeline.detect_finders`; a triple past `TRIPLE_DOUBT` additionally tries its best pair (`pipeline._attempt`) |
+| improve the grid on curved surfaces | `geometry.refine_corners` / `refine_bow` (read the measured results in its docstring first; the per-edge bow is measured by `scripts/ab_dome.py`) |
 | rescue a grid that seated on the wrong thing | `geometry.restart_coarse`, triggered in `pipeline.solve` past `COARSE_RESTART_THRESHOLD`; measured by `scripts/ab_restart.py` |
 | improve the per-cell probabilities | `sampling.estimate_levels` / `posterior_dark`; calibration measured by `scripts/calibration.py`, robustness against lying known cells by `scripts/ab_robust.py` |
+| handle areas where the print is gone | `sampling.featureless_depth` / `buried_cells` (the counting argument), damped into the posterior in `pipeline.solve`; measured by `scripts/ab_worn.py`. The depth also strikes buried witnesses from `wrong_known` in `geometry._score` — deliberately never from the descent's quality; the docstring records the failure that rule comes from |
+| handle coloured overlays (marker, guide lines) | `preprocess.prepare` (`NEUTRAL_SATURATION`) — ships off, cap at zero; `scripts/ab_marker.py` is the instrument that says why |
 | change what the repair may try | `repair.py`; the decode chain order is `pipeline._decode_chain` |
 | add an export format | `export.py`, wired into the request layer in `api.py` (both web shells inherit it) |
 | change the web page | `web/index.html` + `web/app.js` + `web/style.css` — static files, no build step; served by `server.py` locally and copied verbatim into the published site |

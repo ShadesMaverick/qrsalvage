@@ -7,10 +7,14 @@ rates are involved, and is safe to run repeatedly.
 
 | Script | Question it answers |
 |---|---|
-| `difficulty.py` | How does the success rate degrade along one damage axis (contrast, curvature, resolution, stain, tear), all else held at baseline? The primary regression instrument. |
+| `difficulty.py` | How does the success rate degrade along one damage axis (contrast, curvature, resolution, stain, tear, curl, remnant, dome, worn, marker), all else held at baseline? The primary regression instrument. |
 | `calibration.py` | Does the posterior mean what it says? Reliability of claimed confidence, split into border (known cells) and middle (data cells) — the split is the point. |
 | `multi_image.py` | What do several photographs of one code buy over a single one, and under which fusion rule? Single images scored at the same budget, paired trials. |
 | `ab_bow.py` | Flat homography against the bowed grid on curved surfaces; the flat axis is the control. |
+| `ab_coherence.py` | The grid objective with and without the coherence term over the unknown cells: does listening to the middle rescue trapped descents without choosing tidy-looking wrong sizes? Result at `COHERENCE_WEIGHT` in `geometry.py`. |
+| `ab_dome.py` | No bow, the tied bow and the per-edge bow on radially distorted codes -- the damage that bows opposite edges in opposite directions. Result at `geometry.refine_bow`. |
+| `ab_worn.py` | Featureless patches read as confident cells against handed over as unknowns, on codes whose bottom rows are erased whole. Counts *wrong* recoveries separately, because a repair fed wrong erasure positions can produce presentable garbage. |
+| `ab_marker.py` | Coloured strokes read as ink against neutralised before the channel is read; zero strokes is the control where both arms must be identical. |
 | `ab_sigma.py` | The two spatial uncertainty terms on and off against localized damage (they measured useless; weights ship at zero — this is the instrument that says so). |
 | `ab_robust.py` | The robust level estimate on and off against known cells that lie (torn edge, stain); the contrast axis is the control. Result at `ROBUST_LEVELS` in `sampling.py`. |
 | `ab_restart.py` | The coarse restart of a badly seated grid on and off, on the axes that actually displace grids (curvature, resolution, tear); reports how often it fires, because an escalation that never triggers cannot help. Result at `geometry.restart_coarse`. |
