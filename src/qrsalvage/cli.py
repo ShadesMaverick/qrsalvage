@@ -253,6 +253,7 @@ def cmd_synth(args: argparse.Namespace) -> int:
             tear=args.tear,
             curl=args.curl,
             remnant=args.remnant,
+            dome=args.dome,
         ),
         seed=args.seed,
     )
@@ -377,6 +378,7 @@ def main(argv: list[str] | None = None) -> int:
     synth.add_argument("--tear", type=float, default=0.0)
     synth.add_argument("--curl", type=float, default=0.0)
     synth.add_argument("--remnant", type=float, default=0.0)
+    synth.add_argument("--dome", type=float, default=0.0)
     synth.add_argument("--seed", type=int, default=0)
     synth.add_argument("--out", type=Path, default=Path("out"))
     synth.set_defaults(func=cmd_synth)

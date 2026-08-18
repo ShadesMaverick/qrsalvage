@@ -64,6 +64,12 @@ class Damage:
     # left behind, and it exists for one purpose: to put module-pitch structure where a
     # displaced grid's outermost column would otherwise find blank paper.
     remnant: float = 0.0
+    # Radial barrel distortion around the code's centre: a sheet bulging toward the camera, or
+    # a lens that was never corrected. Deliberately the damage a cylinder axis cannot stand in
+    # for -- it bows opposite edges in opposite directions, which is invisible to a homography
+    # *and* to any bow that displaces both edges identically. Positive values compress the
+    # borders; the corners move most, so the flat corner fit absorbs part but not the arcs.
+    dome: float = 0.0
 
 
 def _cylinder_map(shape: tuple[int, int], curvature: float):
@@ -151,6 +157,20 @@ def render_photo(matrix: np.ndarray, damage: Damage, seed: int = 0) -> np.ndarra
     if damage.curvature > 0:
         map_x, map_y = _cylinder_map((h, w), damage.curvature)
         img = cv2.remap(img, map_x, map_y, cv2.INTER_LINEAR, borderValue=1.0)
+
+    if damage.dome != 0:
+        # Backward mapping: the target pixel at normalised radius r reads from radius
+        # r*(1 + dome*r^2) in the flat original, so content is squeezed toward the centre as
+        # the radius grows -- barrel distortion, centred on the code because the code sits
+        # centred in its quiet zone. Composed after the cylinder for the same reason curl is:
+        # they are different surfaces, and each keeps its own meaning when measured alone.
+        cx, cy = (w - 1) / 2.0, (h - 1) / 2.0
+        rx = (xx - cx) / cx
+        ry = (yy - cy) / cy
+        swell = 1.0 + damage.dome * (rx * rx + ry * ry)
+        dome_x = (cx + (xx - cx) * swell).astype(np.float32)
+        dome_y = (cy + (yy - cy) * swell).astype(np.float32)
+        img = cv2.remap(img, dome_x, dome_y, cv2.INTER_LINEAR, borderValue=1.0)
 
     if damage.curl > 0:
         # The curl of the torn edge: a horizontal displacement that peaks at the
