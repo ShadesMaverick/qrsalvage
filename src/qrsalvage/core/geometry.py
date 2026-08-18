@@ -291,23 +291,32 @@ def evaluate(
 def _bowed_warp(
     gray: np.ndarray, corners: np.ndarray, bow: np.ndarray, modules: int, scale: int
 ) -> np.ndarray:
-    """Rectify with a homography plus two separable quadratic bows.
+    """Rectify with a homography plus a quadratic bow per code edge, blended inward.
 
     The mathematical gap this closes: a homography maps straight lines to straight lines, and a
-    module row on a cylinder is not a straight line in the photograph -- it bows. Four corners
-    have no way to say "bow"; they can only tilt the plane.
+    module row on a curved surface is not a straight line in the photograph -- it bows. Four
+    corners have no way to say "bow"; they can only tilt the plane.
 
-    The parametrisation is deliberately the *smallest* one that can say it. A cylinder displaces
-    grid lines by an arc that depends on one coordinate only, and with the corners already
-    pinned by the flat fit, the quadratic bump 4t(1-t) is that arc's second-order shape. So:
-    two bow vectors, one swept along each axis, four scalars in all.
+    Each edge gets its own bow vector, swept across the code with linear falloff towards the
+    opposite edge -- a Coons patch whose boundary curves are the homography edges plus one
+    quadratic bump each. The corner-correction term a Coons patch normally needs vanishes here,
+    because the bump 4t(1-t) is zero at both ends of its edge: every corner stays exactly where
+    the flat fit pinned it. Eight scalars in all.
+
+    Why per edge, and not the two shared vectors this started with: a shared vector displaces
+    the top and bottom module rows identically, which is a cylinder and nothing else. A domed
+    or dished sheet -- paper bulging toward the camera, a lens-distorted scan -- bows the two
+    edges in *opposite* directions, and the shared parametrisation cannot say that at any
+    weight. The tied version survives inside this one (top equal to bottom, left to right), so
+    the models nest; scripts/ab_dome.py measures what untying buys and what it costs.
 
     Not a control lattice. A first version used a 3x3 lattice of free offsets -- eighteen
     parameters -- and it *overfitted the border*: the objective is measured on the known cells,
     which ring the code, so the lattice bought border margin by bending the unmeasured middle,
-    and images the flat grid solved stopped decoding. Four separable parameters cannot express
-    "fix the border, trash the middle"; the constraint is the parametrisation itself, with no
-    penalty weight to tune.
+    and images the flat grid solved stopped decoding. Edge bows cannot express "fix the border,
+    trash the middle": the interior is the bilinear blend of the edges, nothing about it is
+    free. The known cells sit exactly on the edges being parametrised, and since the coherence
+    term (COHERENCE_WEIGHT) the middle is no longer even unmeasured.
 
     Zero bow reproduces the homography exactly, so the two models nest.
     """
@@ -325,8 +334,14 @@ def _bowed_warp(
     v = ys / max(n - 1, 1)
     bump_u = 4.0 * u * (1.0 - u)
     bump_v = 4.0 * v * (1.0 - v)
-    map_x = map_x + bow[0] * bump_u + bow[2] * bump_v
-    map_y = map_y + bow[1] * bump_u + bow[3] * bump_v
+    # bow: (top, bottom, left, right) as x/y pairs. Top fades toward the bottom edge and
+    # vice versa; left and right likewise across.
+    along_u_x = bump_u * ((1.0 - v) * bow[0] + v * bow[2])
+    along_u_y = bump_u * ((1.0 - v) * bow[1] + v * bow[3])
+    along_v_x = bump_v * ((1.0 - u) * bow[4] + u * bow[6])
+    along_v_y = bump_v * ((1.0 - u) * bow[5] + u * bow[7])
+    map_x = map_x + along_u_x + along_v_x
+    map_y = map_y + along_u_y + along_v_y
 
     return cv2.remap(
         gray,
@@ -350,7 +365,7 @@ def refine_bow(
 ) -> GridFit:
     """Let the fitted grid bow, after the flat refinement has done all a plane can do.
 
-    Same coordinate descent, same smooth objective as refine_corners, over the four bow
+    Same coordinate descent, same smooth objective as refine_corners, over the eight bow
     parameters of :func:`_bowed_warp`. Separate stage on purpose: run on every candidate size
     it would multiply the search cost, while the bow only matters once the size is settled --
     so the corners carry the search and the bow is granted only to the winner.
@@ -373,8 +388,22 @@ def refine_bow(
     genuinely quadratic-ish in a way the synthetic cylinder, tamed by the corners, is not. The
     stage stays on for that photograph's sake: synthetic damage shows the term is harmless,
     real damage shows why it exists.
+
+    The per-edge measurement is in scripts/ab_dome.py (16 images per level and arm), on the
+    axis built for it: radial distortion, which bows opposite edges in opposite directions.
+    At dome 0.12 the untied bow reads 15/16 against 7/16 for the tied one and for the flat
+    grid -- the tied bow is *exactly* as blind there as no bow at all -- and at 0.15 it reads
+    6/16 against 0/16 for both. On every gentler level all three arms are 16/16, so the extra
+    freedom invents nothing. The cost is real: about a third over the tied bow on an easy
+    image (82s against 62s for 16 solves), paid once per solve, on the winner only.
+
+    The real photograph behind the axis: a code whose sides are visibly opposite arcs, which
+    no configuration without per-edge bows could solve. Rectifying it by hand along its four
+    boundary curves took 5.0 percent of known cells wrong to 0.4 and it decoded -- and with
+    the edges untied the pipeline now does the same with no hand-drawn curves at all, in
+    three decode attempts.
     """
-    bow = np.zeros(4, dtype=np.float64)
+    bow = np.zeros(8, dtype=np.float64)
 
     def score(candidate: np.ndarray) -> GridFit:
         warped = _bowed_warp(gray, fit.corners, candidate, fit.modules, scale)
@@ -386,7 +415,7 @@ def refine_bow(
     delta = start_delta
     while delta > min_delta:
         improved = False
-        for axis in range(4):
+        for axis in range(8):
             for step in (delta, -delta):
                 candidate = bow.copy()
                 candidate[axis] += step
