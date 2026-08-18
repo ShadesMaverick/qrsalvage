@@ -260,6 +260,7 @@ def cmd_synth(args: argparse.Namespace) -> int:
             remnant=args.remnant,
             dome=args.dome,
             worn=args.worn,
+            marker=args.marker,
         ),
         seed=args.seed,
     )
@@ -386,6 +387,7 @@ def main(argv: list[str] | None = None) -> int:
     synth.add_argument("--remnant", type=float, default=0.0)
     synth.add_argument("--dome", type=float, default=0.0)
     synth.add_argument("--worn", type=float, default=0.0)
+    synth.add_argument("--marker", type=float, default=0.0)
     synth.add_argument("--seed", type=int, default=0)
     synth.add_argument("--out", type=Path, default=Path("out"))
     synth.set_defaults(func=cmd_synth)

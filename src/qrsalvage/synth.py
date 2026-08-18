@@ -76,6 +76,11 @@ class Damage:
     # own axis rather than a stain at the edge: the lost area is *featureless*, so every cell
     # in it reads as a clean, confident light module unless something downstream knows better.
     worn: float = 0.0
+    # Coloured strokes drawn across the code -- a highlighter, a ballpoint circle, printed
+    # guide lines. The number of strokes. The only damage on the colour axis: through the blue
+    # channel a red stroke is a row of fake dark modules, so what this measures is whether the
+    # pipeline knows that colour is never ink.
+    marker: float = 0.0
 
 
 def _cylinder_map(shape: tuple[int, int], curvature: float):
@@ -220,7 +225,22 @@ def render_photo(matrix: np.ndarray, damage: Damage, seed: int = 0) -> np.ndarra
         img = 1.0 - img
 
     out = np.clip(img * 255.0 + rng.normal(0, damage.noise, img.shape), 0, 255).astype(np.uint8)
-    return cv2.cvtColor(out, cv2.COLOR_GRAY2BGR)
+    bgr = cv2.cvtColor(out, cv2.COLOR_GRAY2BGR)
+
+    if damage.marker > 0:
+        # After the greyscale camera model on purpose: a stroke sits on top of the print, so
+        # it is not blurred, curved or stained with it. Saturated red at roughly a module's
+        # width, endpoints drawn from its own generator so every existing case stays
+        # bit-identical -- the same isolation the remnant strip documents above.
+        strokes = np.random.default_rng(seed + 4241)
+        h2, w2 = bgr.shape[:2]
+        for _ in range(int(round(damage.marker))):
+            x0, x1 = strokes.uniform(0.05, 0.95, 2) * w2
+            y0, y1 = strokes.uniform(0.05, 0.95, 2) * h2
+            thickness = max(2, int(round(damage.module_px * strokes.uniform(0.7, 1.3))))
+            cv2.line(bgr, (int(x0), int(y0)), (int(x1), int(y1)), (40, 40, 220), thickness)
+
+    return bgr
 
 
 def make_case(text: str, damage: Damage | None = None, seed: int = 0):
