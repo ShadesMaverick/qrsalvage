@@ -390,6 +390,32 @@ def test_hand_marked_finders_survive_an_oversized_photograph():
         )
 
 
+def test_a_worn_off_strip_is_read_as_unknowns_not_as_light(monkeypatch):
+    """The print ends at the bottom; the blank surface is not evidence of light modules.
+
+    Without the featureless damping every erased cell reaches Reed-Solomon as a confident
+    light module and the case is provably dead -- 0 of 16 across the whole worn axis
+    (scripts/ab_worn.py holds the curve). This pins the mechanism on one seed: the same
+    photograph, decodable exactly when the blank area arrives as unknowns.
+    """
+    from qrsalvage.core import pipeline
+
+    # The exact payload the worn axis measures with (scripts/ab_worn.py): shorter texts leave
+    # Reed-Solomon enough slack to survive even confident blanks, and then this test would
+    # assert nothing.
+    long_text = "Z:0123456789ABCDEF$I:00112233445566778899AABBCCDDEEFF1234%M:0000$D:0000000000"
+    damage = Damage(contrast=0.20, curvature=0.30, module_px=8.0, worn=0.12)
+    photo = render_photo(reencode(long_text), damage, seed=3)
+
+    monkeypatch.setattr(pipeline, "BLANK_FEATURELESS", False)
+    confident = solve(photo, budget=4000)
+    monkeypatch.setattr(pipeline, "BLANK_FEATURELESS", True)
+    damped = solve(photo, budget=4000)
+
+    assert confident.text is None, "confident blanks should not decode -- did the axis move?"
+    assert damped.text == long_text, damped.failure
+
+
 def test_two_hand_marked_finders_reach_a_code_with_one_blinded():
     """A marked pair is enough: every geometric reading is fitted and the cells decide.
 

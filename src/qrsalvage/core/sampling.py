@@ -76,6 +76,102 @@ OUTLIER_SIGMAS = 3.5
 MIN_KNOWN_PER_CLASS = 12  # never thin a field's support below this; 6 parameters need slack
 
 
+# The window of the featureless-patch test, in cells, and the data cells a window must contain
+# before it may testify. After masking, data modules are close to balanced and only weakly
+# correlated, so a window of w*w data cells that is entirely one colour has probability around
+# 2^(1-w*w): at w=5 that is six in a hundred million, against a few hundred window positions
+# per code. Such a window is therefore not data. It is something lying on top of the code --
+# overpaint, a worn-off print, blank paper past a cut -- and pixels measured off it are
+# perfectly sharp and perfectly meaningless.
+#
+# This is the failure the two spatial terms above (BEACON_WEIGHT, NEIGHBOR_WEIGHT) were built
+# for and measurably could not reach: their blur spans one or two cells, a covered patch spans
+# many, so its interior stays uniform, confidently wrong, and invisible to its own spread. The
+# window test is scale-free where the blur is not -- a patch is uniform at every size.
+#
+# The minimum-data floor keeps the structure cells from testifying against themselves: the
+# finders and their quiet rings are large single-colour patches by design, and every cell the
+# standard fixes is excluded from both the count and the verdict.
+#
+# The tolerance exists because real blank areas are not clean: the photograph that motivated
+# this test carries specks of grit on its worn-off patch, each read as one confident dark
+# module in a sea of light ones. A speck breaks its window's uniformity, its codeword then
+# never ranks for erasure, and it enters Reed-Solomon as an error -- which costs double. One
+# deviating cell still leaves the accident probability near 25 * 2^-24 per window; the
+# argument survives the allowance.
+BLANK_WINDOW = 5
+BLANK_MIN_DATA = 12
+BLANK_TOLERANCE = 1
+
+# Past this featureless depth a cell counts as buried -- there is no print under it. The value
+# sits below the core depth of the thinnest damage worth catching (a three-row strip cores
+# near 0.4 under the area-normalised depth) and above the brush a strip leaves on its live
+# neighbours (about 0.2).
+BURIED_DEPTH = 0.35
+
+# A cell that dodged the depth but is surrounded by buried ones on at least this many of its
+# eight sides is grit lying *on* the damage, not a surviving module -- a survivor would have
+# living neighbours. Without this closing, every speck on a worn patch reaches Reed-Solomon
+# as a confident error, and errors cost double what erasures do; measured on the motivating
+# photograph, the specks alone pushed the repair past its budget at every rung of the ladder.
+BURIED_NEIGHBOURS = 5
+
+
+def featureless_depth(
+    posterior: np.ndarray,
+    known: np.ndarray,
+    window: int = BLANK_WINDOW,
+    min_data: int = BLANK_MIN_DATA,
+    tolerance: int = BLANK_TOLERANCE,
+) -> np.ndarray:
+    """Per cell, how deep it stands in featureless ground: 0 structured, towards 1 buried.
+
+    Only data cells testify (the finders are uniform by design), but the verdict covers the
+    known cells inside a marked window too: a finder ring standing in a featureless plain is
+    exactly as gone as the data around it, and it matters twice -- once as a lying witness in
+    the grid objective, once as a cell the decoder must not trust.
+
+    A *depth* rather than a mask, and that is the load-bearing choice. The depth is the
+    fraction of a cell's covering windows that are uniform, so a cell in the middle of a blank
+    plain scores 1 and a cell its rim brushes scores a sliver. Damping confidence by depth
+    hands the erasure ladder an *ordering*: it spends its first erasures in the middle of the
+    damage, the rim costs only what is left over, and a patch larger than the erasure budget
+    degrades into "erase the worst of it" instead of scattering the budget at random across
+    cells that all claimed exactly half. Both binary variants were tried and measured on the
+    photograph with the worn-off bottom edge: marking window centres left the rim confidently
+    wrong and Reed-Solomon produced a *valid wrong* text; marking every touched cell blanked
+    twice the damage area, overran the per-block budget, and the ladder -- choosing at random
+    among equals -- never picked the right set.
+    """
+    hard = posterior >= 0.5
+    size = (window, window)
+    data = (~known).astype(np.float32)
+    dark = (hard & ~known).astype(np.float32)
+    total = cv2.boxFilter(data, -1, size, normalize=False, borderType=cv2.BORDER_ISOLATED)
+    count = cv2.boxFilter(dark, -1, size, normalize=False, borderType=cv2.BORDER_ISOLATED)
+    uniform = (total >= min_data) & ((count <= tolerance) | (count >= total - tolerance))
+    covering = cv2.boxFilter(
+        uniform.astype(np.float32), -1, size, normalize=False, borderType=cv2.BORDER_ISOLATED
+    )
+    # Normalised by the window area, and deliberately never reaching 1 on thin damage: a
+    # strip a few rows tall yields only a few rows of uniform centres, so its core sits near
+    # 0.5 while the live row its windows brush stays near 0.2. That *gap* is the product.
+    # An edge-normalised variant that saturated to 1 was tried and measured worse than the
+    # problem it addressed: core and rim tied at 1.0, the erasure ladder was back to choosing
+    # among equals, and a photograph whose hand-derived grid was pixel-perfect still failed.
+    return covering / float(window * window)
+
+
+def buried_cells(depth: np.ndarray) -> np.ndarray:
+    """The cells with no print under them: deep ones, plus grit encircled by deep ones."""
+    core = depth >= BURIED_DEPTH
+    around = cv2.boxFilter(
+        core.astype(np.float32), -1, (3, 3), normalize=False, borderType=cv2.BORDER_ISOLATED
+    )
+    # `around` counts the cell itself, which for the cells in question is not buried.
+    return core | (around >= BURIED_NEIGHBOURS)
+
+
 @dataclass(frozen=True)
 class LevelFit:
     """The estimated brightness model of a code area.

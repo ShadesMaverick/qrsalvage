@@ -43,6 +43,11 @@ def _report(result, out: Path, band: float) -> None:
     # Before the cell counts, because with several photographs those counts are properties of
     # the fusion and the reader needs to know what went into it first.
     _report_fusion(result.fusion)
+    if result.blanked:
+        print(
+            f"featureless:       {result.blanked} cells lie in single-colour patches, "
+            "read as unknown"
+        )
     print(f"uncertain cells:   {result.uncertain} of {result.modules**2} (band {band})")
     print(f"decode attempts:   {result.candidates_tried}")
 
@@ -254,6 +259,7 @@ def cmd_synth(args: argparse.Namespace) -> int:
             curl=args.curl,
             remnant=args.remnant,
             dome=args.dome,
+            worn=args.worn,
         ),
         seed=args.seed,
     )
@@ -379,6 +385,7 @@ def main(argv: list[str] | None = None) -> int:
     synth.add_argument("--curl", type=float, default=0.0)
     synth.add_argument("--remnant", type=float, default=0.0)
     synth.add_argument("--dome", type=float, default=0.0)
+    synth.add_argument("--worn", type=float, default=0.0)
     synth.add_argument("--seed", type=int, default=0)
     synth.add_argument("--out", type=Path, default=Path("out"))
     synth.set_defaults(func=cmd_synth)
