@@ -294,6 +294,155 @@ Einzelfall durchgeht.
 - **Reed-Solomon über Version 10 hinaus.** Die Blocktabellen enden dort; größere Codes werden
   gelesen, aber nicht repariert.
 
+---
+
+## 8. Abrisskante: ein Foto, drei Schwächen
+
+**Labels:** `bug`, `research`
+
+Ein Foto eines abgerissenen Ausdrucks (lokal: `fixtures-local/sample-torn-edge.jpg`; Klartext
+bekannt, steht absichtlich nicht hier) scheitert auf Stufe 0 und hat beim Sezieren drei
+getrennte Schwächen freigelegt. Das Schadensbild: Die Abrisskante verläuft direkt an der
+linken Codespalte, ihr gewölbter Rand wirft einen weichen grauen Schattenstreifen in die
+Ruhezone, und die Wölbung verschiebt die Module nahe der Kante — am stärksten unten links.
+Als Synth-Achse nachgebaut (`tear` in `synth.py`, Achse in `scripts/difficulty.py`).
+
+**Was die Synth-Achse leistet und was nicht — gemessen, nicht angenommen.** Sie reproduziert
+das *Aussehen* des Schadens (Schattenstreifen an der linken Flanke, Wölbungsversatz zur Kante
+hin), aber nicht den Fehlermechanismus des Fotos. Sie ist bimodal: bis `tear` 0,6 bleibt der
+Fall harmlos (0 falsche bekannte Zellen), ab 0,8 zerstört der Streifen bei manchen Startwerten
+die *Findererkennung* — statt drei Findern wird einer gefunden, die Zwei-Finder-Rekonstruktion
+übernimmt, und die Versionswahl kippt von 29 auf 21. Das schmale Fenster, in dem das echte
+Foto lebt — Finder intakt, Gitter um eine halbe Modulbreite verschoben — überspringt sie.
+Folge: Die `tear`-Achse ist ein Instrument für Finder-Robustheit, **nicht** für (a) oder (b).
+Wer (b) beziffern will, braucht den Wölbungsversatz ohne den Streifen als eigenen Parameter;
+heute sind beide Hälften an `tear` gekoppelt.
+
+**(a) Sigma-Explosion im Helligkeitsmodell — ERLEDIGT.** Das Gitter hing über die Papierkante,
+eine Spalte „bekannt dunkler" Zellen maß helles Papier. Diese Ausreißer hebelten die zwei
+quadratischen Niveaufelder, bis sie sich kreuzten; die Kontrastklemme lief auf ihr absolutes
+Minimum (1e-6), die kontrastnormierten Residuen explodierten, `base_sigma` stand bei
+2,9 Millionen — und die Posterior von 555 der 841 Zellen wurde zum Münzwurf, auf einem Bild
+mit tadellosem Kontrast (Dunkel-Median 102, Hell-Median 197). Eine gesättigte
+22-Erasure-Reparatur lieferte dann margenlos „gültige" unlesbare Ergebnisse. Gebaut in
+`estimate_levels` (`ROBUST_LEVELS` in `sampling.py`): Ausreißer-Known-Cells fliegen iterativ
+aus der Feldanpassung, der Kontrastboden ist ein Anteil des Median-Kontrasts statt eines
+absoluten Epsilons, die Streuung kommt per MAD statt Standardabweichung.
+
+**Die Messung, ehrlich gelesen** (`scripts/ab_robust.py`, 16 Bilder je Stufe und Arm): Auf
+den synthetischen Achsen bringt die Änderung **nichts** — Kontrast (Kontrolle) 16/16, 16/16,
+15/16 in beiden Armen; Fleck 14/14, 11→12, 8→9, also ein Bild von sechzehn auf zwei Stufen und
+damit im Rauschen; `tear` 14/14, 14/14, 6/6, identisch. Wer diese Änderung als
+Erfolgsquotensteigerung verkaufen wollte, hätte keine Belege.
+
+Was sie tatsächlich bringt, ist die **Ehrlichkeit der Zahlen, die die Eskalationsleiter liest**:
+auf dem Foto 555 → 37 unsichere Zellen, bei nie strittigem Kontrast (gelöst wird es dadurch
+trotzdem nicht — siehe b und c). Eine auf 0,5 plattgedrückte Posterior zerstört zusätzlich die
+Flip-Cost-Ordnung, das heißt der Solver vertastet sein gesamtes Budget in zufälliger
+Reihenfolge. Die konstruierte Ausreißer-Matrix in
+`test_lying_known_cells_cannot_flatten_the_posterior` geht von 775/841 unsicher auf 0. Und eine
+konkrete Rettung: Der harte Fusion-Fall (Fleck 0,50, Gruppe 7) hatte vorher alle drei Fotos
+einzeln scheiternd und löst jetzt aus einem Einzelbild — weshalb `test_fusion.py` einen
+härteren Fall braucht (0,55, Gruppe 2).
+
+**Der Preis, ebenfalls gemessen:** 2,4× so viele Niveau-Anpassungen auf einem sauberen Bild,
+2,9× auf einem verfleckten, macht 40–50 % mehr Laufzeit. Grund: Der Ausreißer-Loop läuft
+*innerhalb* der Gittersuche, wo die meisten Kandidatenplatzierungen zu Recht falsch sind und
+darum voller „Ausreißer" aussehen. Die naheliegende Reparatur — robust erst verwerfen, wenn
+das Gitter steht — verlangt, Suchpfad und finale Abtastung zu trennen; heute laufen beide
+durch `geometry._score`. **Offen, lohnt sich besonders für die Browser-Version**, wo ein
+Solve ohnehin bei ~10 s liegt.
+
+**(b) Der Ecken-Descent rastet auf dem Schatten ein — ERLEDIGT.** Der Schattenstreifen liegt
+genau dort, wo die linke dunkle Spalte der beiden linken Finder erwartet wird, und ist etwa
+modultief; die Eckenjustierung findet mit ihrem feinen Startschritt (3 px) aus diesem lokalen
+Optimum nicht heraus und lässt das Gitter eine halbe Modulbreite zu weit links sitzen — 19
+von 244 bekannten Zellen falsch, gebündelt in Spalte 0 und der Alignment-Zone, Timing
+trotzdem 100 % (es verläuft quer zum Versatz und merkt nichts).
+
+Gebaut als `geometry.restart_coarse`, ausgelöst in `pipeline.solve`, sobald der Gewinner über
+5 % falsche bekannte Zellen liegt (die Schwelle, die der Skill selbst als „Geometrieproblem"
+liest). Übernommen wird das Ergebnis nur, wenn dieselbe Qualitätsfunktion, die der Descent
+ohnehin optimiert, eine Verbesserung sieht — dieselbe Sicherheitsgarantie wie bei
+`refine_bow`, festgenagelt in `test_the_coarse_restart_never_returns_a_worse_grid`.
+
+**Die Ablation hat den ursprünglich geplanten Fix widerlegt** und ist der eigentliche Ertrag
+dieser Aufgabe. Geplant war „grober Startschritt *und* die lügende Randspalte aus dem Zielmaß
+nehmen". Gemessen am Foto, alle Arme an *allen* bekannten Zellen bewertet:
+
+| Arm | falsche Zellen | löst |
+|---|---|---|
+| unverändert (Schritt 3, volles Zielmaß) | 19/244 | nein |
+| Schritt 12 ab den **Startecken**, volles Zielmaß | 50/244 | nein |
+| Schritt 3 ab den Startecken, Spalte 0 maskiert | 16/244 | ja |
+| Schritt 12 ab den Startecken, Spalte 0 maskiert | 15/244 | ja |
+
+Und dann, ab den **bereits justierten** Ecken statt ab den Startecken: Bei Schritt 3, 6 und 9
+bleibt der Descent hängen, egal welche Randlinie maskiert wird; ab Schritt 12 retten **alle
+vier** Randlinien das Bild gleich gut — auch die drei, die gar nicht beschädigt sind. Damit
+war klar, dass die Maskierung nichts trägt. Der Test ohne jede Maskierung bestätigt es:
+Schritt 12 ab den justierten Ecken, volles Zielmaß, ergibt 9 falsche Zellen, null unsichere,
+Decodierung im ersten Versuch. Was zählt, ist die Kombination — erst behalten, was der feine
+Descent gefunden hat, dann einen groben davon weglaufen lassen.
+
+**Der Schritt ist in Modulen parametrisiert, nicht in Pixeln** (2 Modulbreiten). 3 px sind auf
+einem Foto eine halbe Modulbreite und auf dem nächsten ein Fünftel; die Falle hat aber eine
+Größe in Modulen, nicht in Pixeln. Auf diesem Foto misst ein Modul 6,2 px, die 12 px sind also
+knapp zwei Module — 16 px und 24 px landen an derselben Stelle, es ist eine Schwelle zum
+Überspringen, kein Wert zum Tunen.
+
+**Ergebnis am Gründungsfall:** Das Foto besteht jetzt Stufe 0 durch die normale CLI. 19 → 10
+falsche bekannte Zellen, 555 → 1 unsichere Zelle, ein einziger Decodier-Versuch statt 4001
+vergeblicher. Als Regressionsfall gesichert (`fixtures-local/sample-torn-edge`, gitignoriert).
+
+**Kein Rückschritt auf dem echten Korpus**, ein Zugewinn: Von acht lokalen Fotos lösen
+weiterhin dieselben fünf, dazu neu das Abrisskanten-Foto. Die drei, die weiter scheitern,
+scheitern an Dingen, die diese Eskalation nicht berührt, und sie feuert dort korrekt gar nicht:
+`sample-curved-sheet` findet nur zwei Finder, `sample-engraved-brackets` (2/244 falsch) und
+`sample-faint` (0/244 falsch) haben ein perfekt sitzendes Gitter und sind
+informationslimitiert.
+
+**Synthetisch bringt es nichts — in jeder einzelnen Stufe null Unterschied** (`scripts/ab_restart.py`,
+16 Bilder je Stufe und Arm; die Zeitspalte des Laufs ist unbrauchbar, weil parallel echte Fotos
+gelöst wurden):
+
+| Achse | Stufe | ohne | mit | gefeuert |
+|---|---|---|---|---|
+| Kurvatur | 0,70 | 16/16 | 16/16 | 0 |
+| Kurvatur | 0,85 | 0/16 | 0/16 | 16 |
+| Kurvatur | 0,95 | 0/16 | 0/16 | 16 |
+| Auflösung | 5,0 px | 11/16 | 11/16 | 0 |
+| Auflösung | 4,5 px | 0/16 | 0/16 | 2 |
+| Auflösung | 4,0 px | 0/16 | 0/16 | 2 |
+| Abriss | 0,80 | 14/16 | 14/16 | 1 |
+| Abriss | 1,00 | 6/16 | 6/16 | 7 |
+
+Das ist eine Aussage über das Korpus, nicht über die Eskalation, und sie ist der eigentliche
+Befund dieser Messung. Ein hängengebliebener Descent und eine nicht abbildbare Fläche sehen
+beide wie ein schlecht sitzendes Gitter aus, aber nur das erste ist ein lokales Optimum. Starke
+synthetische Wölbung ist das zweite: Keine Schrittweite erreicht eine Platzierung, die eine
+Homographie nicht ausdrücken kann — darum feuert die Eskalation dort auf allen 16 Bildern und
+hilft keinem. **Das synthetische Korpus enthält keinen Fall der ersten Art.** Die `tear`-Achse
+sollte genau den liefern und verfehlt ihn, weil ihr Schattenstreifen die Findererkennung
+zerstört, bevor er etwas einklemmt. Der einzige Beleg für diese Stufe ist damit das Foto, das
+sie ausgelöst hat, und der einzige Schutz gegen ihr stilles Veralten ist dieses Foto im privaten
+Korpus.
+
+**Offen, daraus folgend:** ein synthetischer Fall, der den Descent einklemmt, ohne die Finder zu
+zerstören — also Wölbungsversatz an der Kante ohne (oder mit deutlich schwächerem)
+Schattenstreifen, als eigener Parameter neben `tear`. Erst damit ließe sich diese Eskalation
+messen statt nur bezeugen.
+
+**(c) Der Bogen-Term kann Randversatz prinzipiell nicht ausdrücken — DOKUMENTIERT.** Seine
+Beulen `4t(1-t)` verschwinden an den Rändern; das ist Absicht (Schutz gegen das Verbiegen der
+unbeobachteten Mitte, siehe Docstring von `refine_bow`) und genau deshalb liegt der Versatz
+einer gewölbten Abrisskante außerhalb seines Ausdrucksraums. Die Vermutung war, dass die Ecken
+den Randversatz tragen können, wenn der Descent sie nur lässt — **durch (b) bestätigt**: Der
+grobe Neustart bringt die Ecken dorthin, und der Bogen muss den Randversatz gar nicht
+ausdrücken können. Kein Fix nötig. Sollte doch einmal ein Fall auftauchen, den die Ecken nicht
+tragen, ist der nächste Kandidat das Alignment-Muster als vierter Anker, nicht eine weitere
+Parametrisierung des Warps.
+
 
 
 

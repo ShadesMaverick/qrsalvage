@@ -30,6 +30,7 @@ from .geometry import (
     order_finders,
     refine_bow,
     refine_corners,
+    restart_coarse,
     select_finder_triple,
     third_finder_candidates,
 )
@@ -48,6 +49,15 @@ ENSEMBLE_MODES = ("off", "sampling", "geometry")
 # and decisive on a real fabric photograph that nothing else could solve. Details at
 # geometry.refine_bow.
 BOW_REFINE = True
+
+# A grid that fitted this badly is not a hard image, it is a misplaced grid: the skill's own
+# reading of the diagnostics puts a healthy fit under 1 percent of known cells wrong and calls
+# anything past 5 percent a geometry problem. Past it, the winning grid gets one more descent
+# from a coarse step, which is the only thing that reaches a false optimum a module away.
+# Never returns a worse grid; measurement and the failure that motivated it at
+# geometry.restart_coarse.
+COARSE_RESTART = True
+COARSE_RESTART_THRESHOLD = 0.05
 
 
 # The progress callback a shell injects: (event name, JSON-ready payload). See _emit.
@@ -619,10 +629,10 @@ def solve(
     # and a bow cannot rescue a wrong size anyway. Descent from zero offsets, so this never
     # returns a worse grid than the flat refinement produced. Measured in scripts/ab_bow.py.
     _emit(progress, "chosen", modules=int(best.modules), version=version_for_modules(best.modules))
-    if BOW_REFINE:
-        ox_, oy_, f_ = transform
+    ox_, oy_, f_ = transform
 
-        def on_bow(fit: GridFit) -> None:
+    def grid_event(phase: str) -> Callable[[GridFit], None]:
+        def report(fit: GridFit) -> None:
             shifted(
                 "grid",
                 {
@@ -630,12 +640,19 @@ def solve(
                     "wrong": int(fit.wrong_known),
                     "total": int(fit.known_total),
                     "quality": round(float(fit.quality), 4),
-                    "phase": "bow",
+                    "phase": phase,
                     "corners": [[c[0] / f_ + ox_, c[1] / f_ + oy_] for c in fit.corners.tolist()],
                 },
             )
 
-        best = refine_bow(gray, best, known_dark, known_light, on_step=on_bow)
+        return report
+
+    # Before the bow, because a bow fitted onto a misplaced grid is a bow spent bending the
+    # wrong thing -- and because the restart is what decides whether the grid is placed at all.
+    if COARSE_RESTART and best.wrong_known > COARSE_RESTART_THRESHOLD * max(best.known_total, 1):
+        best = restart_coarse(gray, best, known_dark, known_light, on_step=grid_event("restart"))
+    if BOW_REFINE:
+        best = refine_bow(gray, best, known_dark, known_light, on_step=grid_event("bow"))
 
     consensus: Consensus | None = None
     geometry: GeometryConsensus | None = None

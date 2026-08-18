@@ -31,9 +31,11 @@ BASE = Damage(contrast=0.18, curvature=0.30, module_px=8.0)
 # does fusing three rescue what three cannot do individually. A stain sits somewhere else in
 # every photograph, so each loses a different part of the code while the others still hold it.
 # That is the case this path exists for, and these values were found by searching for one the
-# single-image path provably cannot solve.
-HARD_STAIN = 0.50
-HARD_GROUP = 7
+# single-image path provably cannot solve. The search has to be redone whenever the solver
+# gets stronger: the robust level estimate (ROBUST_LEVELS in sampling.py) solved the previous
+# case (0.50, group 7) from a single image -- along with every other group at stain 0.50.
+HARD_STAIN = 0.55
+HARD_GROUP = 2
 
 
 def photographs(stain: float, group: int, count: int = 3) -> list[np.ndarray]:

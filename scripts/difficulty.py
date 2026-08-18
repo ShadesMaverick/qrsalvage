@@ -36,6 +36,7 @@ AXES: dict[str, tuple[str, tuple[float, ...]]] = {
     "curvature": ("curvature", (0.20, 0.35, 0.50, 0.65, 0.80, 0.95)),
     "resolution": ("module_px", (9.0, 8.0, 7.0, 6.0, 5.0, 4.0)),
     "stain": ("stain", (0.0, 0.10, 0.20, 0.30, 0.40, 0.50)),
+    "tear": ("tear", (0.0, 0.20, 0.40, 0.60, 0.80, 1.00)),
 }
 
 

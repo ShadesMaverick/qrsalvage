@@ -354,6 +354,80 @@ def refine_bow(
     return best
 
 
+def module_px(corners: np.ndarray, modules: int) -> float:
+    """Pixels per module of a fitted grid, averaged over its two top edges."""
+    top = float(np.linalg.norm(corners[1] - corners[0]))
+    left = float(np.linalg.norm(corners[2] - corners[0]))
+    return (top + left) / (2.0 * max(modules, 1))
+
+
+def restart_coarse(
+    gray: np.ndarray,
+    fit: GridFit,
+    known_dark: np.ndarray,
+    known_light: np.ndarray,
+    scale: int = 12,
+    steps_in_modules: float = 2.0,
+    on_step: Callable[[GridFit], None] | None = None,
+) -> GridFit:
+    """Run the corner descent again from a coarse step, for a grid that fitted badly.
+
+    The descent in :func:`refine_corners` is local, and its 3 px start step is a fraction of a
+    module on most photographs. That is right when the initial corners are already close, and
+    it is a trap when something in the image offers a false optimum a module away. Observed on
+    a photograph of a torn printout: the curled paper edge shaded the quiet zone into a soft
+    dark strip exactly where the left finders' dark edge belongs, the descent settled half a
+    module into it, and the grid stayed there with 19 of 244 known cells wrong -- while the
+    timing pattern, which runs across the displacement, read a contented 100 percent.
+
+    Escaping needs a step large enough to clear the false optimum in one move, so the step is
+    measured in *modules*, not pixels: 3 px means half a module on one photograph and a fifth
+    of one on the next. Measured on that photograph, restarting from the already-refined
+    corners: 3 px and 6 px stay stuck (19 wrong, no decode), 9 px stays stuck, and 12 px --
+    just under two modules there -- drops it to 9 wrong, 0 uncertain cells and a decode on the
+    first attempt. 16 and 24 px land in the same place, so the effect is a threshold to clear,
+    not a value to tune.
+
+    Deliberately *not* the fix this looked like it needed. Masking the lying border column out
+    of the objective was tried first and is the more elaborate idea; measured against this one
+    it is unnecessary (all four border lines rescue the image equally once the step is coarse,
+    including the three that are not damaged), and a coarse restart from the *initial* corners
+    rather than the refined ones is actively worse (50 of 244 wrong). What matters is the
+    combination: keep what the fine descent found, then let a coarse one try to leave it.
+
+    MEASURED ON THE SYNTHETIC CORPUS: nothing at all (scripts/ab_restart.py, 16 images per
+    level and arm). Curvature 0.70 and module size 5 px solve completely in both arms without
+    the escalation ever firing; curvature 0.85 and 0.95 fire on all 16 images and rescue none;
+    module size 4.5 and 4 px, and the tear axis at 0.8 and 1.0, are level in both arms too.
+    Every level, identical.
+
+    That is a statement about the corpus rather than about the escalation, and worth reading
+    carefully before deleting either. A trapped descent and an unfittable surface both show up
+    as a badly seated grid, and only the first is a local optimum. Strong synthetic curvature
+    is the second: no step size reaches a placement a homography cannot express, which is why
+    the escalation fires there on every image and helps none of them. The synthetic corpus has
+    no case of the first kind -- the tear axis was built to add one and misses, because its
+    shadow strip destroys finder detection before it traps anything. So the only evidence for
+    this stage is the photograph that motivated it, and the only guard against it going stale
+    is that photograph sitting in the private corpus.
+
+    Kept only when the same objective the descent already optimises says it improved, so this
+    can never return a worse grid than it was handed -- the same guarantee as
+    :func:`refine_bow`, and for the same reason.
+    """
+    trial = refine_corners(
+        gray,
+        fit.corners,
+        fit.modules,
+        scale,
+        known_dark,
+        known_light,
+        start_delta=steps_in_modules * module_px(fit.corners, fit.modules),
+        on_step=on_step,
+    )
+    return trial if trial.quality > fit.quality else fit
+
+
 def refine_corners(
     gray: np.ndarray,
     corners: np.ndarray,

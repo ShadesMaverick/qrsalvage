@@ -13,6 +13,7 @@ import pytest
 from qrsalvage.core.decoding import ordered_search, reencode
 from qrsalvage.core.matrix import DARK, LIGHT, UNKNOWN, ModuleMatrix
 from qrsalvage.core.pipeline import solve
+from qrsalvage.core.sampling import estimate_levels, posterior_dark
 from qrsalvage.core.structure import structure_mask
 from qrsalvage.synth import Damage, render_photo
 
@@ -122,6 +123,38 @@ def test_matrix_knows_three_states():
     assert ascii_grid.count("?") > 0
 
 
+def test_lying_known_cells_cannot_flatten_the_posterior():
+    """Known cells that measure the wrong brightness must lose influence, not gain it.
+
+    The construction mirrors a photographed failure: a fitted grid overhung a torn paper
+    edge, so one column of known-dark cells measured bright paper while a misregistered
+    alignment zone made known-light cells measure dark. Fitted naively, those outliers bend
+    the two level fields until they cross; the contrast clamp bottoms out, the normalised
+    residuals explode, and the posterior of nearly every cell -- including hundreds of
+    perfectly clean ones -- flattens to a coin toss. On the photograph that meant 555 of 841
+    cells uncertain at fine contrast. The robust estimate has to keep every honest cell
+    decided.
+    """
+    modules = 29
+    known_dark, known_light = structure_mask(modules)
+    means = np.where(known_dark, 100.0, 200.0)
+    means[:, 0] = 200.0  # the torn edge: every known-dark cell in column 0 reads paper
+    zone = np.zeros((modules, modules), dtype=bool)
+    zone[19:25, 19:25] = True  # the misregistered alignment zone reads dark
+    means[known_light & zone] = 100.0
+    spread = np.full((modules, modules), 5.0)
+
+    fit = estimate_levels(means, spread, known_dark, known_light)
+    posterior = posterior_dark(means, fit)
+
+    honest_dark = known_dark.copy()
+    honest_dark[:, 0] = False
+    honest_light = known_light & ~zone
+    assert float(posterior[honest_dark].min()) > 0.9
+    assert float(posterior[honest_light].max()) < 0.1
+    assert float(np.median(fit.sigma)) < 1.0, "a handful of liars must not inflate sigma"
+
+
 def test_structure_is_never_touched_while_probing():
     modules = 21
     known_dark, known_light = structure_mask(modules)
@@ -228,6 +261,38 @@ def test_the_bow_never_returns_a_worse_grid():
         assert bowed.wrong_known <= flat.wrong_known + 1, (
             "a quality gain must not be bought with known cells"
         )
+
+
+def test_the_coarse_restart_never_returns_a_worse_grid():
+    """The same invariant, for the escalation that runs when a grid fitted badly.
+
+    A coarse descent can walk somewhere worse -- that is the price of a step large enough to
+    leave a false optimum. It is safe only because the result is kept solely when the same
+    objective says it improved, so the escalation is free to be wrong. Checked on a grid that
+    is already good (where it should change nothing) and on one deliberately pushed off by two
+    modules (where it has something to recover).
+    """
+    from qrsalvage.core.geometry import restart_coarse
+    from qrsalvage.core.pipeline import DEFAULT_SIZES, _attempt
+
+    photo = render_photo(reencode(TEXT), Damage(contrast=0.25, curvature=0.30), seed=2)
+    _, gray, _, _, fits, _, _ = _attempt(photo, DEFAULT_SIZES, False, None)
+    fitted = min(fits, key=lambda f: (f.wrong_known, -f.quality))
+    known_dark, known_light = structure_mask(fitted.modules)
+
+    for label, shift in (("already good", 0.0), ("pushed off", 2.0)):
+        start = fitted
+        if shift:
+            from qrsalvage.core.geometry import evaluate, module_px
+
+            moved = fitted.corners + np.array(
+                [shift * module_px(fitted.corners, fitted.modules), 0.0]
+            )
+            start = evaluate(gray, moved, fitted.modules, 12, known_dark, known_light)
+
+        restarted = restart_coarse(gray, start, known_dark, known_light)
+
+        assert restarted.quality >= start.quality, label
 
 
 def test_hand_marked_finders_survive_an_oversized_photograph():
