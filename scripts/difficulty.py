@@ -44,6 +44,17 @@ AXES: dict[str, tuple[str, tuple[float, ...]]] = {
     # A flat axis is a statement about the damage, not a broken instrument.
     "curl": ("curl", (0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0)),
     "remnant": ("remnant", (0.0, 0.25, 0.5, 0.75, 1.0)),
+    # Radial distortion: bows opposite edges in opposite directions, which no homography and
+    # no tied bow can express. The per-edge bow was built against this axis; scripts/ab_dome.py
+    # holds the three-arm measurement.
+    "dome": ("dome", (0.0, 0.05, 0.08, 0.10, 0.12, 0.15)),
+    # The print ends: bottom rows erased whole, blank surface where modules belong. Breaks
+    # through two mechanisms at once -- the lost bottom-left finder and the featureless area
+    # read as confident light cells; scripts/ab_worn.py separates what the patch handling buys.
+    "worn": ("worn", (0.0, 0.06, 0.09, 0.12, 0.15, 0.18)),
+    # Coloured strokes across the code -- the one axis that needs colour. Measures whether the
+    # pipeline knows that colour is never ink; scripts/ab_marker.py holds the A/B.
+    "marker": ("marker", (0.0, 1.0, 2.0, 3.0, 4.0)),
 }
 
 

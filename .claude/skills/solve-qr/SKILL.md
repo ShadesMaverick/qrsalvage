@@ -34,6 +34,12 @@ während der erste ernsthafte Geometrieversuch nahe an der Lösung war. Schlecht
 an der Geometrie, nicht am Kontrast. Ein Sweep lohnt erst, wenn die Findersuche selbst versagt —
 dann geht es um die Frage, welcher Farbkanal das Muster überhaupt zeigt.
 
+**Farbige Überlagerungen** (Filzstift, Hilfslinien, Stempel): gesättigte Pixel vorab per Skript
+auf Mittelgrau setzen (nach `out/`, Original nie anfassen) — Mittelgrau, nicht Weiß, damit die
+Zellen darunter unsicher statt hell werden. Es gibt dafür einen Schalter im Kern
+(`preprocess.NEUTRAL_SATURATION_CAP`), aber er ships aus; die Messung, warum, steht in seinem
+Docstring und `scripts/ab_marker.py`.
+
 ## Stufe 1 — die Zahlen lesen, die das Werkzeug ausgibt
 
 Die Ausgabe ist eine Diagnose, kein Protokoll. In dieser Reihenfolge prüfen:
@@ -48,6 +54,29 @@ Die Ausgabe ist eine Diagnose, kein Protokoll. In dieser Reihenfolge prüfen:
 
 Sitzt die Geometrie nicht, hier ansetzen und nicht an den Zellwerten. Ein um eine halbe
 Modulbreite verschobenes Gitter erzeugt hunderte falsche Zellen und sieht dabei plausibel aus.
+
+Neu in der Ausgabe: eine `featureless:`-Zeile heißt, das Werkzeug hat leere Flächen erkannt
+(übermalt, abgerieben, Druck endet) und behandelt sie bereits als Erasures — das ist kein
+Fehler, sondern Diagnose. Viele featureless-Zellen bei gleichzeitig erschöpftem Budget: prüfen,
+ob die Fläche mehr Codewörter frisst, als das Korrekturniveau trägt (dann ist das Foto die
+Grenze, nicht das Werkzeug).
+
+## Stufe 1b — Finderzentren von Hand
+
+Wenn die Versionstabelle durchweg schlecht fittet (alles über 5 %) oder die Findersuche ein
+Artefakt gegriffen hat (drei „Finder" mit stark ungleichen Breiten in der Diagnose):
+
+```
+.venv\Scripts\python.exe -m qrsalvage solve <bild> --finders X1 Y1 X2 Y2 [X3 Y3]
+```
+
+Zwei Zentren genügen, wenn der dritte Finder zerstört oder außerhalb des Fotos ist — alle
+geometrischen Lesarten des Paares werden dann gefittet und die bekannten Zellen entscheiden.
+Grob geklickt reicht; die Zentren rasten auf das nächste echte Muster ein. Bei zerstörter
+*Unterkante* (Finderpaar oben intakt, unten nichts): den dritten Punkt konstruieren und dabei
+mehrere Abstände probieren (senkrecht unter dem ersten Punkt, Distanz mal 0,95 bis 1,06) —
+die Bodenkante ist dann durch keine Strukturzelle festgelegt, und nur der Decode entscheidet
+(siehe docs/ISSUES.md Nr. 9).
 
 ## Stufe 2 — unsichere Zellen beurteilen
 
