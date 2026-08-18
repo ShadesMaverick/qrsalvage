@@ -19,6 +19,12 @@ import numpy as np
 
 from .core.decoding import reencode
 
+# Where the surviving strip of the neighbouring label sits, in modules: how wide it prints and
+# how much clear paper separates it from the code. The gap is not cosmetic -- see the note at
+# its use in render_photo.
+REMNANT_WIDTH = 2
+REMNANT_GAP = 1
+
 
 @dataclass(frozen=True)
 class Damage:
@@ -53,6 +59,11 @@ class Damage:
     # shape is exactly what neither a homography nor the edge-pinned bow can express -- the
     # bow's bumps vanish at the borders, which is where this damage lives.
     curl: float = 0.0
+    # How dark the surviving strip of the neighbouring label prints, as a fraction of a full
+    # module. Unlike the two above it is not part of the torn edge itself but of what the tear
+    # left behind, and it exists for one purpose: to put module-pitch structure where a
+    # displaced grid's outermost column would otherwise find blank paper.
+    remnant: float = 0.0
 
 
 def _cylinder_map(shape: tuple[int, int], curvature: float):
@@ -78,9 +89,31 @@ def render_photo(matrix: np.ndarray, damage: Damage, seed: int = 0) -> np.ndarra
     px = int(round(damage.module_px))
     quiet = 5
 
-    cells = np.where(matrix, np.float32(0.0), np.float32(1.0))
+    # Padded in cell units and only then expanded to pixels, which is the same image as
+    # expanding first and padding by quiet*px -- but it leaves the quiet zone addressable in
+    # modules, which the remnant strip below needs in order to print on the code's own pitch.
+    cells = np.pad(np.where(matrix, np.float32(0.0), np.float32(1.0)), quiet, constant_values=1.0)
+
+    if damage.remnant > 0:
+        # A strip of the neighbouring label left standing by the tear: same press, same pitch,
+        # sitting in the quiet zone. Tear a sheet of labels apart and this is what stays.
+        #
+        # REMNANT_GAP is the whole design question. Butted against the code the strip merges
+        # with the finders' outer ring in the binarisation, thickens it, breaks the 1:1:3:1:1
+        # proportion the scan detector needs, and destroys detection -- the same way the old
+        # shadow bar did. One clear module keeps the finders intact.
+        #
+        # Its own generator, so a case with no remnant renders bit-identical to before: the
+        # shared `rng` also draws the sensor noise, and consuming from it here would shift
+        # every existing synthetic image and silently invalidate measurements taken on them.
+        strip = np.random.default_rng(seed + 9973)
+        end = quiet - REMNANT_GAP
+        start = max(end - REMNANT_WIDTH, 0)
+        if end > start:
+            dark = strip.integers(0, 2, size=(cells.shape[0], end - start)).astype(bool)
+            cells[:, start:end] = np.where(dark, 1.0 - damage.remnant, 1.0)
+
     plane = np.kron(cells, np.ones((px, px), dtype=np.float32))
-    plane = np.pad(plane, quiet * px, constant_values=1.0)
     h, w = plane.shape
 
     # Dot raster: an engraving is not a blot but a pattern of individual dots.

@@ -17,7 +17,7 @@ from qrsalvage.core.matrix import DARK, LIGHT, UNKNOWN, ModuleMatrix
 from qrsalvage.core.pipeline import solve
 from qrsalvage.core.sampling import estimate_levels, posterior_dark
 from qrsalvage.core.structure import structure_mask
-from qrsalvage.synth import Damage, render_photo
+from qrsalvage.synth import REMNANT_GAP, Damage, render_photo
 
 # Deliberately all upper case and restricted to the QR alphanumeric character set: a single
 # lower-case letter forces the encoder into byte mode, makes the code denser and silently
@@ -263,6 +263,30 @@ def test_the_bow_never_returns_a_worse_grid():
         assert bowed.wrong_known <= flat.wrong_known + 1, (
             "a quality gain must not be bought with known cells"
         )
+
+
+def test_the_label_remnant_never_touches_the_symbol():
+    """The strip of the neighbouring label prints beside the code, never on it.
+
+    The whole reason this damage is interesting is that it is an attractor the finders can
+    survive, and it survives them by keeping one clear module of paper between the two. Butt
+    it against the code and it merges with the finders' outer ring in the binarisation,
+    breaks the 1:1:3:1:1 proportion the scan detector reads, and becomes just another way to
+    lose the finders -- which is the failure the shadow bar already documented. So the gap is
+    the feature, and this is the test that says so.
+    """
+    matrix = reencode(TEXT)
+    clean = Damage(contrast=0.25, curvature=0.0, blur=0.0, noise=0.0)
+    plain = render_photo(matrix, clean, seed=1)
+    printed = render_photo(matrix, replace(clean, remnant=1.0), seed=1)
+
+    px = plain.shape[1] / (matrix.shape[0] + 10)
+    # Everything from the gap rightwards -- the clear module and the symbol itself.
+    untouched = slice(int((5 - REMNANT_GAP) * px), plain.shape[1])
+    np.testing.assert_array_equal(printed[:, untouched], plain[:, untouched])
+    assert (
+        printed[:, : int((5 - REMNANT_GAP) * px)] != plain[:, : int((5 - REMNANT_GAP) * px)]
+    ).any()
 
 
 def test_the_two_halves_of_a_torn_edge_are_independent():
