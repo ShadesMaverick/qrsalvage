@@ -50,7 +50,11 @@ SPATIAL_BLUR = 1.2  # in cells; roughly the scale at which stains outgrow single
 # success-rate story. Control axis contrast: 16/16, 16/16, 15/16 -- identical in both arms,
 # which is what a control has to show. Stain: 14/14, 11 -> 12, 8 -> 9; one image in sixteen
 # at two levels, well inside the noise. Tear: 14/14, 14/14, 6/6 -- identical, and that axis
-# breaks through lost finder detection rather than through this term anyway.
+# breaks through lost finder detection rather than through this term anyway. (That run
+# predates both the split of the torn edge into an optical and a geometric half and the
+# reshaping of its shadow from a bar into a penumbra, so it does not describe today's tear
+# axis. It is kept rather than rerun because the finding it carries -- that the axis was
+# breaking through finder detection -- is exactly what motivated both changes.)
 #
 # What the term does buy is the honesty of the numbers the escalation reads. On the
 # photograph above it cut the uncertain cells from 555 to 37 while the image's actual

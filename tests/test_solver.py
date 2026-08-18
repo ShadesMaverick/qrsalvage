@@ -7,6 +7,8 @@ rather than argued about.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import numpy as np
 import pytest
 
@@ -261,6 +263,37 @@ def test_the_bow_never_returns_a_worse_grid():
         assert bowed.wrong_known <= flat.wrong_known + 1, (
             "a quality gain must not be bought with known cells"
         )
+
+
+def test_the_two_halves_of_a_torn_edge_are_independent():
+    """The shadow and the curl have to stay separable, because they break different things.
+
+    They were one parameter first, and that cost a measurement: the composite axis was read
+    as evidence about the grid when what it actually destroyed was finder detection. Split,
+    each has to do its own job and nothing else -- the shadow darkens without moving anything,
+    the curl moves without darkening -- or an axis built on one of them measures the other
+    again.
+    """
+    matrix = reencode(TEXT)
+    # No blur and no noise: the blur runs after the shadow is drawn and would smear it a
+    # grey level or two past its own support, which is not the coupling this test is about.
+    clean = Damage(contrast=0.25, curvature=0.0, blur=0.0, noise=0.0)
+    plain = render_photo(matrix, clean, seed=1)
+    shadow = render_photo(matrix, replace(clean, tear=0.8), seed=1)
+    curled = render_photo(matrix, replace(clean, curl=3.0), seed=1)
+
+    # Stated so it does not depend on where either effect happens to reach, because both
+    # shapes have been retuned once already: a subtracted gradient can only ever make a
+    # pixel darker, while a displacement moves edges and therefore brightens exactly as
+    # much as it darkens. That difference is what "independent" means here.
+    assert (shadow.astype(int) <= plain.astype(int)).all(), "the shadow must only darken"
+    assert (curled.astype(int) > plain.astype(int) + 5).any(), "the curl must move edges"
+
+    # And each has to act where it claims to: the shadow on the flank's brightness, the
+    # curl not at all on it. render_photo pads the code with a five-module quiet zone.
+    flank = slice(0, int(5 * plain.shape[1] / (matrix.shape[0] + 10)))
+    assert shadow[:, flank].mean() < plain[:, flank].mean() - 5
+    assert abs(float(curled[:, flank].mean()) - float(plain[:, flank].mean())) < 5
 
 
 def test_the_coarse_restart_never_returns_a_worse_grid():

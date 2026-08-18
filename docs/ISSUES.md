@@ -414,8 +414,14 @@ gelöst wurden):
 | Auflösung | 5,0 px | 11/16 | 11/16 | 0 |
 | Auflösung | 4,5 px | 0/16 | 0/16 | 2 |
 | Auflösung | 4,0 px | 0/16 | 0/16 | 2 |
-| Abriss | 0,80 | 14/16 | 14/16 | 1 |
-| Abriss | 1,00 | 6/16 | 6/16 | 7 |
+| Abriss* | 0,80 | 14/16 | 14/16 | 1 |
+| Abriss* | 1,00 | 6/16 | 6/16 | 7 |
+
+\* Dieser Lauf ist älter als die Aufspaltung der Abrisskante in eine optische und eine
+geometrische Hälfte **und** als die Umformung ihres Schattens vom Balken zur Penumbra. Er
+beschreibt die Achse, wie sie damals war, nicht wie sie heute ist — behalten statt
+wiederholt, weil der Befund, den er trägt (die Achse bricht über die Findererkennung), genau
+der Anlass für beide Änderungen war.
 
 Das ist eine Aussage über das Korpus, nicht über die Eskalation, und sie ist der eigentliche
 Befund dieser Messung. Ein hängengebliebener Descent und eine nicht abbildbare Fläche sehen
@@ -428,10 +434,62 @@ zerstört, bevor er etwas einklemmt. Der einzige Beleg für diese Stufe ist dami
 sie ausgelöst hat, und der einzige Schutz gegen ihr stilles Veralten ist dieses Foto im privaten
 Korpus.
 
-**Offen, daraus folgend:** ein synthetischer Fall, der den Descent einklemmt, ohne die Finder zu
-zerstören — also Wölbungsversatz an der Kante ohne (oder mit deutlich schwächerem)
-Schattenstreifen, als eigener Parameter neben `tear`. Erst damit ließe sich diese Eskalation
-messen statt nur bezeugen.
+**Versucht, den fehlenden Fall zu bauen — und gescheitert. BLEIBT OFFEN.**
+
+Zwei Änderungen an `synth.py`, beide sinnvoll und beide nicht ausreichend:
+
+*Die Abrisskante ist jetzt zwei Parameter.* `tear` ist die optische Hälfte (der Schatten),
+`curl` die geometrische (der Kantenversatz). Zusammen ergeben sie das Foto, einzeln lässt sich
+messen, was jede Hälfte tut — was vorher unmöglich war und genau deshalb eine Fehlmessung
+erzeugt hatte. Ein Test hält sie auseinander
+(`test_the_two_halves_of_a_torn_edge_are_independent`), formuliert über eine formunabhängige
+Invariante: Ein subtrahierter Verlauf kann ein Pixel nur dunkler machen, ein Versatz verschiebt
+Kanten und hellt daher genauso viel auf, wie er abdunkelt.
+
+*Der Schatten ist jetzt eine Penumbra.* Vorher ein dreieckiger Balken (Halbbreite 1,6 Module,
+Zentrum 0,8 Module außerhalb der Kante) — sein Träger lief direkt über den äußeren Finderring
+und zerstörte die Erkennung, bevor er irgendeine Geometrie täuschen konnte. Jetzt eine
+Gaußsche Penumbra (σ 1,5 Module, Zentrum 1,5 Module außerhalb): Maximum außerhalb des Codes,
+in die Finder reicht nur der Ausläufer. Gaußsch statt dreieckig, weil eine harte Kante selbst
+ein Merkmal ist, an dem die Binarisierung sich festhält.
+
+**Das hat die Findererkennung deutlich verbessert** — bei `tear` 1,0 überleben jetzt 6 von 6
+Tripeln, wo der alte Balken bei manchen Startwerten einen statt drei Findern übrig ließ.
+**Das Fenster trifft es trotzdem nicht** (6 Bilder je Zelle, Budget 2000):
+
+| tear | curl | Finder | falsch (Median) | Zellen >5 % | ohne | mit Neustart |
+|---|---|---|---|---|---|---|
+| 0,8 | 1,5 | 5/6 | 2,5 % | 0 | 5/6 | 5/6 |
+| 0,8 | 2,5 | 4/6 | 4,5 % | 0 | 6/6 | 6/6 |
+| 0,8 | 3,5 | 0/6 | 5,3 % | 3 | 5/6 | 5/6 |
+| 1,2 | 1,5 | 4/6 | 4,5 % | 1 | 6/6 | 6/6 |
+| 1,2 | 2,5 | 1/6 | 5,3 % | 5 | 6/6 | 6/6 |
+| 1,2 | 3,5 | 0/6 | 25,8 % | 4 | 2/6 | 2/6 |
+| 1,6 | 1,5 | 0/6 | 8,2 % | 6 | 3/6 | 3/6 |
+| 1,6 | 2,5 | 1/6 | 9,0 % | 3 | 3/6 | **2/6** |
+| 1,6 | 3,5 | 0/6 | 25,0 % | 2 | 1/6 | 1/6 |
+
+In **keiner** Zelle treffen „Finder intakt" und „Gitter über 5 % falsch" zusammen: Wo die
+Fehlerrate die Schwelle überschreitet, ist die Findererkennung bereits auf 0–1 von 6 gefallen.
+Der Neustart gewinnt nirgends — und verliert in einer Zelle ein Bild von sechs (fett). Das ist
+bei n=6 im Rauschen und betrifft eine Zelle, in der die Finder ohnehin tot sind und die
+Versionswahl damit haltlos, aber es ist genau der Fall, den `ab_restart.py` im Kopf hat: Die
+Garantie gilt für das *Gitter* unter der Qualitätsfunktion, nicht für das *Ergebnis*, und hier
+hat die Qualität einmal in die falsche Richtung gezeigt.
+
+**Warum es strukturell schwer ist.** Eine Falle im Sinne eines lokalen Optimums braucht ein
+Merkmal, das die quadratischen Niveaufelder *nicht* absorbieren können — also etwa modulbreit
+und lokal. Genau so ein Merkmal überlappt zwangsläufig den Finderring. Umgekehrt ist ein
+breiter weicher Verlauf, der die Finder schont, exakt das, was adaptive Schwelle und
+quadratische Anpassung wegrechnen. Das echte Foto trifft das Fenster, weil sein Schatten beides
+ist: weich genug für die Finder, lokal genug an der Codekante. Über die Schattenform allein ist
+das synthetisch nicht erreichbar.
+
+**Nächster Kandidat, falls es jemand erneut versucht:** nicht weiter an der Schattenform drehen,
+sondern den Attraktor woanders herholen — etwa eine zweite, um eine Modulbreite versetzte
+*Codekante*, wie sie ein stehengebliebener Rest des abgerissenen Nachbaretiketts erzeugt. Die
+berührt die Finder gar nicht und ist trotzdem lokal. Bis dahin gilt: Der grobe Neustart hat
+genau einen Beleg, und der ist ein Foto.
 
 **(c) Der Bogen-Term kann Randversatz prinzipiell nicht ausdrücken — DOKUMENTIERT.** Seine
 Beulen `4t(1-t)` verschwinden an den Rändern; das ist Absicht (Schutz gegen das Verbiegen der
