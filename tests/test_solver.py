@@ -390,6 +390,68 @@ def test_hand_marked_finders_survive_an_oversized_photograph():
         )
 
 
+def test_two_hand_marked_finders_reach_a_code_with_one_blinded():
+    """A marked pair is enough: every geometric reading is fitted and the cells decide.
+
+    Two points are the honest input when the third finder cannot be marked precisely --
+    scratched, faded, painted over. Before the pair was accepted, the hint path indexed a
+    third point that was not there. The paint below takes out the finder's inner square:
+    that blinds both detectors (the contour one loses its nesting, the scan one its
+    1:1:3:1:1 proportion) while the outer ring keeps anchoring the grid -- which is exactly
+    what a scratched-up real photograph looked like.
+    """
+    from qrsalvage.core.pipeline import detect_finders
+    from qrsalvage.core.preprocess import prepare
+
+    px, quiet = 9, 5
+    matrix = reencode(TEXT)
+    modules = matrix.shape[0]
+    damage = Damage(contrast=0.30, curvature=0.0, rotation_deg=0.0, module_px=float(px))
+    photo = render_photo(matrix, damage, seed=2)
+
+    # Everything inside the bottom-left finder's outer ring, painted out.
+    y0 = (quiet + modules - 6) * px
+    x0 = (quiet + 1) * px
+    photo[y0 : y0 + 5 * px, x0 : x0 + 5 * px] = 245
+
+    _, binary = prepare(photo)
+    assert len(detect_finders(binary)) == 2, "precondition: the damage must blind the detectors"
+
+    near = (quiet + 3.5) * float(px)
+    far = (quiet + modules - 3.5) * float(px)
+    result = solve(photo, finder_points=[(near, near), (far, near)])
+
+    assert result.solved, result.failure
+    assert result.text == TEXT
+
+
+def test_hand_marked_finders_are_given_in_pre_crop_coordinates():
+    """A crop narrows the search; it must not change what the marked numbers mean.
+
+    The reported finders are mapped back into the given image's frame, so the marked ones
+    have to be read in that same frame -- anything else makes the escape hatch disagree
+    with its own output.
+    """
+    damage = Damage(contrast=0.30, curvature=0.0, rotation_deg=0.0, module_px=9.0)
+    photo = render_photo(reencode(TEXT), damage, seed=4)
+    shift = 60
+    padded = np.full((photo.shape[0] + shift, photo.shape[1] + shift, 3), 230, dtype=np.uint8)
+    padded[shift:, shift:] = photo
+
+    modules = reencode(TEXT).shape[0]
+    near = (5 + 3.5) * 9.0 + shift
+    far = (5 + modules - 3.5) * 9.0 + shift
+    points = [(near, near), (far, near), (near, far)]
+
+    result = solve(
+        padded,
+        crop=(shift, shift, padded.shape[1], padded.shape[0]),
+        finder_points=points,
+    )
+    assert result.solved, result.failure
+    assert result.text == TEXT
+
+
 def test_reported_finders_are_in_the_coordinates_of_the_given_image():
     """The automatic path downscales internally; the report must not leak that."""
     import cv2
