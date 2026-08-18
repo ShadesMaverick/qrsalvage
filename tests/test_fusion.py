@@ -33,15 +33,20 @@ BASE = Damage(contrast=0.18, curvature=0.30, module_px=8.0)
 # That is the case this path exists for, and these values were found by searching for one the
 # single-image path provably cannot solve.
 #
-# The search has to be redone whenever the solver gets stronger, and it has been twice now, so
-# treat this failing as a result rather than a chore: the robust level estimate (ROBUST_LEVELS
-# in sampling.py) read the case at 0.50/group 7 from one photograph -- as it did every other
-# group at that stain -- and the grid coherence term (COHERENCE_WEIGHT in geometry.py) then
-# read 0.55/group 2 the same way. Each time, work aimed at something else moved a case out of
-# "needs three photographs" and into "needs one", which is the clearest evidence either change
-# produced. When this precondition next breaks, the first question is which change earned it.
-HARD_STAIN = 0.55
-HARD_GROUP = 7
+# The search has to be redone whenever the solver gets stronger, and it has been three times
+# now, so treat this failing as a result rather than a chore: the robust level estimate
+# (ROBUST_LEVELS in sampling.py) read the case at 0.50/group 7 from one photograph -- as it
+# did every other group at that stain -- and the grid coherence term (COHERENCE_WEIGHT in
+# geometry.py) then read 0.55/group 2 the same way. The third time took two changes at once:
+# with the per-edge bow (geometry.refine_bow) and the featureless damping
+# (sampling.featureless_depth) both in place, every group at stain 0.55 reads from a single
+# photograph -- a stain is a featureless patch, so its cells now reach Reed-Solomon as
+# erasures -- while either change alone converts none of them. Each time, work aimed at
+# something else moved a case out of "needs three photographs" and into "needs one", which is
+# the clearest evidence the changes produced. When this precondition next breaks, the first
+# question is which change earned it.
+HARD_STAIN = 0.60
+HARD_GROUP = 3
 
 
 def photographs(stain: float, group: int, count: int = 3) -> list[np.ndarray]:

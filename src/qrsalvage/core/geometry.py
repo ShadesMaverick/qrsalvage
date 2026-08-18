@@ -14,7 +14,21 @@ from typing import cast
 import cv2
 import numpy as np
 
-from .sampling import estimate_levels, posterior_dark, sample_cells, warp
+from .sampling import (
+    buried_cells,
+    estimate_levels,
+    featureless_depth,
+    posterior_dark,
+    sample_cells,
+    warp,
+)
+
+# The witness floor: a candidate grid is only judgeable while at least this fraction of its
+# known cells stands on readable surface. Below it the wrong-cell count is a statement about
+# the damage, not the placement, and the candidate is scored as unjudgeable rather than as
+# accidentally clean -- otherwise the grid that buries most of its witnesses wins by silencing
+# them.
+ALIVE_KNOWN_FLOOR = 0.5
 
 # How much the grid objective listens to the cells the standard does not fix. Zero reproduces
 # the known-cell-only objective exactly. See the note at its use in _score for what it
@@ -89,6 +103,41 @@ def find_finders(binary: np.ndarray, min_size: int = 20) -> list[tuple[float, fl
     return merged
 
 
+def finder_triple_score(triple: list[tuple[float, float, float]]) -> float:
+    """How little three candidates look like one code's three finders. Lower is better.
+
+    The two properties genuine finders share: nearly identical width, and an arrangement of
+    two equal, perpendicular sides. A clean photographed triple scores well under 0.3; a triple
+    completed by an artefact -- a bulb rim, the code's own outline picked up as one contour --
+    lands past 1.0, driven by the width term. Degenerate triples score infinity.
+    """
+    widths = [w for _, _, w in triple]
+    if len(triple) != 3 or min(widths) <= 0:
+        return float(np.inf)
+    width_spread = (max(widths) - min(widths)) / max(widths)
+
+    points = [np.array([x, y], dtype=np.float64) for x, y, _ in triple]
+    corner_scores = []
+    for c in range(3):
+        a, b = (points[m] for m in range(3) if m != c)
+        v1, v2 = a - points[c], b - points[c]
+        n1, n2 = float(np.linalg.norm(v1)), float(np.linalg.norm(v2))
+        if n1 < 1e-6 or n2 < 1e-6:
+            continue
+        right_angle = abs(float(np.dot(v1, v2))) / (n1 * n2)
+        equal_sides = abs(n1 - n2) / max(n1, n2)
+        corner_scores.append(right_angle + equal_sides)
+    if not corner_scores:
+        return float(np.inf)
+
+    # A code smaller than a few finder widths across is a coincidence, not a code.
+    span = min(float(np.linalg.norm(points[a] - points[b])) for a, b in ((0, 1), (0, 2), (1, 2)))
+    if span < 2.0 * max(widths):
+        return float(np.inf)
+
+    return min(corner_scores) + 2.0 * width_spread
+
+
 def select_finder_triple(
     candidates: list[tuple[float, float, float]], limit: int = 10
 ) -> list[tuple[float, float, float]]:
@@ -97,8 +146,9 @@ def select_finder_triple(
     Taking the three largest is wrong, and it fails on exactly the photographs people bring:
     a bulb rim, a label edge or a reflection produces a large false candidate that outranks the
     real ones. The three genuine finders always share two properties instead -- nearly identical
-    width, and an arrangement of two equal, perpendicular sides. Both are scored here, and the
-    best-scoring triple wins.
+    width, and an arrangement of two equal, perpendicular sides. Both are scored by
+    :func:`finder_triple_score`, and the best-scoring triple wins. Whether even the winner is
+    worth believing is the caller's question, and the same score answers it.
     """
     pool = candidates[:limit]
     if len(pool) < 3:
@@ -109,34 +159,7 @@ def select_finder_triple(
         for j in range(i + 1, len(pool)):
             for k in range(j + 1, len(pool)):
                 triple = [pool[i], pool[j], pool[k]]
-                widths = [w for _, _, w in triple]
-                if min(widths) <= 0:
-                    continue
-                width_spread = (max(widths) - min(widths)) / max(widths)
-
-                points = [np.array([x, y], dtype=np.float64) for x, y, _ in triple]
-                corner_scores = []
-                for c in range(3):
-                    a, b = (points[m] for m in range(3) if m != c)
-                    v1, v2 = a - points[c], b - points[c]
-                    n1, n2 = float(np.linalg.norm(v1)), float(np.linalg.norm(v2))
-                    if n1 < 1e-6 or n2 < 1e-6:
-                        continue
-                    right_angle = abs(float(np.dot(v1, v2))) / (n1 * n2)
-                    equal_sides = abs(n1 - n2) / max(n1, n2)
-                    corner_scores.append(right_angle + equal_sides)
-                if not corner_scores:
-                    continue
-
-                # A code smaller than a few finder widths across is a coincidence, not a code.
-                span = min(
-                    float(np.linalg.norm(points[a] - points[b]))
-                    for a, b in ((0, 1), (0, 2), (1, 2))
-                )
-                if span < 2.0 * max(widths):
-                    continue
-
-                score = min(corner_scores) + 2.0 * width_spread
+                score = finder_triple_score(triple)
                 if score < best_score:
                     best_score, best = score, triple
 
@@ -239,8 +262,18 @@ def _score(
     posterior = posterior_dark(means, fit)
 
     known = known_dark | known_light
+    known_total = int(known.sum())
+
     # Quality: mean contrast-normalised distance from the threshold. Smooth enough to optimise
     # against, unlike the integer error count.
+    #
+    # Deliberately *unweighted* by the featureless depth below, and that took a broken
+    # photograph to learn: a descent whose objective discounts cells standing in featureless
+    # ground is rewarded for pushing troublesome cells INTO that ground, where they stop
+    # costing -- it reported fewer wrong cells than the honest objective and produced a grid
+    # whose data no longer decoded. The witness discount is safe only where nothing can move:
+    # in the wrong-cell count that ranks finished candidates, never in the score a descent
+    # climbs.
     margin = np.where(known_dark, fit.threshold - means, means - fit.threshold) / fit.contrast
     quality = float(np.tanh(margin[known] * 4.0).mean())
 
@@ -261,15 +294,31 @@ def _score(
         # rules out. Hence a weight, and hence a measurement of it.
         quality += COHERENCE_WEIGHT * float(np.abs(2.0 * posterior[~known] - 1.0).mean())
 
+    # The wrong count, unlike the quality, excludes the cells standing in featureless ground:
+    # a known cell there is not wrong about the placement, it is wrong about the world -- the
+    # print under it is gone -- and counting it makes every candidate on a damaged photograph
+    # look misplaced. The survivors are extrapolated to the full ring so candidates whose
+    # damage differs stay comparable: three wrong of a hundred living witnesses is the same
+    # placement quality as six of two hundred. Only the selection between finished candidates
+    # reads this number, never the descent, so it cannot teach anyone to bury witnesses.
     hard = means < fit.threshold
-    wrong = int((hard[known] != known_dark[known]).sum())
+    depth = featureless_depth(posterior, known)
+    alive = known & ~buried_cells(depth)
+    alive_count = int(alive.sum())
+    if alive_count < ALIVE_KNOWN_FLOOR * known_total:
+        # Too little living testimony to judge the placement at all. Worst possible count,
+        # not a lucky zero: the grid that buries its jury must not outrank one that faces it.
+        wrong = known_total
+    else:
+        wrong_alive = int((hard[alive] != known_dark[alive]).sum())
+        wrong = int(round(wrong_alive * known_total / alive_count))
 
     return GridFit(
         modules=modules,
         corners=np.asarray(corners, dtype=np.float64),
         quality=quality,
         wrong_known=wrong,
-        known_total=int(known.sum()),
+        known_total=known_total,
         means=means,
         posterior=posterior,
     )

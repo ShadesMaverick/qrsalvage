@@ -26,6 +26,7 @@ from .ensemble import (
 from .geometry import (
     GridFit,
     find_finders,
+    finder_triple_score,
     initial_corners,
     order_finders,
     refine_bow,
@@ -38,6 +39,7 @@ from .layout import read_format
 from .matrix import ModuleMatrix
 from .preprocess import prepare
 from .repair import RepairResult, repair_progressive, repair_scattered
+from .sampling import BURIED_DEPTH, buried_cells, featureless_depth
 from .scanfinder import find_finders_scan, merge_finders
 from .structure import is_valid_size, structure_mask, timing_score, version_for_modules
 
@@ -58,6 +60,30 @@ BOW_REFINE = True
 # geometry.restart_coarse.
 COARSE_RESTART = True
 COARSE_RESTART_THRESHOLD = 0.05
+
+# Whether cells inside single-colour patches reach the decoder damped by their featureless
+# depth instead of as confident readings. The counting argument and the depth live at
+# sampling.featureless_depth.
+#
+# MEASURED RESULT (scripts/ab_worn.py, 16 images per level and arm, budget 4000). The worn
+# axis erases the bottom rows of the print whole, and without this the axis is simply dead:
+# 0/16 at every level from 0.09 up, because every erased cell reaches Reed-Solomon as a
+# confident light module. Damped, the same levels read 9/16, 9/16, 10/16 and 4/16 (worn 0.09
+# to 0.18), the two control levels stay 16/16 in both arms, and neither arm produced a single
+# wrong text -- the count that matters most, since a repair fed wrong erasure positions can
+# manufacture presentable garbage. The stain axis profits as a side effect: a stain is a
+# featureless patch too, and with this and the per-edge bow together every fusion hard case
+# at stain 0.55 now reads from a single photograph (see tests/test_fusion.py).
+BLANK_FEATURELESS = True
+
+# Past this triple score the third best "finder" is likelier an artefact than a finder, and
+# the two credible ones additionally go down the pair path, competing on the same terms.
+# Calibration: clean synthetic and photographed triples score below 0.3 (width agreement and
+# right angle), while a triple completed by an artefact -- observed with a worn-off bottom
+# edge whose broken outline came back as one giant contour -- lands past 1.2, carried by the
+# width term alone. The doubt is cheap where it is wrong: the six extra pair fits only run
+# when the score is bad, and the known cells still decide between every candidate fitted.
+TRIPLE_DOUBT = 0.5
 
 
 # The progress callback a shell injects: (event name, JSON-ready payload). See _emit.
@@ -95,6 +121,7 @@ class SolveResult:
     uncertain: int | None = None
     candidates_tried: int = 0
     flipped: list[tuple[int, int]] = field(default_factory=list)
+    blanked: int = 0
     matrix: ModuleMatrix | None = None
     decoded_matrix: np.ndarray | None = None
     finders: list[tuple[float, float, float]] = field(default_factory=list)
@@ -329,25 +356,46 @@ def _attempt(
     # misplaced click; with the automatic centres a fine step converges faster and better.
     delta = 12.0 if finder_points else 3.0
 
+    def pair_fits(pair: list[tuple[float, float, float]]) -> list[GridFit]:
+        """Every geometric reading of two finders, fitted; the known cells decide.
+
+        Constructed thirds outside the image are skipped for automatic pairs only: those are
+        unvetted, and a far-out third fits a garbage grid onto border pixels. A hand-marked
+        pair is the opposite case -- the person marked two centres precisely because the third
+        is destroyed or beyond the frame -- so for them every reading is fitted.
+        """
+        found: list[GridFit] = []
+        for third in third_finder_candidates(pair[0], pair[1]):
+            in_frame = 0 <= third[0] < gray.shape[1] and 0 <= third[1] < gray.shape[0]
+            if finder_points is None and not in_frame:
+                continue
+            # The constructed third is a right-angle guess that ignores perspective, so it
+            # starts further out than any hand-placed click -- it gets the same coarse first
+            # step the clicks get, measured to matter on a photograph whose skew put the true
+            # corner a dozen pixels from the construction.
+            found.extend(fit_grid(gray, [*pair, third], sizes, start_delta=max(delta, 12.0)))
+        return found
+
     fits: list[GridFit] = []
     if len(finders) >= 3:
-        fits = fit_grid(gray, finders, sizes, start_delta=delta, on_step=on_fit)
+        triple = select_finder_triple(finders)
+        fits = fit_grid(gray, triple, sizes, start_delta=delta, on_step=on_fit)
+        if finder_triple_score(triple) > TRIPLE_DOUBT:
+            # The best triple available still does not look like three finders -- one of them
+            # is probably an artefact standing in for a finder the damage took. The two that
+            # agree on their width go down the pair path as well, and the known cells decide
+            # between everything fitted, exactly as they decide everything else.
+            pair = min(
+                ([a, b] for i, a in enumerate(finders[:10]) for b in finders[i + 1 : 10]),
+                key=lambda p: abs(p[0][2] - p[1][2]) / max(p[0][2], p[1][2], 1e-6),
+            )
+            fits.extend(pair_fits(pair))
     elif len(finders) == 2:
         # One finder may be worn away entirely, or merely faded enough that neither detector
         # recognises it -- both happen on real damage. The geometry is still determined up to
         # six discrete choices, so all of them are fitted and the known cells decide. This path
         # costs six times a normal fit, which is why it is a fallback.
-        #
-        # Candidates outside the image are skipped for the automatic pairs only. Those pairs
-        # are unvetted, and a far-out third fits a garbage grid onto border pixels. A
-        # hand-marked pair is the opposite case: the person marked two centres precisely
-        # because the third is destroyed or beyond the frame, so for them every geometric
-        # reading is fitted and the known cells decide, as everywhere else.
-        for third in third_finder_candidates(finders[0], finders[1]):
-            in_frame = 0 <= third[0] < gray.shape[1] and 0 <= third[1] < gray.shape[0]
-            if finder_points is None and not in_frame:
-                continue
-            fits.extend(fit_grid(gray, [*finders[:2], third], sizes, start_delta=max(delta, 8.0)))
+        fits = pair_fits(list(finders[:2]))
 
     return used, gray, binary, finders, fits, invert, transform
 
@@ -696,6 +744,23 @@ def solve(
         if geometry is not None:
             posterior = geometry.posterior
 
+    # Single-colour patches carry no data whatever the pixels say. Cells buried in one reach
+    # the decoder as exact unknowns -- that hard half is what guarantees their codewords rank
+    # below every merely-shaky cell the photograph has anyway, so the erasure ladder spends
+    # its first erasures inside the damage. The rim a patch brushes is damped in proportion,
+    # which keeps it ahead of healthy cells and behind the core: the ladder reaches it only
+    # with whatever budget the core left over. After the ensembles, so a fused posterior is
+    # judged as fused; before the events, so a watcher sees what the decoder sees.
+    blanked = 0
+    if BLANK_FEATURELESS:
+        known = known_dark | known_light
+        depth = featureless_depth(posterior, known)
+        buried = buried_cells(depth) & ~known
+        blanked = int(buried.sum())
+        if depth.any():
+            damp = np.where(buried, 0.0, np.clip(1.0 - depth / BURIED_DEPTH, 0.0, 1.0))
+            posterior = np.where(~known, 0.5 + (posterior - 0.5) * damp, posterior)
+
     mm = ModuleMatrix(posterior=posterior, known_dark=known_dark, known_light=known_light)
     _emit(
         progress,
@@ -733,6 +798,7 @@ def solve(
         uncertain=int(len(mm.uncertain_cells(band))),
         candidates_tried=search.candidates_tried,
         flipped=search.flipped,
+        blanked=blanked,
         matrix=mm,
         decoded_matrix=search.matrix,
         finders=shown_finders,
@@ -858,11 +924,25 @@ def solve_many(
         disagreeing=consensus.disagreeing,
         rejected=list(consensus.rejected),
     )
-    mm = ModuleMatrix(consensus.posterior, known_dark, known_light)
+    # The members arrive damped already, and averaging half-values keeps them there -- but a
+    # patch every photograph read the same way can first *become* uniform in the fusion. The
+    # decoder's contract is the same on both paths: what it sees has been through the test.
+    fused = consensus.posterior
+    blanked = 0
+    if BLANK_FEATURELESS:
+        known = known_dark | known_light
+        depth = featureless_depth(fused, known)
+        buried = buried_cells(depth) & ~known
+        blanked = int(buried.sum())
+        if depth.any():
+            damp = np.where(buried, 0.0, np.clip(1.0 - depth / BURIED_DEPTH, 0.0, 1.0))
+            fused = np.where(~known, 0.5 + (fused - 0.5) * damp, fused)
+
+    mm = ModuleMatrix(fused, known_dark, known_light)
     search, repair_result = _decode_chain(mm, budget, progress=progress)
 
     known = known_dark | known_light
-    wrong_sampled = int(((consensus.posterior >= 0.5)[known] != known_dark[known]).sum())
+    wrong_sampled = int(((fused >= 0.5)[known] != known_dark[known]).sum())
 
     ecc = None
     if search.matrix is not None:
@@ -882,6 +962,7 @@ def solve_many(
         uncertain=int(len(mm.uncertain_cells(band))),
         candidates_tried=search.candidates_tried,
         flipped=search.flipped,
+        blanked=blanked,
         matrix=mm,
         decoded_matrix=search.matrix,
         finders=best.finders,

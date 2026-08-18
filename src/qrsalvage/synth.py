@@ -70,6 +70,12 @@ class Damage:
     # *and* to any bow that displaces both edges identically. Positive values compress the
     # borders; the corners move most, so the flat corner fit absorbs part but not the arcs.
     dome: float = 0.0
+    # The print simply ends: the bottom rows of the code never made it onto the surface, or
+    # were rubbed off whole -- a photographed sticker lost its lower fifth this way, wall paint
+    # showing where modules belong. As a fraction of the code's module rows. What makes it its
+    # own axis rather than a stain at the edge: the lost area is *featureless*, so every cell
+    # in it reads as a clean, confident light module unless something downstream knows better.
+    worn: float = 0.0
 
 
 def _cylinder_map(shape: tuple[int, int], curvature: float):
@@ -118,6 +124,14 @@ def render_photo(matrix: np.ndarray, damage: Damage, seed: int = 0) -> np.ndarra
         if end > start:
             dark = strip.integers(0, 2, size=(cells.shape[0], end - start)).astype(bool)
             cells[:, start:end] = np.where(dark, 1.0 - damage.remnant, 1.0)
+
+    if damage.worn > 0:
+        # In cell units, before optics: the print ends, it is not covered up. Everything the
+        # camera later does -- blur, glare, noise -- happens to blank surface exactly as it
+        # happens to the surviving modules.
+        rows = int(round(damage.worn * matrix.shape[0]))
+        if rows > 0:
+            cells[cells.shape[0] - quiet - rows :, :] = 1.0
 
     plane = np.kron(cells, np.ones((px, px), dtype=np.float32))
     h, w = plane.shape
