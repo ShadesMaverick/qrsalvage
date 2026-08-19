@@ -546,7 +546,7 @@ Parametrisierung des Warps.
 
 ---
 
-## 9. Unterkante ohne Anker: das Alignment-Muster als vierter Fixpunkt
+## 9. Unterkante ohne Anker: Becken aufzählen statt Zeugen suchen — ERLEDIGT
 
 **Labels:** `enhancement`, `geometry`
 
@@ -565,8 +565,36 @@ konstruiert (so wurde das Foto gelöst). Zweiter Kandidat, falls das Alignment a
 ist: Skalenhypothesen (0,94–1,06) je durch die volle Decode-Kette schicken und den Decoder
 entscheiden lassen — teuer, aber nur als Eskalation nach Fehlschlag.
 
-**Fertig, wenn:** das Foto (liegt im Batch-Protokoll, Reddit-Fund „damaged-qr-encoding-url")
-vollautomatisch löst, und die worn-Achse bei 0,12+ messbar über die heutigen 9/16 steigt.
+**Nachtrag nach Vertiefung — die Alignment-Hälfte war falsch herum gedacht.** Beide Gitter
+lesen das Alignment bereits fehlerfrei (es steckt längst in den bekannten Zellen und pinnt
+beide bis Reihe 28); die Divergenz sitzt in der BR-Ecke (24 px in x), von Perspektive und
+Kantenbogen an allen Zeugen vorbei gebogen. Ein zusätzlicher Alignment-Zwang hätte nichts
+getrennt. Gebaut wurde deshalb der zweite Kandidat: der **Anchor-Sweep** in `pipeline.solve`
+(`ANCHOR_SWEEP`), der nach Fehlschlag die Descent-Becken der konstruierten Drittfinder-Skalen
+aufzählt und die billige Decode-Kette richten lässt — mit gedeckelter Erasure-Leiter
+(`ANCHOR_ERASURE_CAP`), weil ein Richter über mehrere Geometrien sonst die mit der größten
+Reed-Solomon-Freiheit gewinnen lässt statt die mit der Antwort (zwei so entstandene Fehltexte
+in der ersten Messung, beide mit der Signatur „alle Prüfsymbole als Erasures verbraucht").
+Messung in `scripts/ab_anchor.py`.
+
+**Das Foto selbst bleibt offen und ist doppelt blockiert:** (a) sein richtiges Becken wird
+nur von der 1,06-Konstruktion ab den *Handklick*-Zentren erreicht — ab den Detektorzentren
+(TR 10 px daneben) erreicht es keine der Skalen, auch nicht mit grobem Neustart; (b) selbst
+im richtigen Becken decodiert erst die handgesetzte Reihenmaske, weil der strukturierte
+Abrieb (Nr. 10) konfident-falsche Zellen liefert. Es ist damit der Prüfstein für Nr. 10,
+nicht mehr für diese Nummer.
+
+**Fertig, wenn:** die worn-Achse bei 0,09+ messbar über die 9/16 des einzelnen Beckens
+steigt, ohne dass der Sweep-Arm falsche Texte produziert (`scripts/ab_anchor.py`).
+
+**Gemessen und erfüllt** (16 Bilder je Level und Arm, Budget 4000, vier Messrunden — die
+ersten drei haben je einen Richterfehler aufgedeckt, Protokoll im Docstring von
+`ANCHOR_WITNESS_CONFIDENCE`): worn 0,09: 9→11; 0,12: 9→11; 0,15: 10→10; 0,18: **4→10**;
+Kontrolllevel identisch, **kein falscher Text in keinem Arm**. Der Zeugen-Richter („eine
+unbestätigte Reparatur darf Stille füllen, aber keine konfident gelesene Zelle
+überstimmen") hat dabei mehr getan als Erfindungen zu blocken: Nach einer Verwerfung sucht
+der Sweep weiter, und ein Seed, der zuvor Byte-Müll lieferte, decodiert aus einem späteren
+Becken korrekt.
 
 ---
 

@@ -98,6 +98,7 @@ Break any of these and the project stops being itself:
 | rescue a grid that seated on the wrong thing | `geometry.restart_coarse`, triggered in `pipeline.solve` past `COARSE_RESTART_THRESHOLD`; measured by `scripts/ab_restart.py` |
 | improve the per-cell probabilities | `sampling.estimate_levels` / `posterior_dark`; calibration measured by `scripts/calibration.py`, robustness against lying known cells by `scripts/ab_robust.py` |
 | handle areas where the print is gone | `sampling.featureless_depth` / `buried_cells` (the counting argument), damped into the posterior in `pipeline.solve`; measured by `scripts/ab_worn.py`. The depth also strikes buried witnesses from `wrong_known` in `geometry._score` — deliberately never from the descent's quality; the docstring records the failure that rule comes from |
+| rescue a grid whose third finder is constructed | the anchor sweep in `pipeline.solve` (`ANCHOR_SWEEP`): on failure, refit at each `ANCHOR_SCALES` along the winning direction and let the cheap half of the decode chain judge each basin; measured by `scripts/ab_anchor.py`, the failure it exists for at the constant's docstring |
 | handle coloured overlays (marker, guide lines) | `preprocess.prepare` (`NEUTRAL_SATURATION`) — ships off, cap at zero; `scripts/ab_marker.py` is the instrument that says why |
 | change what the repair may try | `repair.py`; the decode chain order is `pipeline._decode_chain` |
 | add an export format | `export.py`, wired into the request layer in `api.py` (both web shells inherit it) |
