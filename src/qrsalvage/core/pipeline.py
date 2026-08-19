@@ -38,6 +38,7 @@ from .geometry import (
 from .layout import read_format
 from .matrix import ModuleMatrix
 from .preprocess import prepare
+from .qrspec import block_plan
 from .repair import RepairResult, repair_progressive, repair_scattered
 from .sampling import BURIED_DEPTH, buried_cells, featureless_depth
 from .scanfinder import find_finders_scan, merge_finders
@@ -84,6 +85,53 @@ BLANK_FEATURELESS = True
 # width term alone. The doubt is cheap where it is wrong: the six extra pair fits only run
 # when the score is bad, and the known cells still decide between every candidate fitted.
 TRIPLE_DOUBT = 0.5
+
+# The anchor sweep: when a grid hangs on two finders and a constructed third, the side away
+# from the pair has no witness, and the failure that proves it is exact. On a photograph with
+# a worn-off bottom edge, two grids read all 220 visible structure cells -- timing, both
+# finders, the full alignment pattern -- without a single error, and still assigned 197 data
+# cells differently; their bottom-right corners sat 24 px apart, the gap bent back out of the
+# witnesses' sight by perspective and the per-edge bow. No objective built on the cells the
+# standard fixes can rank such grids, because they are all silent in exactly the region that
+# differs. Each constructed-third scale is its own descent basin (the descent cannot cross
+# between them; reaching the solving grid took a hand-built start at 1.06), so on failure the
+# basins are enumerated: refit at each scale along the winning direction, and let the decoder
+# -- the one witness with something to say -- judge each basin through the cheap half of the
+# decode chain. Bad scales stay cheap to reject: they tear the alignment pattern and the
+# timing off their cells, and the known-cell count discards them before any decoding.
+#
+# MEASURED RESULT (scripts/ab_anchor.py, 16 images per level and arm, budget 4000, with the
+# witness judge below in place). On the worn axis, whose erased bottom rows manufacture
+# exactly this geometry: 9/16 -> 11/16 at worn 0.09 and at 0.12, 10/16 -> 10/16 at 0.15,
+# 4/16 -> 10/16 at 0.18; the control level stays 16/16 in both arms, and neither arm
+# produced a single wrong text. Ten recoveries across the axis, each one a photograph whose
+# only obstacle was that the right-angle construction had picked the wrong basin. The cost
+# lands on failures alone -- a solved image never enters the sweep.
+ANCHOR_SWEEP = True
+ANCHOR_SCALES = (0.94, 0.97, 1.03, 1.06)
+
+# The sweep's second judge, and it fires only on the repairs nothing else vouches for. A
+# repair that spent *every* check symbol as an erasure has confirmed nothing -- repair.py
+# states it plainly: with as many erasures as check symbols Reed-Solomon always finds a valid
+# solution -- and the outside verify only catches structural nonsense. Such a repair may
+# still be right, on heavy damage it is even the only possible right answer; what it may not
+# do is overrule witnesses. Past this confidence a cell counts as one, and an unconfirmed
+# repair that flips even a single witness is rejected however cleanly it decodes: the true
+# full-freedom repair only writes into blank cells, the invented one recomputes whole
+# codewords and contradicts confidently-read cells somewhere along the way.
+#
+# Both simpler judges were measured first and rejected. A flat cap below the ladder's top
+# rung removed the two wrong texts of the first measurement and with them every genuine
+# recovery at worn 0.18 (9/16 back to 4/16) -- on heavy damage the true repair needs the
+# full ladder too. Applying the witness check to every repair removed the wrong texts and
+# the genuine recoveries at worn 0.09 and 0.12 instead -- error *correction* overrules
+# witnesses by definition, and a repair with check symbols left over has been vouched for by
+# exactly those symbols. Confirmed repairs pass unquestioned; only total freedom is audited.
+#
+# Measured, this judge does more than block the two inventions: rejecting them lets the
+# sweep keep searching, and on one seed the very case that had produced byte garbage went on
+# to decode correctly from a later basin. The final tally is at ANCHOR_SWEEP above.
+ANCHOR_WITNESS_CONFIDENCE = 0.35
 
 
 # The progress callback a shell injects: (event name, JSON-ready payload). See _emit.
@@ -171,7 +219,9 @@ _ScaleAttempt = tuple[
     list[tuple[float, float, float]],
 ]
 
-# One complete pass at one polarity: a _Prepared plus the fitted grids and the polarity used.
+# One complete pass at one polarity: a _Prepared plus the fitted grids, the polarity used,
+# and -- when the grids hang on a constructed third finder -- the pair they hang on. The pair
+# is what the anchor sweep needs later: it marks the geometry as one with an unwitnessed side.
 _Attempt = tuple[
     np.ndarray,
     np.ndarray,
@@ -180,6 +230,7 @@ _Attempt = tuple[
     list[GridFit],
     bool,
     tuple[float, float, float],
+    "list[tuple[float, float, float]] | None",
 ]
 
 
@@ -377,6 +428,7 @@ def _attempt(
         return found
 
     fits: list[GridFit] = []
+    anchor_pair: list[tuple[float, float, float]] | None = None
     if len(finders) >= 3:
         triple = select_finder_triple(finders)
         fits = fit_grid(gray, triple, sizes, start_delta=delta, on_step=on_fit)
@@ -385,19 +437,20 @@ def _attempt(
             # is probably an artefact standing in for a finder the damage took. The two that
             # agree on their width go down the pair path as well, and the known cells decide
             # between everything fitted, exactly as they decide everything else.
-            pair = min(
+            anchor_pair = min(
                 ([a, b] for i, a in enumerate(finders[:10]) for b in finders[i + 1 : 10]),
                 key=lambda p: abs(p[0][2] - p[1][2]) / max(p[0][2], p[1][2], 1e-6),
             )
-            fits.extend(pair_fits(pair))
+            fits.extend(pair_fits(anchor_pair))
     elif len(finders) == 2:
         # One finder may be worn away entirely, or merely faded enough that neither detector
         # recognises it -- both happen on real damage. The geometry is still determined up to
         # six discrete choices, so all of them are fitted and the known cells decide. This path
         # costs six times a normal fit, which is why it is a fallback.
-        fits = pair_fits(list(finders[:2]))
+        anchor_pair = list(finders[:2])
+        fits = pair_fits(anchor_pair)
 
-    return used, gray, binary, finders, fits, invert, transform
+    return used, gray, binary, finders, fits, invert, transform, anchor_pair
 
 
 def _error_rate(attempt: _Attempt) -> float:
@@ -551,8 +604,30 @@ def fit_grid(
     return fits
 
 
+def _damp_featureless(
+    posterior: np.ndarray, known_dark: np.ndarray, known_light: np.ndarray
+) -> tuple[np.ndarray, int]:
+    """Damp featureless ground towards unknown; returns (posterior, buried cell count).
+
+    One function for every path that builds a matrix for the decoder -- single image, fusion,
+    anchor sweep -- because the decoder's contract is the same on all of them: what it sees
+    has been through the test. The reasoning lives at sampling.featureless_depth and at the
+    BLANK_FEATURELESS constant above.
+    """
+    if not BLANK_FEATURELESS:
+        return posterior, 0
+    known = known_dark | known_light
+    depth = featureless_depth(posterior, known)
+    buried = buried_cells(depth) & ~known
+    blanked = int(buried.sum())
+    if depth.any():
+        damp = np.where(buried, 0.0, np.clip(1.0 - depth / BURIED_DEPTH, 0.0, 1.0))
+        posterior = np.where(~known, 0.5 + (posterior - 0.5) * damp, posterior)
+    return posterior, blanked
+
+
 def _decode_chain(
-    mm: ModuleMatrix, budget: int, progress: ProgressFn | None = None
+    mm: ModuleMatrix, budget: int, progress: ProgressFn | None = None, probe: bool = True
 ) -> tuple[SearchResult, RepairResult | None]:
     """Turn a module matrix into text, cheapest route first.
 
@@ -562,7 +637,10 @@ def _decode_chain(
 
     Shared by the single-image and the multi-image path on purpose. The two differ only in how
     the matrix was measured, and a second copy of this ladder is exactly how they would start
-    giving different answers to the same evidence.
+    giving different answers to the same evidence. The anchor sweep runs this same chain with
+    `probe` off -- it judges many candidate geometries, and per candidate the combinatorial
+    probe costs more than it could tell; the sweep then adds its own witness check on top
+    (ANCHOR_WITNESS_CONFIDENCE) before adopting what this chain returns.
     """
     hard = mm.hard()
     text = decode_matrix(hard)
@@ -597,6 +675,9 @@ def _decode_chain(
         text = decode_matrix(scattered.matrix)
         if text:
             return SearchResult(text=text, candidates_tried=3, matrix=scattered.matrix), scattered
+
+    if not probe:
+        return SearchResult(text=None, candidates_tried=3), repair_result
 
     _emit(progress, "probe", tried=0, budget=budget)
     search = ordered_search(
@@ -675,7 +756,7 @@ def solve(
         if _error_rate(flipped) < _error_rate(attempt):
             attempt = flipped
 
-    bgr, gray, binary, finders, fits, inverted, transform = attempt
+    bgr, gray, binary, finders, fits, inverted, transform, anchor_pair = attempt
 
     # Everything internal measures on the working image; everything a person sees -- the
     # finder rings the page draws on the photograph above all -- has to land on the pixels
@@ -751,15 +832,7 @@ def solve(
     # which keeps it ahead of healthy cells and behind the core: the ladder reaches it only
     # with whatever budget the core left over. After the ensembles, so a fused posterior is
     # judged as fused; before the events, so a watcher sees what the decoder sees.
-    blanked = 0
-    if BLANK_FEATURELESS:
-        known = known_dark | known_light
-        depth = featureless_depth(posterior, known)
-        buried = buried_cells(depth) & ~known
-        blanked = int(buried.sum())
-        if depth.any():
-            damp = np.where(buried, 0.0, np.clip(1.0 - depth / BURIED_DEPTH, 0.0, 1.0))
-            posterior = np.where(~known, 0.5 + (posterior - 0.5) * damp, posterior)
+    posterior, blanked = _damp_featureless(posterior, known_dark, known_light)
 
     mm = ModuleMatrix(posterior=posterior, known_dark=known_dark, known_light=known_light)
     _emit(
@@ -771,6 +844,89 @@ def solve(
         posterior=[[round(float(p), 2) for p in row] for row in posterior.tolist()],
     )
     search, repair_result = _decode_chain(mm, budget, progress=progress)
+
+    if search.text is None and ANCHOR_SWEEP and anchor_pair is not None:
+        # Enumerate the descent basins the constructed third could not choose between -- see
+        # the note at ANCHOR_SWEEP. Only the winning direction is swept: the selection picked
+        # the right reading of the pair, it is the reading's *scale* no witness could settle.
+        m = float(best.modules)
+        destination = np.array([[0, 0], [m, 0], [0, m], [m, m]], dtype=np.float32)
+        homography = cv2.getPerspectiveTransform(
+            destination, np.asarray(best.corners, dtype=np.float32)
+        )
+
+        def module_point(col: float, row: float) -> np.ndarray:
+            v = homography @ np.array([col, row, 1.0])
+            return v[:2] / v[2]
+
+        centres = [module_point(3.5, 3.5), module_point(m - 3.5, 3.5), module_point(3.5, m - 3.5)]
+        base = third_finder_candidates(anchor_pair[0], anchor_pair[1])
+        if base:
+            direction = int(
+                np.argmin([min(np.hypot(t[0] - c[0], t[1] - c[1]) for c in centres) for t in base])
+            )
+            seen_corners = [best.corners]
+            for scale in ANCHOR_SCALES:
+                third = third_finder_candidates(anchor_pair[0], anchor_pair[1], scale=scale)[
+                    direction
+                ]
+                in_frame = 0 <= third[0] < gray.shape[1] and 0 <= third[1] < gray.shape[0]
+                if finder_points is None and not in_frame:
+                    continue
+                refits = fit_grid(gray, [*anchor_pair, third], (best.modules,), start_delta=12.0)
+                if not refits:
+                    continue
+                trial = refits[0]
+                if BOW_REFINE:
+                    trial = refine_bow(gray, trial, known_dark, known_light)
+                # A scale that tears the alignment pattern and the timing off their cells is
+                # not a basin worth decoding; and two scales that fell into the same basin
+                # need only one verdict.
+                if trial.wrong_known > 3 * best.wrong_known + 5:
+                    continue
+                if any(float(np.abs(trial.corners - s).max()) < 1.5 for s in seen_corners):
+                    continue
+                seen_corners.append(trial.corners)
+
+                trial_posterior, trial_blanked = _damp_featureless(
+                    trial.posterior, known_dark, known_light
+                )
+                trial_mm = ModuleMatrix(trial_posterior, known_dark, known_light)
+                trial_search, trial_repair = _decode_chain(trial_mm, budget, probe=False)
+
+                # The witness check -- but only for repairs no check symbol vouches for.
+                # See ANCHOR_WITNESS_CONFIDENCE for the two wrong texts and the two simpler
+                # judges this is made of.
+                adopted = trial_search.text is not None
+                if adopted and trial_repair is not None and trial_repair.ecc:
+                    try:
+                        plan = block_plan(version_for_modules(best.modules), trial_repair.ecc)
+                        unconfirmed = trial_repair.erasures_used >= plan.ec_per_block * max(
+                            trial_repair.blocks, 1
+                        )
+                    except KeyError:
+                        unconfirmed = True
+                    if unconfirmed and trial_search.matrix is not None:
+                        witnesses = (np.abs(trial_posterior - 0.5) > ANCHOR_WITNESS_CONFIDENCE) & ~(
+                            known_dark | known_light
+                        )
+                        overruled = int(
+                            ((trial_search.matrix != trial_mm.hard()) & witnesses).sum()
+                        )
+                        adopted = overruled == 0
+
+                grid_event("anchor")(trial)
+                _emit(
+                    progress,
+                    "anchor",
+                    scale=scale,
+                    wrong=int(trial.wrong_known),
+                    adopted=adopted,
+                )
+                if adopted:
+                    best, posterior, blanked = trial, trial_posterior, trial_blanked
+                    mm, search, repair_result = trial_mm, trial_search, trial_repair
+                    break
 
     # Two separate error counts, because they measure two different things: wrong_known scores
     # the grid fit, wrong_sampled the sampling that the search actually ran on. Conflating them
@@ -925,18 +1081,8 @@ def solve_many(
         rejected=list(consensus.rejected),
     )
     # The members arrive damped already, and averaging half-values keeps them there -- but a
-    # patch every photograph read the same way can first *become* uniform in the fusion. The
-    # decoder's contract is the same on both paths: what it sees has been through the test.
-    fused = consensus.posterior
-    blanked = 0
-    if BLANK_FEATURELESS:
-        known = known_dark | known_light
-        depth = featureless_depth(fused, known)
-        buried = buried_cells(depth) & ~known
-        blanked = int(buried.sum())
-        if depth.any():
-            damp = np.where(buried, 0.0, np.clip(1.0 - depth / BURIED_DEPTH, 0.0, 1.0))
-            fused = np.where(~known, 0.5 + (fused - 0.5) * damp, fused)
+    # patch every photograph read the same way can first *become* uniform in the fusion.
+    fused, blanked = _damp_featureless(consensus.posterior, known_dark, known_light)
 
     mm = ModuleMatrix(fused, known_dark, known_light)
     search, repair_result = _decode_chain(mm, budget, progress=progress)

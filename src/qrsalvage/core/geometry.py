@@ -167,7 +167,7 @@ def select_finder_triple(
 
 
 def third_finder_candidates(
-    a: tuple[float, float, float], b: tuple[float, float, float]
+    a: tuple[float, float, float], b: tuple[float, float, float], scale: float = 1.0
 ) -> list[tuple[float, float, float]]:
     """Where the missing third finder could be, given two that were found.
 
@@ -180,6 +180,11 @@ def third_finder_candidates(
     They are not distinguished here. That is deliberate: the grid fit already scores every
     candidate against the cells the standard fixes, and a wrong corner produces an obviously
     worse score than the right one. Guessing badly is cheap; guessing silently is not.
+
+    `scale` stretches the constructed offset. The right-angle construction assumes the pair's
+    plane is parallel to the sensor; under real perspective the third finder sits closer or
+    further by a few percent, and each scale is a different descent basin -- see the anchor
+    sweep in pipeline.py for why the basins have to be enumerated rather than found.
     """
     pa = np.array([a[0], a[1]], dtype=np.float64)
     pb = np.array([b[0], b[1]], dtype=np.float64)
@@ -192,11 +197,11 @@ def third_finder_candidates(
 
     candidates: list[np.ndarray] = []
     for sign in (1.0, -1.0):
-        offset = perpendicular * distance * sign
+        offset = perpendicular * distance * scale * sign
         candidates.append(pa + offset)
         candidates.append(pb + offset)
         # The diagonal reading: a and b are opposite corners, the third completes the square.
-        candidates.append((pa + pb) / 2.0 + perpendicular * (distance / 2.0) * sign)
+        candidates.append((pa + pb) / 2.0 + perpendicular * (distance * scale / 2.0) * sign)
 
     return [(float(p[0]), float(p[1]), width) for p in candidates]
 

@@ -15,6 +15,7 @@ rates are involved, and is safe to run repeatedly.
 | `ab_dome.py` | No bow, the tied bow and the per-edge bow on radially distorted codes -- the damage that bows opposite edges in opposite directions. Result at `geometry.refine_bow`. |
 | `ab_worn.py` | Featureless patches read as confident cells against handed over as unknowns, on codes whose bottom rows are erased whole. Counts *wrong* recoveries separately, because a repair fed wrong erasure positions can produce presentable garbage. |
 | `ab_marker.py` | Coloured strokes read as ink against neutralised before the channel is read; zero strokes is the control where both arms must be identical. |
+| `ab_anchor.py` | One constructed third finder against the anchor sweep over its scales, on codes whose bottom rows are erased whole -- the geometry with an unwitnessed side. Counts wrong recoveries separately: a decoder given more chances to be wrong must be watched for taking them. |
 | `ab_sigma.py` | The two spatial uncertainty terms on and off against localized damage (they measured useless; weights ship at zero — this is the instrument that says so). |
 | `ab_robust.py` | The robust level estimate on and off against known cells that lie (torn edge, stain); the contrast axis is the control. Result at `ROBUST_LEVELS` in `sampling.py`. |
 | `ab_restart.py` | The coarse restart of a badly seated grid on and off, on the axes that actually displace grids (curvature, resolution, tear); reports how often it fires, because an escalation that never triggers cannot help. Result at `geometry.restart_coarse`. |

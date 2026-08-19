@@ -253,7 +253,7 @@ def test_the_bow_never_returns_a_worse_grid():
 
     for curvature in (0.0, 0.6):
         photo = render_photo(reencode(TEXT), Damage(contrast=0.25, curvature=curvature), seed=2)
-        _, gray, _, _, fits, _, _ = _attempt(photo, DEFAULT_SIZES, False, None)
+        _, gray, _, _, fits, _, _, _ = _attempt(photo, DEFAULT_SIZES, False, None)
         flat = min(fits, key=lambda f: (f.wrong_known, -f.quality))
         known_dark, known_light = structure_mask(flat.modules)
 
@@ -333,7 +333,7 @@ def test_the_coarse_restart_never_returns_a_worse_grid():
     from qrsalvage.core.pipeline import DEFAULT_SIZES, _attempt
 
     photo = render_photo(reencode(TEXT), Damage(contrast=0.25, curvature=0.30), seed=2)
-    _, gray, _, _, fits, _, _ = _attempt(photo, DEFAULT_SIZES, False, None)
+    _, gray, _, _, fits, _, _, _ = _attempt(photo, DEFAULT_SIZES, False, None)
     fitted = min(fits, key=lambda f: (f.wrong_known, -f.quality))
     known_dark, known_light = structure_mask(fitted.modules)
 
@@ -414,6 +414,30 @@ def test_a_worn_off_strip_is_read_as_unknowns_not_as_light(monkeypatch):
 
     assert confident.text is None, "confident blanks should not decode -- did the axis move?"
     assert damped.text == long_text, damped.failure
+
+
+def test_the_anchor_sweep_reaches_the_basin_the_construction_missed(monkeypatch):
+    """A grid hanging on two finders has an unwitnessed side; the sweep enumerates it.
+
+    The constructed third finder assumes the pair's plane is parallel to the sensor. When it
+    is not, the construction starts the descent in the wrong basin, every witness the standard
+    provides is silent about the difference (see the note at pipeline.ANCHOR_SWEEP), and only
+    the decoder can tell the basins apart. Same photograph, decodable exactly when the basins
+    are enumerated; scripts/ab_anchor.py holds the rate across the worn axis.
+    """
+    from qrsalvage.core import pipeline
+
+    long_text = "Z:0123456789ABCDEF$I:00112233445566778899AABBCCDDEEFF1234%M:0000$D:0000000000"
+    damage = Damage(contrast=0.20, curvature=0.30, module_px=8.0, worn=0.12)
+    photo = render_photo(reencode(long_text), damage, seed=0)
+
+    monkeypatch.setattr(pipeline, "ANCHOR_SWEEP", False)
+    single = solve(photo, budget=4000)
+    monkeypatch.setattr(pipeline, "ANCHOR_SWEEP", True)
+    swept = solve(photo, budget=4000)
+
+    assert single.text is None, "the single basin should fail here -- did the axis move?"
+    assert swept.text == long_text, swept.failure
 
 
 def test_two_hand_marked_finders_reach_a_code_with_one_blinded():
