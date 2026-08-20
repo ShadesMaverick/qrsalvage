@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import shutil
 from datetime import date
 from pathlib import Path
@@ -25,6 +26,12 @@ import cv2
 from qrsalvage.core.pipeline import solve
 
 TARGET = Path(__file__).resolve().parents[1] / "fixtures-local"
+
+# The name becomes a file name under TARGET and nothing else. Unchecked, a name carrying a
+# separator walks out of fixtures-local/ -- and one directory over sits the tracked, public
+# fixtures/. Nothing hostile is needed for that: a slip of the keyboard is enough, and what the
+# slip costs is a private photograph in the corpus that gets published.
+FIXTURE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\Z")
 
 
 def main() -> int:
@@ -45,6 +52,10 @@ def main() -> int:
         help="the device belongs to someone else; marks the fixture as not ours to publish",
     )
     args = parser.parse_args()
+
+    if not FIXTURE_NAME.match(args.name):
+        print(f"the name must be a bare identifier, not a path: {args.name!r}")
+        return 1
 
     TARGET.mkdir(parents=True, exist_ok=True)
     destination = TARGET / f"{args.name}.png"

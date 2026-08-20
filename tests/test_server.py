@@ -365,6 +365,41 @@ def test_a_foreign_host_header_is_refused(running_server):
     connection.close()
 
 
+def test_a_malformed_request_costs_an_answer_but_never_a_thread(running_server):
+    """Two bodies that decode fine and then fall over on the way in.
+
+    Both used to raise outside every handler in do_POST: a Content-Length that is not a number
+    at the int(), and a JSON body that is not an object at the first .get(). The handler runs
+    on a worker thread whose log_message is stubbed out, so the traceback went nowhere and the
+    caller waited on a connection nobody was still holding. What each one must cost now is one
+    refusal -- and the server must still be answering afterwards."""
+    host, port = running_server
+
+    connection = http.client.HTTPConnection(host, port, timeout=10)
+    connection.putrequest("POST", "/api/solve")
+    connection.putheader("Content-Type", "application/json")
+    connection.putheader("Content-Length", "not-a-number")
+    connection.endheaders()
+    assert connection.getresponse().status == 400
+    connection.close()
+
+    for body in ("[1, 2]", '"a string"', "17"):
+        connection = http.client.HTTPConnection(host, port, timeout=10)
+        connection.request(
+            "POST", "/api/solve", body=body, headers={"Content-Type": "application/json"}
+        )
+        response = connection.getresponse()
+        assert response.status == 200
+        assert json.loads(response.read())["ok"] is False
+        connection.close()
+
+    # The point of all of the above: the server is still there.
+    connection = http.client.HTTPConnection(host, port, timeout=10)
+    connection.request("GET", "/")
+    assert connection.getresponse().status == 200
+    connection.close()
+
+
 def test_the_page_ships_hardened_headers(running_server):
     """No sniffing, no framing, no referrer -- and no inline script to allow at all."""
     host, port = running_server
