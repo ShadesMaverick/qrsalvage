@@ -398,6 +398,14 @@ def main() -> int:
         else "  every absolute URL left in the build is accounted for above"
     )
 
+    if unexplained:
+        # The check above is the one the whole exercise stands on, so it decides the exit code
+        # rather than merely narrating. Printing the finding and then returning 0 anyway left
+        # the promise resting on whoever read the scrollback -- and the publishing steps below
+        # are exactly the ones that must not be taken while an address is unaccounted for.
+        print("\nnot self-contained -- resolve the address(es) above before publishing")
+        return 1
+
     print("\nserve it locally to test:")
     print("  .venv\\Scripts\\python.exe -m http.server 8833 --directory site --bind 127.0.0.1")
     print("  then open http://127.0.0.1:8833/")

@@ -156,7 +156,14 @@ class Handler(BaseHTTPRequestHandler):
         if self.path not in ("/api/solve", "/api/export", "/api/catalog"):
             self._send(404, b"not found", "text/plain; charset=utf-8")
             return
-        length = int(self.headers.get("Content-Length", 0))
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+        except ValueError:
+            # A header that is not a number is not a size to compare against. int() would raise
+            # here, outside every handler below, and take the worker thread with it -- silently,
+            # because log_message is stubbed out. One bad header must not cost a thread.
+            self._send(400, b'{"ok":false,"failure":"bad Content-Length"}', "application/json")
+            return
         if length <= 0 or length > MAX_UPLOAD:
             self._send(413, b'{"ok":false,"failure":"image too large"}', "application/json")
             return
@@ -176,6 +183,14 @@ class Handler(BaseHTTPRequestHandler):
             payload = json.loads(self.rfile.read(length))
         except Exception as exc:
             answer = {"ok": False, "failure": f"{type(exc).__name__}: {exc}"}
+            self._send(200, json.dumps(answer).encode("utf-8"), "application/json; charset=utf-8")
+            return
+
+        if not isinstance(payload, dict):
+            # `[1,2]` is valid JSON and survives the decode above, but every reader from here on
+            # asks the body for keys. The .get one line down would raise outside any handler --
+            # the same lost thread as a bad Content-Length, one layer further in.
+            answer = {"ok": False, "failure": "the request body must be a JSON object"}
             self._send(200, json.dumps(answer).encode("utf-8"), "application/json; charset=utf-8")
             return
 
