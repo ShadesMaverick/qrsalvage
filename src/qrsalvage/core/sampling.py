@@ -226,7 +226,7 @@ def _quadratic_terms(n: int) -> np.ndarray:
     return terms
 
 
-@lru_cache(maxsize=32)
+@lru_cache(maxsize=128)
 def _fit_operator(n: int, mask_bytes: bytes) -> np.ndarray:
     """The pseudoinverse of the design matrix restricted to the marked cells.
 
@@ -234,6 +234,15 @@ def _fit_operator(n: int, mask_bytes: bytes) -> np.ndarray:
     solve, always against the same design matrix and the same mask -- only the measured means
     change. So the solve collapses to one cached pseudoinverse and a matrix product, which is
     the identical minimum-norm solution lstsq would compute, without the SVD every time.
+
+    The mask is not as constant as that reads, though, and the size is measured rather than
+    guessed. The robust loop in estimate_levels drops outlying known cells and fits again, so
+    a mask is a function of the measurements too, and one solve of the hardest fixture asks
+    for 45094 fits across 14855 distinct masks. At 32 entries the cache was full and evicting:
+    53.7 % hits. At 128 it reaches 65.8 %, and after that it plateaus -- 512, 2048 and an
+    unbounded cache all land on 67.0 %, because the remaining masks genuinely occur once. So
+    128 is where the curve flattens, and holding thousands of pseudoinverses to buy the last
+    1.2 points would be paying memory for nothing.
     """
     mask = np.frombuffer(mask_bytes, dtype=bool).reshape(n, n)
     return np.linalg.pinv(_quadratic_terms(n)[mask])
