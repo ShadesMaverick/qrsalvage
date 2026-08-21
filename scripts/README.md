@@ -20,6 +20,7 @@ rates are involved, and is safe to run repeatedly.
 | `ab_robust.py` | The robust level estimate on and off against known cells that lie (torn edge, stain); the contrast axis is the control. Result at `ROBUST_LEVELS` in `sampling.py`. |
 | `ab_restart.py` | The coarse restart of a badly seated grid on and off, on the axes that actually displace grids (curvature, resolution, tear); reports how often it fires, because an escalation that never triggers cannot help. Result at `geometry.restart_coarse`. |
 | `ab_ensemble.py` | Single measurement against the within-image ensembles (both measured useless; documented in `ensemble.py`). |
+| `runtime.py` | How long does a recovery take, and is a measured difference bigger than the noise it was measured through? Repeats each image from a cold level-fit cache, prints the spread beside the median, and refuses to call a change real when it falls inside that spread. The instrument for any claim about speed. |
 | `batch.py` | Run the solver over a folder of images and tabulate outcomes. |
 | `diagnose.py` | Why did a photograph fail — is the code invisible, or is the preprocessing tuned for the wrong scale? Writes the binarisations so failure can be looked at. |
 | `make_fixtures.py` | Regenerate the public synthetic corpus in `fixtures/` (never edit fixtures by hand). |
