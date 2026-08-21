@@ -88,8 +88,10 @@ window.qrBackend = (() => {
       // Bytes cross the worker boundary base64-encoded: small next to the photographs already
       // in play, and immune to the conversion surprises of typed arrays through Pyodide.
       const binary = atob(answer.base64);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      // One engine-level pass rather than a JavaScript loop per character. An HTML report
+      // carries the photograph inside it, so this string runs to megabytes, and this runs on
+      // the thread that draws the page.
+      const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
       return {
         blob: new Blob([bytes], { type: answer.contentType }),
         filename: answer.filename,

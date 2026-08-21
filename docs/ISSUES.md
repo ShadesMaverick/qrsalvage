@@ -624,3 +624,72 @@ Versionswahl springt zwischen 21 und 37 Modulen. Unterhalb von etwa 5 px/Modul p
 Fremdstruktur ist die Information im Foto erschöpft — das gehört als ehrliche Grenze in die
 Dokumentation (REACH/README), nicht in die Pipeline. Der richtige Rat an Nutzer: näher
 fotografieren, mehrere Fotos, Fusion.
+
+## 12. Performance-Audit: was die 36 Befunde wirklich wert waren — ERLEDIGT
+
+Ein RepoLens-Lauf über die Domain `performance` hat 36 Befunde geliefert. Jeder wurde gegen
+ein Profil geprüft, statt nach Plausibilität sortiert. Das Ergebnis in einem Satz: **kein
+einziger Befund zielt auf `refine_corners` oder `estimate_levels`** — also auf die 90 % und
+52 % der Laufzeit.
+
+Gemessene Anteile, Korpus (alle sechs Bilder lösen beim ersten Kandidaten):
+
+| Bereich | Anteil | Aufrufe |
+|---|---|---|
+| `refine_corners` | 90,2 % | 24 |
+| `estimate_levels` (darin) | 52,1 % | 6073 |
+| Findersuche, `uncertain_cells` | 0,0 % | 4 bzw. 2 |
+| `ordered_search`, `repair_progressive`, `ensemble` | 0,0 % | **0** |
+
+Auf schweren synthetischen Fällen (4001 Kandidaten, ungelöst): `refine_corners` 58–73 %,
+`ordered_search` 5,7–16,3 %, `repair*` 4,1–6,7 %, `repair_progressive` 0,5–0,7 %.
+
+**Umgesetzt.** Das Basisbild in `ordered_search` wird einmal gerendert und pro Kandidat nur an
+den gekippten Modulen gepatcht (`_patch_module`); im selben Profil fiel `render` von 0,34 s auf
+0,08 s, `ordered_search` von 1,37 s auf 1,11 s. Der Server deckelt gleichzeitige Recoveries auf
+zwei (`WORKERS`). Im Browser gibt `zxDecodeSync` seine embind-Handles frei — bei bis zu 4000
+Orakelaufrufen je Solve war das ein Heap, der nur wuchs —, das Wheel wird parallel zur
+WASM-Initialisierung geladen, `ImageBitmap`s werden beim Verlassen von `loaded` geschlossen,
+und der base64-Pfad läuft ohne Zeichenschleife.
+
+**Abgelehnt, mit Messung.**
+
+- *Serie parallel lösen.* Vier Recoveries in vier Threads brauchten **0,90×** der Zeit von vier
+  nacheinander — der Abstieg ist Python-Arbeit unter dem GIL. Dazu ist die Schleife in
+  `solve_many` ein Kurzschluss: das erste allein lösende Foto beendet den Aufruf.
+- *Importe erst bei Bedarf.* `qrsalvage.cli` kostet 209 ms über 87 ms nacktem Interpreter,
+  davon numpy 139 ms und cv2 170 ms inklusive numpy. Jeder Befehl braucht numpy, also spart
+  Verzögern nur bei `--help`. Der Preis wäre, `FUSION_RULES` aus `ensemble.py` herauszulösen.
+- *Findersuche, `uncertain_cells`, `repair_progressive`, `consensus_posterior`.* Zielen auf
+  0,0 % bis 0,7 %. `consensus_posterior` gehört zum bildinternen Ensemble, das laut
+  `ensemble.py` standardmäßig aus ist und als nutzlos vermessen wurde — ein Cache für Code, der
+  nie läuft.
+- *Statische Dateien bei jedem GET von der Platte.* Drei kleine Dateien über Loopback.
+
+**Falsch.** Die Behauptung, nicht-Daemon-Threads hielten den Server nach Ctrl+C am Leben:
+`ThreadingHTTPServer.daemon_threads` ist seit Python 3.7 `True`. Und die Meldung, dem CLI fehle
+die Bildobergrenze des Web-Pfads, liest das Bedrohungsmodell falsch herum — die Web-Grenze
+existiert, weil eine Anfrage von einer fremden Seite kommen kann.
+
+**Was das über das Werkzeug sagt.** Performance-Linsen erkennen Muster — O(n²), fehlende
+Caches, wiederholte Arbeit — aber sie wissen nicht, was oft läuft. Hier liegen 90 % der Zeit in
+einem Koordinatenabstieg, an dem nichts falsch ist; er ist nur teuer. Der nächste echte Hebel
+steht in Abschnitt 13.
+
+## 13. Die Ausreißerschleife läuft in ihre Rundengrenze, statt zu konvergieren
+
+`estimate_levels` verwirft Ausreißer und fittet neu, höchstens vier Runden. Gemessen über 6073
+Aufrufe eines schweren Solves: 1 Runde 3,3 %, 2 Runden 7,2 %, 3 Runden 4,5 %, **4 Runden
+85,0 %** — Schnitt 3,71. Der Docstring sagt „converges in two or three rounds on damaged images
+and runs exactly once on clean ones".
+
+In 85 % der Auswertungen endet die Schleife also, weil `range(4)` zu Ende ist, nicht weil keine
+Ausreißer mehr gefunden wurden. Der benutzte Level-Fit ist damit ein abgeschnittener. Zu klären
+ist zuerst, ob die Verwerfungsmenge zwischen Runde 3 und 4 noch wächst oder zwischen zwei
+Zuständen oszilliert — bei Oszillation ist ein echtes Abbruchkriterium die Lösung, das
+konvergiert *und* spart Runden 2 bis 4, also rund drei Viertel der 52 % Laufzeit von
+`estimate_levels`. Bei echtem Bedarf an mehr Runden ist die aktuelle Schätzung systematisch zu
+früh gestoppt, und das ist wichtiger als Geschwindigkeit.
+
+Zu messen mit `scripts/runtime.py` (Streuung beachten) **und** `scripts/difficulty.py`: ein
+Abstieg, der schneller ein schlechteres Optimum findet, überlebt sechs Fixtures problemlos.

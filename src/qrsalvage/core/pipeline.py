@@ -1000,6 +1000,15 @@ def solve_many(
 
     Any photograph that solves on its own wins immediately: it is the cheapest correct answer,
     and it needs no argument about how the fusion was formed.
+
+    One photograph after another, and measured that way rather than assumed. Recovering a burst
+    concurrently is the obvious suggestion and it is wrong twice over. The loop below is a
+    short-circuit: the first photograph that solves ends the whole call, so running all of them
+    at once would pay for every recovery the sequence never has to make. And the concurrency
+    does not repay it anyway -- four recoveries in four threads took 0.90x the time of running
+    the same four in turn, because the descent that dominates a solve is Python-level work
+    under the GIL, where threads contend rather than cooperate. Processes would escape the GIL
+    and lose the progress callbacks, the shared memory and the short-circuit with it.
     """
     if not images:
         return SolveResult(text=None, failure="no images given")

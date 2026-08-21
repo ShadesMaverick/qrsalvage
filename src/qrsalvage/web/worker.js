@@ -85,12 +85,32 @@ async function armOracle(zxing) {
 
   if (!readerOptions || !writerOptions) throw new Error("could not arm the oracle");
 
+  // Handles that live in the WASM heap are not garbage collected -- embind hands JavaScript a
+  // reference and waits to be told when it may go. `delete` is missing on a plain object, so
+  // the guard keeps this safe whichever kind of value comes back.
+  const release = (handle) => {
+    if (handle && typeof handle.delete === "function") handle.delete();
+  };
+
   self.zxDecodeSync = (rgbaBytes, width, height) => {
     const pointer = mod._malloc(rgbaBytes.length);
     mod.HEAPU8.set(rgbaBytes, pointer);
     const results = mod.readBarcodesFromPixmap(pointer, width, height, readerOptions);
     mod._free(pointer);
-    return results.size() > 0 ? results.get(0).text : null;
+    // The probe asks this question thousands of times for one photograph -- up to the search
+    // budget, four thousand by default. A result vector left behind on each of those is a heap
+    // that only grows, and the page dies partway through a recovery with nothing to explain it.
+    try {
+      if (results.size() === 0) return null;
+      const first = results.get(0);
+      try {
+        return first.text;
+      } finally {
+        release(first);
+      }
+    } finally {
+      release(results);
+    }
   };
 
   self.zxEncodeSync = (text, ecLevel) => {
@@ -166,6 +186,11 @@ def handle_file(kind, payload_json):
 `;
 
 async function start() {
+  // Started here and awaited three steps down. Nothing about fetching the wheel depends on
+  // Python existing yet -- only unpacking it does -- so the download rides alongside the WASM
+  // that is being fetched and compiled anyway, instead of waiting its turn behind all of it.
+  const wheelBytes = fetch(`${PYODIDE}qrsalvage.whl`).then((response) => response.arrayBuffer());
+
   let t = performance.now();
   const zxing = await import(`${PYODIDE}zxing/index.mjs`);
   await armOracle(zxing);
@@ -181,7 +206,7 @@ async function start() {
   boot("numpy and opencv ready", t);
 
   t = performance.now();
-  const wheel = await (await fetch(`${PYODIDE}qrsalvage.whl`)).arrayBuffer();
+  const wheel = await wheelBytes;
   pyodide.unpackArchive(wheel, "wheel");
   self.reportProgress = (line) => post({ type: "progress", line });
   await pyodide.runPythonAsync(GLUE);
