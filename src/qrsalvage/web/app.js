@@ -38,6 +38,17 @@ const canvas = $("photo"), ctx = canvas.getContext("2d");
 // on the canvas; hand-marking finders only makes sense against a single framing, so the
 // marking flow is offered only while exactly one is loaded.
 let loaded = [];    // { dataUrl, bitmap, name, result? (catalogue mode caches per photo) }
+
+// An ImageBitmap holds a decoded frame at full resolution outside the JavaScript heap, so
+// dropping the last reference to one does not hand the memory back on any schedule this page
+// controls -- the browser frees it when it gets around to it. A burst of camera frames is
+// hundreds of megabytes of that, and the tab is often open across several codes. So entries
+// leaving `loaded` say so on the way out.
+function releaseBitmaps(entries) {
+  for (const entry of entries) {
+    if (entry && entry.bitmap && typeof entry.bitmap.close === "function") entry.bitmap.close();
+  }
+}
 let picking = false;
 let picked = [];
 let token = null;   // identifies the result the backend is holding for export
@@ -220,6 +231,7 @@ async function addFiles(files) {
   // After a success a fresh drop means a fresh code: adding to a solved one is always
   // pointless, because the already-solved member wins again before anything is fused.
   if (mode === "one" && lastSolved && loaded.length) {
+    releaseBitmaps(loaded);
     loaded = []; token = null; lastSolved = false;
   }
 
@@ -257,6 +269,7 @@ function resetAll() {
   seq += 1;               // orphan any solve still in flight
   busy(false);
   closeCamera();
+  releaseBitmaps(loaded);
   loaded = []; picked = []; picking = false; token = null;
   $("results").classList.add("hidden");
   $("catalogPanel").classList.add("hidden");
@@ -282,7 +295,7 @@ function refresh() {
     .join("");
   for (const button of thumbs.querySelectorAll("button")) {
     button.addEventListener("click", () => {
-      loaded.splice(parseInt(button.dataset.index, 10), 1);
+      releaseBitmaps(loaded.splice(parseInt(button.dataset.index, 10), 1));
       picked = []; picking = false;
       if (!loaded.length) { resetAll(); return; }
       refresh();

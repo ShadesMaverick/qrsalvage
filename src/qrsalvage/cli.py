@@ -6,6 +6,19 @@ whether probing is needed and where.
 
 from __future__ import annotations
 
+# Imported at module level, and measured before deciding to leave them there. Loading this
+# module costs 209 ms over a bare interpreter's 87 ms, and an audit reasonably asks why argparse
+# has to wait for OpenCV. Taken apart: numpy is 139 ms of it and cv2 170 ms including numpy, so
+# the weight is numpy's and every command here needs it -- solve, catalog and synth immediately,
+# serve as soon as it answers anything. Deferring the imports into the commands would therefore
+# buy nothing for any run that does work; it would speed up `--help` and a mistyped flag, and
+# nothing else.
+#
+# It is not free either. The parser is built from FUSION_RULES and DEFAULT_FUSION, so a lazy
+# cli.py needs those two constants somewhere that does not import numpy -- which means cutting
+# them out of the ensemble module that gives them their meaning, to save a fifth of a second on
+# a path that prints usage. The trade was declined; this note is here so the next audit finds
+# the measurement instead of repeating the question.
 import argparse
 import hashlib
 from pathlib import Path

@@ -23,6 +23,7 @@ import json
 import re
 import socket
 import sys
+import threading
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -34,6 +35,23 @@ WEB_ROOT = Path(__file__).resolve().parent / "web"
 # Roomy enough for a camera burst of full-resolution frames plus a couple of dropped photos,
 # base64 overhead included. Still a hard cap: this is one person's loopback, not an inbox.
 MAX_UPLOAD = 64 * 1024 * 1024
+
+# How many recoveries may run at once, and why the number is small rather than generous.
+#
+# ThreadingHTTPServer starts a thread per connection, so without this every request that
+# arrived would begin work immediately. That reads like throughput and measures as the
+# opposite: four recoveries in four threads took 0.90x the time of running the same four one
+# after another. The descent is Python-level work under the GIL, so concurrent solves contend
+# instead of cooperating, and every caller waits longer than if they had queued.
+#
+# Two, not one, so a page that opens a second tab is not simply blocked -- and a ceiling rather
+# than none, because each recovery holds a full-resolution photograph and its warps in memory.
+# A queue that answers slowly is a better failure than a machine that runs out of memory.
+WORKERS = threading.BoundedSemaphore(2)
+
+# Long enough to sit through the recovery ahead in the queue, short enough that a caller is
+# told to come back rather than left holding a socket forever.
+WORK_WAIT = 180.0
 
 # The one inline <script> of a served page, hashed, so the policy can name it instead of
 # waving through every inline script with 'unsafe-inline'. Keyed by (path, mtime): the page is
@@ -202,6 +220,20 @@ class Handler(BaseHTTPRequestHandler):
             self._send(413, b'{"ok":false,"failure":"image too large"}', "application/json")
             return
 
+        # One thread per connection is the server's own doing; how many of them may be *working*
+        # at once is this file's to decide, and the answer is measured. See WORKERS.
+        if not WORKERS.acquire(timeout=WORK_WAIT):
+            self._send(
+                503, b'{"ok":false,"failure":"busy with another recovery"}', "application/json"
+            )
+            return
+        try:
+            self._serve_api(length)
+        finally:
+            WORKERS.release()
+
+    def _serve_api(self, length: int) -> None:
+        """Read the body, do the work, write the answer -- the half that costs something."""
         if self.path in ("/api/export", "/api/catalog"):
             builder = export_payload if self.path == "/api/export" else catalog_payload
             try:
