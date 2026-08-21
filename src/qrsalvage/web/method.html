@@ -3,6 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- The page carries no script of its own and never wants one, so it says so. It was the one
+     published page without a policy at all: on the local server the headers cover it, but the
+     static build is served by a host that sends none, and a page with no policy there has no
+     boundary. Note what a meta-delivered policy cannot do -- frame-ancestors is ignored in
+     this position by every browser, so the anti-framing on the static build has to come from
+     the host's headers, not from here. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self';
+      script-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;
+      connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <title>qrsalvage — how it works</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23232f3a'/%3E%3Crect x='8' y='3' width='7' height='7' fill='none' stroke='%23f2f4f5' stroke-width='1'/%3E%3Crect x='10' y='5' width='3' height='3' fill='%23f2f4f5'/%3E%3Crect x='5' y='4' width='2' height='2' fill='%23f07ea3'/%3E%3Crect x='2' y='7' width='2' height='2' fill='%23f07ea3'/%3E%3Crect x='5' y='10' width='2' height='2' fill='%23f2f4f5'/%3E%3C/svg%3E">
 <style>

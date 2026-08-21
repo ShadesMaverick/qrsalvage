@@ -19,6 +19,36 @@ from .export import to_catalog_pdf, to_html_report, to_json, to_pdf, to_svg
 from .synth import Damage, make_case
 
 
+def _as_payload(text: str) -> str:
+    """Render a decoded payload so it cannot forge the report printed around it.
+
+    This string is the one thing here that came from outside -- it is whatever was encoded in
+    someone else's label. A carriage return walks the cursor back over the line just written
+    and an escape begins a sequence the terminal obeys, so a crafted code could overwrite the
+    sha256 line above it or paint a "RECOVERED" line of its own. Both are shown as escapes
+    instead of run.
+
+    Line feeds stay line feeds, because a vCard has them honestly. What keeps an honest
+    newline from being useful to a dishonest one is the indent: report lines start at the left
+    margin and payload lines never do, so nothing inside the payload can pass for one.
+    """
+    shown = "".join(
+        char if char in "\n\t" else f"\\x{ord(char):02x}" if _is_control(char) else char
+        for char in text
+    )
+    return "".join(f"  {line}\n" for line in shown.split("\n"))
+
+
+def _is_control(char: str) -> bool:
+    code = ord(char)
+    return code < 0x20 or code == 0x7F
+
+
+def _as_name(name: str) -> str:
+    """A file name on its way into a printed line, with any terminal steering removed."""
+    return "".join("?" if _is_control(char) else char for char in name)
+
+
 def _report(result, out: Path, band: float) -> None:
     print(f"finder candidates: {len(result.finders)}")
     for fit in result.per_size:
@@ -69,7 +99,7 @@ def _report(result, out: Path, band: float) -> None:
             print(f"probed: flipped {len(result.flipped)} cell(s) -> {cells}")
         digest = hashlib.sha256(result.text.encode()).hexdigest()
         print(f"\nRECOVERED ({len(result.text)} characters, sha256 {digest[:16]}...)")
-        print(result.text)
+        print(_as_payload(result.text), end="")
     else:
         print(f"\nfailed: {result.failure}")
 
@@ -199,24 +229,27 @@ def cmd_catalog(args: argparse.Namespace) -> int:
     failed: list[str] = []
     seen: dict[str, str] = {}
     for index, path in enumerate(args.image):
+        # A file name is chosen by whoever handed over the photographs, and these lines are a
+        # report someone reads to decide what was recovered. Same reasoning as the payload.
+        shown = _as_name(path.name)
         image = cv2.imread(str(path))
         if image is None:
-            print(f"{path.name:35s} cannot be read as an image")
-            failed.append(path.name)
+            print(f"{shown:35s} cannot be read as an image")
+            failed.append(shown)
             continue
         result = solve(image, budget=args.budget)
         title = titles[index] if index < len(titles) else path.stem.replace("-", " ")
         if not result.solved:
-            print(f"{path.name:35s} not recovered — {result.failure}")
-            failed.append(path.name)
+            print(f"{shown:35s} not recovered — {result.failure}")
+            failed.append(shown)
             continue
         assert result.text is not None
         if result.text in seen:
             # A wild pile of photographs regularly holds two shots of the same label. The
             # catalogue is a register of codes, not of photographs, so the duplicate folds in.
-            print(f"{path.name:35s} duplicate of {seen[result.text]}, folded into one entry")
+            print(f"{shown:35s} duplicate of {seen[result.text]}, folded into one entry")
             continue
-        seen[result.text] = path.name
+        seen[result.text] = shown
         note = f"version {result.version}"
         if result.ecc:
             note += f" · error correction {result.ecc}"
@@ -229,7 +262,7 @@ def cmd_catalog(args: argparse.Namespace) -> int:
                 "note": note,
             }
         )
-        print(f"{path.name:35s} recovered — {title}")
+        print(f"{shown:35s} recovered — {_as_name(title)}")
 
     if not entries:
         print("\nnothing recovered, no catalogue to write")

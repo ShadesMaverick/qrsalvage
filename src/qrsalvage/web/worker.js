@@ -26,10 +26,24 @@
  */
 
 // Where the runtime comes from. The production build vendors everything next to the page and
-// passes nothing; the query parameter exists so a developer can point at a CDN while working.
+// passes nothing; the query parameter exists so a developer can point at a different local
+// layout while working.
+//
+// It is confined to this origin on purpose, and that is a deliberate loss: it used to accept
+// any absolute http(s) URL, which made "point at a CDN" a link away. This worker imports and
+// runs whatever it finds at that address, and it is also the half of the page that holds the
+// photograph -- so an origin a stranger can name in a query string is the one place the
+// runtime must not come from. A developer who wants a different build serves it from here.
 const params = new URLSearchParams(self.location.search);
-const ASSETS = params.get("assets") || "./vendor/";
-const PYODIDE = ASSETS.startsWith("http") ? ASSETS : new URL(ASSETS, self.location.href).href;
+const VENDORED = new URL("./vendor/", self.location.href);
+const requested = new URL(params.get("assets") || "./vendor/", self.location.href);
+const sameOrigin = requested.origin === self.location.origin;
+if (!sameOrigin) {
+  console.warn(
+    `qrsalvage: the assets parameter points at ${requested.origin}; using the vendored runtime instead`,
+  );
+}
+const PYODIDE = (sameOrigin ? requested : VENDORED).href;
 
 const post = (message) => self.postMessage(message);
 const boot = (stage, since) =>

@@ -21,10 +21,12 @@ import base64
 import hashlib
 import json
 import re
-import socketserver
+import socket
+import sys
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from .api import catalog_payload, export_payload, solve_payload
 
@@ -68,6 +70,11 @@ def _html_csp(path: Path, body: bytes) -> str:
 class Handler(BaseHTTPRequestHandler):
     server_version = "qrsalvage"
 
+    # A client that opens a connection and then goes quiet used to hold a worker thread for as
+    # long as it liked. Loopback is fast and the largest upload allowed is 64 MB, so a minute is
+    # generous for anything honest; nothing here waits on a human.
+    timeout = 60
+
     def log_message(self, *args) -> None:  # noqa: D102 - quiet by default
         pass
 
@@ -82,8 +89,32 @@ class Handler(BaseHTTPRequestHandler):
         host = (self.headers.get("Host") or "").rsplit(":", 1)[0].strip("[]").lower()
         return host in ("127.0.0.1", "localhost", "::1")
 
+    def _origin_allowed(self) -> bool:
+        """Refuse a state-changing request that a page on another origin sent for the visitor.
+
+        _host_allowed covers DNS rebinding, where a hostile domain resolves to this address.
+        It cannot cover the cheaper attack, which needs no rebinding at all: a page on any
+        origin posts straight to 127.0.0.1, and the browser writes the Host header itself, so
+        the check above sees exactly what it wants to see.
+
+        What a page cannot forge are the headers the browser writes about the page: Origin on a
+        cross-origin POST, Sec-Fetch-Site on every request a browser makes at all. Their absence
+        means the caller is not a browser -- curl, the test suite, a script -- and that was
+        never the thing being defended against here.
+        """
+        site = self.headers.get("Sec-Fetch-Site")
+        if site is not None and site not in ("same-origin", "none"):
+            return False
+        origin = self.headers.get("Origin")
+        if origin is None:
+            return True
+        return (urlsplit(origin).hostname or "").lower() in ("127.0.0.1", "localhost", "::1")
+
     def _refuse_host(self) -> None:
         self._send(403, b"wrong host", "text/plain; charset=utf-8")
+
+    def _refuse_origin(self) -> None:
+        self._send(403, b"wrong origin", "text/plain; charset=utf-8")
 
     def _send(self, status: int, body: bytes, content_type: str, csp: str | None = None) -> None:
         self.send_response(status)
@@ -152,6 +183,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802 - name fixed by BaseHTTPRequestHandler
         if not self._host_allowed():
             self._refuse_host()
+            return
+        if not self._origin_allowed():
+            self._refuse_origin()
             return
         if self.path not in ("/api/solve", "/api/export", "/api/catalog"):
             self._send(404, b"not found", "text/plain; charset=utf-8")
@@ -234,10 +268,29 @@ class Handler(BaseHTTPRequestHandler):
         self._send(200, json.dumps(answer).encode("utf-8"), "application/json; charset=utf-8")
 
 
+class _LoopbackServer(ThreadingHTTPServer):
+    """The listening socket, owned exclusively wherever the platform lets it be owned.
+
+    On POSIX, reusing the address only skips the TIME_WAIT delay after a restart -- which is
+    the whole reason the flag is usually set. Windows spells something else with the same
+    constant: it lets a second process bind a port this one already holds, and the kernel then
+    hands new connections to one of the two. On the platform this tool is used on most, the
+    convenience flag is a way for another local process to be given the photographs. What
+    Windows calls "this port is mine" is SO_EXCLUSIVEADDRUSE, and that is what it gets.
+    """
+
+    allow_reuse_address = sys.platform != "win32"
+
+    def server_bind(self) -> None:
+        exclusive = getattr(socket, "SO_EXCLUSIVEADDRUSE", None)
+        if exclusive is not None:
+            self.socket.setsockopt(socket.SOL_SOCKET, exclusive, 1)
+        super().server_bind()
+
+
 def serve(port: int = 8765, open_browser: bool = True) -> int:
     """Start the local interface. Listens on the loopback address only."""
-    socketserver.TCPServer.allow_reuse_address = True
-    with ThreadingHTTPServer(("127.0.0.1", port), Handler) as httpd:
+    with _LoopbackServer(("127.0.0.1", port), Handler) as httpd:
         url = f"http://127.0.0.1:{port}/"
         print(f"qrsalvage is listening on {url}  (loopback only, press Ctrl+C to stop)")
         if open_browser:

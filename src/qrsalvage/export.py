@@ -470,6 +470,20 @@ PAYLOAD_HINTS = {
 }
 
 
+# What the recovered string actually is, for whoever opens the exported file later.
+#
+# The split fields have carried warnings of their own for a while, but the split is opt-in and
+# the payload is not: `payload` holds the same install code whether or not anyone asked to see
+# it in pieces. Hanging the warning on the split meant it appeared exactly for the reader who
+# had already ticked a box about secrets, and stayed silent on the path everyone takes. It
+# belongs to the secret, so it lives here and is attached wherever the payload goes.
+PAYLOAD_SECRETS = {
+    "zigbee": "The install code is a pairing secret, not an identifier. Do not publish it.",
+    "matter": "The passcode and manual pairing code commission the device. Treat them like keys.",
+    "wifi": "The password is the network key. Do not publish it.",
+}
+
+
 def payload_fields(text: str) -> tuple[str, dict] | None:
     """Recognise and split a payload: (kind, fields), or None for plain content."""
     parsers = (("zigbee", zigbee_fields), ("matter", matter_fields), ("wifi", wifi_fields))
@@ -518,6 +532,9 @@ def to_json(result, include_payload: bool = True, split_payload: bool = False) -
         recognised = payload_fields(result.text)
         if recognised:
             out["payload_kind"] = recognised[0]
+            warning = PAYLOAD_SECRETS.get(recognised[0])
+            if warning is not None:
+                out["payload_warning"] = warning
             if split_payload:
                 out[recognised[0]] = recognised[1]
     return json.dumps(out, indent=2) + "\n"
@@ -567,9 +584,19 @@ def to_html_report(result, photo_png: bytes, recovered_png: bytes, clean_png: by
         )
 
     table = "".join(f"<tr><th>{html.escape(k)}</th><td>{html.escape(v)}</td></tr>" for k, v in rows)
+    # This report is the one export built to be looked at, which makes it the one most likely
+    # to be forwarded to whoever was asked for help. The recovered string sits in it in full,
+    # so if that string is a key, the page has to say so where the string is.
+    secret = ""
+    if result.solved and result.text:
+        recognised = payload_fields(result.text)
+        if recognised is not None:
+            note = PAYLOAD_SECRETS.get(recognised[0])
+            if note is not None:
+                secret = f'<p class="secret">{html.escape(note)}</p>'
     verdict = (
         f'<p class="ok">Recovered {len(result.text)} characters</p>'
-        f"<pre>{html.escape(result.text)}</pre>"
+        f"<pre>{html.escape(result.text)}</pre>{secret}"
         if result.solved
         else f'<p class="bad">Not recovered — {html.escape(result.failure or "unknown")}</p>'
     )
@@ -596,6 +623,8 @@ th{{font-weight:500;color:#6b6b66}} td{{font-variant-numeric:tabular-nums}}
 pre{{background:#fff;border:1px solid #e0e0dc;border-radius:6px;padding:.8rem;
 white-space:pre-wrap;word-break:break-all}}
 .ok{{color:#2f6f4f;font-weight:600}} .bad{{color:#a33a2a;font-weight:600}}
+.secret{{color:#8a5a1a;background:#fdf6e8;border:1px solid #efdcb4;border-radius:6px;
+padding:.6rem .8rem;margin-top:.8rem}}
 </style></head><body>
 <h1>qrsalvage report</h1><p class="sub">recover QR codes from what's left of them</p>
 <div class="row">{images}</div>

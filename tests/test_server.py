@@ -365,6 +365,70 @@ def test_a_foreign_host_header_is_refused(running_server):
     connection.close()
 
 
+def test_a_cross_origin_post_is_refused(running_server):
+    """The attack the Host check cannot see, and the callers that must not be caught with it.
+
+    Rebinding is not needed to reach a loopback server: a page on any origin can post straight
+    at it, and the browser writes the Host header itself, so the check above sees exactly what
+    it wants to see. What the page cannot write is the browser's own account of where the
+    request came from -- and a caller that sends no such account is not a browser at all."""
+    host, port = running_server
+    body = json.dumps({"image": "data:,x"})
+
+    for headers in (
+        {"Origin": "https://evil.example"},
+        {"Sec-Fetch-Site": "cross-site"},
+        {"Origin": f"http://127.0.0.1:{port}", "Sec-Fetch-Site": "cross-site"},
+    ):
+        connection = http.client.HTTPConnection(host, port, timeout=10)
+        connection.request(
+            "POST", "/api/solve", body=body, headers={"Content-Type": "application/json", **headers}
+        )
+        assert connection.getresponse().status == 403, headers
+        connection.close()
+
+    # The page's own fetch, and curl or the CLI, which never had an Origin to send. Both reach
+    # the recovery -- "data:,x" is simply not an image, which is a different answer entirely.
+    for headers in (
+        {"Origin": f"http://localhost:{port}", "Sec-Fetch-Site": "same-origin"},
+        {},
+    ):
+        connection = http.client.HTTPConnection(host, port, timeout=10)
+        connection.request(
+            "POST", "/api/solve", body=body, headers={"Content-Type": "application/json", **headers}
+        )
+        response = connection.getresponse()
+        assert response.status == 200, headers
+        assert json.loads(response.read())["ok"] is False
+        connection.close()
+
+
+def test_the_caller_cannot_name_its_own_workload():
+    """Every number the caller chooses is bounded, and the ones that are not numbers say so.
+
+    These all used to travel straight into the recovery: a burst of any length, a frame of any
+    size, a budget of any magnitude, and finder points that were neither three nor finite.
+    NaN in particular survives every comparison the geometry makes, so it produced a grid that
+    was neither placed nor refused."""
+    one = _data_url(FIXTURE)
+
+    assert solve_payload({"images": [one] * 13})["failure"].startswith("at most 12")
+    assert solve_payload({})["failure"] == "no photograph was given"
+
+    for points, expected in (
+        ([{"x": 1, "y": 2}], "three finder points"),
+        ([{"x": 1, "y": 2}] * 4, "three finder points"),
+        ([{"x": "a", "y": 2}] * 3, "needs a numeric"),
+        ([{"x": float("nan"), "y": 2.0}] * 3, "finite"),
+        ([{"x": float("inf"), "y": 2.0}] * 3, "finite"),
+    ):
+        answer = solve_payload({"image": one, "finder_points": points})
+        assert answer["ok"] is False
+        assert expected in answer["failure"], points
+
+    assert solve_payload({"image": one, "budget": "lots"})["failure"] == "budget must be a number"
+
+
 def test_a_malformed_request_costs_an_answer_but_never_a_thread(running_server):
     """Two bodies that decode fine and then fall over on the way in.
 

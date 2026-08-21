@@ -70,6 +70,18 @@ PYODIDE_CORE_URL = (
 PYODIDE_FILE_URL = f"https://cdn.jsdelivr.net/pyodide/v{PYODIDE_VERSION}/full/"
 ZXING_URL = f"https://registry.npmjs.org/zxing-wasm/-/zxing-wasm-{ZXING_VERSION}.tgz"
 
+# The digests of those two archives, so the build checks them instead of taking whatever the
+# release page and the registry serve today. The wheels further down were already checked --
+# but against pyodide-lock.json, which is extracted from the core tarball itself, so until
+# these two lines existed the whole chain rested on the one file nobody ever looked at.
+#
+# What they pin is the bytes this project vendored and worked from, read back out of the build
+# cache. That is a lock, not a blessing from upstream: nobody here compared them against a
+# checksum Pyodide or npm published. Their worth is that changing a version now has to change
+# a digest with it, deliberately and visibly, which is the property that was missing.
+PYODIDE_CORE_SHA256 = "da184d1266414630ed6c8312d2faf23ca959a0bbc31be334890fa44d0ad72b3d"
+ZXING_SHA256 = "c028f80fe6e0d2d7879a370c0f090c1c8141cf6239e0d43ebdd2176812553bfb"
+
 # What loadPyodide actually reads from indexURL. The type stubs, the UMD build and the npm
 # package manifest ride along in the tarball and are of no use to a browser.
 PYODIDE_RUNTIME = (
@@ -125,16 +137,31 @@ AUDIT_EXPLAINED: tuple[tuple[str, str], ...] = (
 )
 
 
-def _download(url: str, cached: Path, refresh: bool) -> bytes:
-    """Fetch a pinned file, once. Re-runs of the build must work offline."""
+def _download(url: str, cached: Path, refresh: bool, sha256: str | None = None) -> bytes:
+    """Fetch a pinned file, once, and refuse it when it is not the file that was pinned.
+
+    Re-runs must work offline, so a cached copy is used as it stands -- but it is checked all
+    the same. The cache is an ordinary directory that anything on this machine can write to,
+    and the point of a digest is that the bytes reaching the published site are the bytes
+    somebody looked at.
+    """
+    body: bytes
     if cached.exists() and not refresh:
-        return cached.read_bytes()
-    print(f"  downloading {url}")
-    request = urllib.request.Request(url, headers={"User-Agent": "qrsalvage-build"})
-    with urllib.request.urlopen(request, timeout=300) as response:
-        body: bytes = response.read()
-    cached.parent.mkdir(parents=True, exist_ok=True)
-    cached.write_bytes(body)
+        body = cached.read_bytes()
+    else:
+        print(f"  downloading {url}")
+        request = urllib.request.Request(url, headers={"User-Agent": "qrsalvage-build"})
+        with urllib.request.urlopen(request, timeout=300) as response:
+            body = response.read()
+        cached.parent.mkdir(parents=True, exist_ok=True)
+        cached.write_bytes(body)
+    if sha256 is not None:
+        digest = hashlib.sha256(body).hexdigest()
+        if digest != sha256:
+            raise SystemExit(
+                f"{url}\n  pinned sha256 {sha256}\n  actual sha256 {digest}\n"
+                "  refusing to vendor a file that is not the one pinned here"
+            )
     return body
 
 
@@ -187,7 +214,10 @@ def vendor_pyodide(target: Path, refresh: bool) -> list[str]:
     """Lay out the Python runtime and the two package wheels under vendor/pyodide/."""
     target.mkdir(parents=True, exist_ok=True)
     archive = _download(
-        PYODIDE_CORE_URL, CACHE / f"pyodide-core-{PYODIDE_VERSION}.tar.bz2", refresh
+        PYODIDE_CORE_URL,
+        CACHE / f"pyodide-core-{PYODIDE_VERSION}.tar.bz2",
+        refresh,
+        PYODIDE_CORE_SHA256,
     )
     with tarfile.open(fileobj=io.BytesIO(archive), mode="r:bz2") as tar:
         members = {Path(member.name).name: member for member in tar.getmembers()}
@@ -225,7 +255,7 @@ def vendor_zxing(target: Path, refresh: bool) -> None:
     needed, and it imports one shared module and one .wasm.
     """
     target.mkdir(parents=True, exist_ok=True)
-    archive = _download(ZXING_URL, CACHE / f"zxing-wasm-{ZXING_VERSION}.tgz", refresh)
+    archive = _download(ZXING_URL, CACHE / f"zxing-wasm-{ZXING_VERSION}.tgz", refresh, ZXING_SHA256)
     with tarfile.open(fileobj=io.BytesIO(archive), mode="r:gz") as tar:
 
         def read(name: str) -> bytes:
