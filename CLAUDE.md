@@ -23,6 +23,9 @@ adressiert — so ist immer eindeutig, welcher Interpreter läuft.
 - A/B einzelner Verfahrensteile: `scripts\ab_ensemble.py`, `scripts\ab_sigma.py`, `scripts\ab_bow.py`
 - Testfall erzeugen: `.venv\Scripts\python.exe -m qrsalvage synth "<text>" --contrast 0.14 --curvature 0.4`
 - Schwierigkeitskurve messen: `.venv\Scripts\python.exe scripts\difficulty.py`
+- Laufzeit messen: `.venv\Scripts\python.exe scripts\runtime.py [--save vorher.json] [--against vorher.json]`
+  (nennt die Streuung neben dem Median; eine Änderung innerhalb der Streuung gilt nicht als
+  Änderung. Grundlinien sind maschinenspezifisch und werden nicht eingecheckt)
 - Test: `.venv\Scripts\python.exe -m pytest`
 - Test ohne Bildkorpus (schnell): `.venv\Scripts\python.exe -m pytest -m "not regression"`
 - Nur Bildregression: `.venv\Scripts\python.exe -m pytest -m regression`
