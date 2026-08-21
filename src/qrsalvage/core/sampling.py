@@ -75,6 +75,13 @@ CONTRAST_FLOOR = 0.15  # of the median contrast
 OUTLIER_SIGMAS = 3.5
 MIN_KNOWN_PER_CLASS = 12  # never thin a field's support below this; 6 parameters need slack
 
+# How many times the level fit may drop outliers and fit again. Was a bare 4 in the loop, named
+# here so it could be measured rather than argued about, and then measured: it stays 4. Below
+# that costs accuracy on the damage it exists for and does not reliably save time; above it
+# buys one wrong cell for fifteen percent more work. See estimate_levels for the numbers and
+# scripts/ab_rounds.py for the instrument.
+ROBUST_ROUNDS = 4
+
 
 # The window of the featureless-patch test, in cells, and the data cells a window must contain
 # before it may testify. After masking, data modules are close to balanced and only weakly
@@ -281,12 +288,27 @@ def estimate_levels(
     grossly wrong known cells -- a grid column overhanging a torn paper edge, a stain across
     a finder -- enough leverage to bend the fields until they cross, and a scatter taken as a
     standard deviation is inflated by exactly the outliers it should have flagged. See the
-    note at :data:`ROBUST_LEVELS` for the observed failure and the three defences. The loop
-    below converges in two or three rounds on damaged images and runs exactly once on clean
-    ones, where no residual crosses the threshold.
+    note at :data:`ROBUST_LEVELS` for the observed failure and the three defences.
+
+    What the loop below actually does, measured, because the sentence that stood here before
+    described something else. It cannot oscillate -- every round only removes cells, never puts
+    one back -- so it does not thrash. It spirals: dropping outliers shrinks the residual
+    scatter, a smaller scatter puts more cells outside the threshold, and those go next.
+    Replayed on 400 real inputs with the cap lifted to twelve, 98.2 % of calls do come to a
+    stop, but the median takes six or seven rounds and the support falls from 203 known cells
+    to around 120 on the way. Under the shipped cap, 85 % of calls on a hard photograph use
+    every round they are given. So this is a stop partway down a spiral, not a convergence.
+
+    That is not the fault it looks like. On the stained axis, where known cells genuinely lie,
+    the median wrong-cell count runs 16, 9, 7, 7, 6 for one through six rounds: the whole
+    benefit arrives by round three and four is where it flattens. Cutting the cap does not even
+    buy time on the images it exists for -- one round measured *slower* than two (370 s against
+    346 s over thirty images), because a worse level fit hands the probe more uncertain cells
+    to work through. Four is where the curve turns; the argument for it is
+    scripts/ab_rounds.py.
     """
     use_dark, use_light = known_dark, known_light
-    for _ in range(4):
+    for _ in range(ROBUST_ROUNDS):
         dark = _fit_quadratic(means, use_dark)
         light = _fit_quadratic(means, use_light)
         if ROBUST_LEVELS:

@@ -676,20 +676,39 @@ Caches, wiederholte Arbeit — aber sie wissen nicht, was oft läuft. Hier liege
 einem Koordinatenabstieg, an dem nichts falsch ist; er ist nur teuer. Der nächste echte Hebel
 steht in Abschnitt 13.
 
-## 13. Die Ausreißerschleife läuft in ihre Rundengrenze, statt zu konvergieren
+## 13. Die Ausreißerschleife: der Deckel stimmt, die Begründung stimmte nicht — ERLEDIGT
 
-`estimate_levels` verwirft Ausreißer und fittet neu, höchstens vier Runden. Gemessen über 6073
-Aufrufe eines schweren Solves: 1 Runde 3,3 %, 2 Runden 7,2 %, 3 Runden 4,5 %, **4 Runden
-85,0 %** — Schnitt 3,71. Der Docstring sagt „converges in two or three rounds on damaged images
-and runs exactly once on clean ones".
+`estimate_levels` verwirft Ausreißer und fittet neu, höchstens `ROBUST_ROUNDS` mal. Das Profil
+liess es wie eine Performance-Frage aussehen: 85 % der Aufrufe auf einem schweren Foto
+schöpfen jede Runde aus, Runden 2 bis 4 sind damit rund drei Viertel der teuersten Funktion.
 
-In 85 % der Auswertungen endet die Schleife also, weil `range(4)` zu Ende ist, nicht weil keine
-Ausreißer mehr gefunden wurden. Der benutzte Level-Fit ist damit ein abgeschnittener. Zu klären
-ist zuerst, ob die Verwerfungsmenge zwischen Runde 3 und 4 noch wächst oder zwischen zwei
-Zuständen oszilliert — bei Oszillation ist ein echtes Abbruchkriterium die Lösung, das
-konvergiert *und* spart Runden 2 bis 4, also rund drei Viertel der 52 % Laufzeit von
-`estimate_levels`. Bei echtem Bedarf an mehr Runden ist die aktuelle Schätzung systematisch zu
-früh gestoppt, und das ist wichtiger als Geschwindigkeit.
+**Was die Schleife wirklich tut.** Sie kann nicht oszillieren — jede Runde entfernt nur, nimmt
+nie zurück. Sie spiralt: Ausreißer verwerfen verkleinert die Streuung, die kleinere Streuung
+schiebt weitere Zellen über die Schwelle. Über 400 mitgeschnittene echte Eingaben mit Deckel 12
+nachgespielt: 98,2 % kommen zum Stehen, aber der Median braucht 6–7 Runden, und die Stützmenge
+fällt dabei von 203 auf rund 120 bekannte Zellen. Der Deckel bei 4 ist also ein Halt mitten in
+der Spirale, keine Konvergenz — anders als der alte Docstring behauptete.
 
-Zu messen mit `scripts/runtime.py` (Streuung beachten) **und** `scripts/difficulty.py`: ein
-Abstieg, der schneller ein schlechteres Optimum findet, überlebt sechs Fixtures problemlos.
+**Trotzdem der richtige Halt.** A/B auf der Fleck-Achse (Kontrast 0,13, Wölbung 0,50, 6 px,
+`stain` 0,50; 30 Bilder je Zelle), Median der falschen Zellen:
+
+| Runden | 1 | 2 | 3 | 4 | 6 |
+|---|---|---|---|---|---|
+| falsche Zellen | 16 | 9 | 7 | 7 | 6 |
+| Sekunden | 370 | 346 | 380 | 418 | 479 |
+
+Der Nutzen kommt bis Runde 3 und flacht bei 4 ab. Erfolgsquoten lagen in allen Armen in
+überlappenden Wilson-Intervallen und tragen nichts bei. Bemerkenswert: **eine Runde ist
+langsamer als zwei** — ein schlechterer Level-Fit gibt der Sonde mehr unsichere Zellen zu
+durchsuchen. Runden zu streichen spart auf beschädigten Bildern also nicht einmal Zeit; die
+Ersparnis zeigt sich nur auf sauberen, wo es nichts zu verwerfen gibt.
+
+**Ergebnis:** `ROBUST_ROUNDS` bleibt 4. Die erhoffte Beschleunigung aus Abschnitt 12 existiert
+nicht — der Weg zu weniger Laufzeit führt nicht über weniger Runden. Korrigiert wurde der
+Docstring, der „converges in two or three rounds" behauptete. Instrument: `scripts/ab_rounds.py`.
+
+**Zweimal falsch angesetzt, damit es nicht wiederholt wird.** Der erste A/B lief bei Kontrast
+0,20 und `stain` 0,35: alles gelöst, falsche Zellen überall 0, kein Arm unterscheidbar. Der
+zweite bei Kontrast 0,13 und `stain` 0,50: fast nichts gelöst, aber die Zellzahl trennte sauber.
+Bei Änderungen an der Abtastung ist `wrong_known` der Messwert, nicht die Erfolgsquote — steht
+so in `scripts/README.md` und hat zwei Anläufe gekostet.
