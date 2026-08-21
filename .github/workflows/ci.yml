@@ -22,9 +22,17 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: pip install ruff
+      # The declared floors, not whatever the index happens to serve today. A linter that
+      # drifts away from the one a contributor ran locally turns a green run into a red one
+      # over a rule nobody chose; requirements.txt is where the floor is written down.
+      - run: pip install -r requirements.txt
+      - run: pip install -e .
       - run: ruff check .
       - run: ruff format --check .
+      # CLAUDE.md calls complete signatures in the core mandatory, and until this line existed
+      # that was a rule the repository stated and no gate enforced. The editable install above
+      # is what lets mypy follow the package's own imports.
+      - run: mypy
 
   test:
     # The fast suite on every platform and version we claim to support. This project was

@@ -80,6 +80,13 @@ def main() -> int:
     shutil.copyfile(args.image, destination)
     meta = {
         "source": args.source or "private photograph",
+        # Unsalted and single-round, and that is not an oversight. An audit will flag it as a
+        # weak verifier for a low-entropy secret, which it would be anywhere else. Here the
+        # file it sits in is <name>.json and the photograph of the very same code is <name>.png
+        # beside it, in the same gitignored directory. Anyone holding this hash is holding the
+        # picture that made it, so salting would protect nothing that is not already open. The
+        # hash exists so a regression can compare without a device secret in the repository --
+        # not to withstand someone who already has the folder.
         "expected_sha256": hashlib.sha256(result.text.encode()).hexdigest(),
         # Recorded separately from `source` so it cannot be mistaken for a description. A
         # photograph handed to you does not make the device yours, and the payload of a Zigbee

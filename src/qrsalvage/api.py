@@ -14,6 +14,8 @@ concerns -- upload limits, headers, status codes -- stay with the transport, in 
 from __future__ import annotations
 
 import base64
+import math
+import threading
 import uuid
 from collections import OrderedDict
 from collections.abc import Callable
@@ -42,6 +44,31 @@ ProgressFn = Callable[[str, dict], None]
 # one machine -- and in the browser build, one person in one tab.
 _RECENT: OrderedDict[str, tuple] = OrderedDict()
 _RECENT_LIMIT = 4
+# The server answers on threads. Storing a token and evicting the oldest are each atomic on
+# their own, but "store, then evict while over the limit" is not: two recoveries finishing
+# together can both see the cache over its limit and both evict, retiring a token its owner
+# has not used yet. The cost is an export that answers "no longer held" for no reason anyone
+# can see, which is exactly the kind of fault that gets blamed on the recovery instead.
+_RECENT_LOCK = threading.Lock()
+
+# What one person's camera burst plausibly holds. Fusing several photographs is why more than
+# one arrives at all; past a dozen the extra frames buy nothing measurable and every one of
+# them costs a full recovery's work.
+_MAX_IMAGES = 12
+
+# Above any phone sensor, and the point where a decoded frame stops being a photograph and
+# starts being a way to spend the machine's memory. Checked after the decode, which is this
+# guard's honest limit -- OpenCV has already allocated that one frame by the time it is asked.
+# What it does bound is the whole burst behind it, and every stage downstream.
+_MAX_PIXELS = 40_000_000
+
+# The descent's default is 4000. Twenty-five times that is far past where more probing still
+# finds anything, and it finishes; what the ceiling stops is a caller naming a number that
+# never would.
+_MAX_BUDGET = 100_000
+
+# One A4 catalogue per household, not per warehouse.
+_MAX_CATALOG_ENTRIES = 200
 
 
 def _png_bytes(matrix: np.ndarray, scale: int = 8) -> bytes:
@@ -61,7 +88,12 @@ def solve_payload(payload: dict, progress: ProgressFn | None = None) -> dict:
     failure guidance sends people here on purpose. Hand-placed finder points only apply to a
     single photograph: three clicks describe one framing, not several.
     """
-    encoded = payload.get("images") or [payload["image"]]
+    encoded = payload.get("images") or ([payload["image"]] if "image" in payload else [])
+    if not isinstance(encoded, list) or not encoded:
+        return {"ok": False, "failure": "no photograph was given"}
+    if len(encoded) > _MAX_IMAGES:
+        return {"ok": False, "failure": f"at most {_MAX_IMAGES} photographs of one code at a time"}
+
     images: list[np.ndarray] = []
     for entry in encoded:
         raw = base64.b64decode(entry.split(",", 1)[-1])
@@ -69,15 +101,43 @@ def solve_payload(payload: dict, progress: ProgressFn | None = None) -> dict:
         if image is None:
             which = f" ({len(images) + 1} of {len(encoded)})" if len(encoded) > 1 else ""
             return {"ok": False, "failure": f"the file{which} could not be read as an image"}
+        if image.shape[0] * image.shape[1] > _MAX_PIXELS:
+            return {
+                "ok": False,
+                "failure": f"the photograph is larger than {_MAX_PIXELS // 1_000_000} megapixels",
+            }
         images.append(image)
 
     points = payload.get("finder_points") or None
     if points and len(images) == 1:
-        points = [(float(p["x"]), float(p["y"])) for p in points]
+        # Three clicks describe one framing. Fewer leaves the grid without a corner to sit on
+        # and used to reach past the end of the list somewhere down in geometry; more says the
+        # caller means something this path cannot honour. Both are worth saying out loud here,
+        # where the words can still name what is wrong.
+        if not isinstance(points, list) or len(points) != 3:
+            return {
+                "ok": False,
+                "failure": "three finder points describe a framing, not more or fewer",
+            }
+        try:
+            points = [(float(p["x"]), float(p["y"])) for p in points]
+        except (TypeError, KeyError, ValueError):
+            return {"ok": False, "failure": "each finder point needs a numeric x and y"}
+        if not all(math.isfinite(value) for point in points for value in point):
+            # NaN survives every comparison the geometry makes and turns into a grid that is
+            # neither placed nor refused.
+            return {"ok": False, "failure": "finder points must be finite coordinates"}
     else:
         points = None
 
-    budget = int(payload.get("budget", 4000))
+    try:
+        budget = int(payload.get("budget", 4000))
+    except (TypeError, ValueError):
+        return {"ok": False, "failure": "budget must be a number"}
+    # Clamped rather than refused, unlike the export sizes below: this one is not a measurement
+    # anybody reads back, only how hard to try. A caller who asks for more than the descent can
+    # use should get the most it can use, not an error about a number that hurt nobody.
+    budget = max(1, min(budget, _MAX_BUDGET))
     if len(images) == 1:
         result = solve(
             images[0],
@@ -152,9 +212,10 @@ def solve_payload(payload: dict, progress: ProgressFn | None = None) -> dict:
         out["clean_png"] = _png_data_url(reencode(result.text), scale=12)
 
     token = uuid.uuid4().hex
-    _RECENT[token] = (result, image)
-    while len(_RECENT) > _RECENT_LIMIT:
-        _RECENT.popitem(last=False)
+    with _RECENT_LOCK:
+        _RECENT[token] = (result, image)
+        while len(_RECENT) > _RECENT_LIMIT:
+            _RECENT.popitem(last=False)
     out["token"] = token
     out["exportable"] = result.decoded_matrix is not None
     return out
@@ -162,7 +223,8 @@ def solve_payload(payload: dict, progress: ProgressFn | None = None) -> dict:
 
 def export_payload(payload: dict) -> tuple[bytes, str, str]:
     """Build one export from a remembered result. Returns (bytes, content type, filename)."""
-    remembered = _RECENT.get(payload.get("token", ""))
+    with _RECENT_LOCK:
+        remembered = _RECENT.get(payload.get("token", ""))
     if remembered is None:
         raise KeyError("that result is no longer held; recover the image again")
     result, image = remembered
@@ -205,8 +267,15 @@ def catalog_payload(payload: dict) -> tuple[bytes, str, str]:
     remembered between the recoveries and the download, so a catalogue can span more
     recoveries than the export cache holds.
     """
+    given = payload.get("entries", [])
+    # Every entry is a fresh QR encode plus a page's worth of layout, so the work is the
+    # caller's to name. A household's labelled devices do not run to three figures; a request
+    # that does is not a catalogue anyone means to print.
+    if not isinstance(given, list) or len(given) > _MAX_CATALOG_ENTRIES:
+        raise ValueError(f"a catalogue holds at most {_MAX_CATALOG_ENTRIES} entries")
+
     entries = []
-    for entry in payload.get("entries", []):
+    for entry in given:
         text = (entry.get("text") or "").strip()
         if not text:
             continue
