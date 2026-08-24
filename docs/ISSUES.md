@@ -260,7 +260,7 @@ Einzelfall durchgeht.
   Architekturstücke haben das getragen: `api.py` (transportneutral, Server und Worker rufen
   dieselben Funktionen) und die synchrone Encode-Richtung des Orakels — ohne die wäre die
   Browser-Version ein reiner Leser gewesen, weil jeder Erfolg re-encodiert und der ganze
-  Katalog aus Re-Encodierungen besteht. **Offen:** Pages-Repo, `.domains` ausfüllen, DNS-CNAME,
+  Katalog aus Re-Encodierungen besteht. **Offen:** Pages-Branch `pages` plus Forgejo-Webhook (git-pages; `.domains` ist abgeschafft, v2 ist für neue Konten aus), DNS-CNAME,
   echter Safari/iOS-Test, und die wurzelrelativen Pfade (`/style.css`, `/method`) setzen die
   Seite auf einem Domain-Root voraus — unter einer Projekt-URL mit Unterpfad bräuchte es
   relative Links.
@@ -284,7 +284,7 @@ Einzelfall durchgeht.
   und hart erkämpfte Erfolge (>100 Versuche) tragen die Aufforderung, den re-encodierten Code
   vor dem Eintippen mit dem eigenen Handy gegenzuscannen. Upload-Deckel auf 64 MB für
   Kamera-Serien. **Restarbeit:** Assets selbst hosten statt CDN (Versionen pinnen),
-  Encode-Richtung bridgen (writeBarcode), Pages-Repo mit `.domains`, DNS CNAME auf
+  Encode-Richtung bridgen (writeBarcode), Pages-Branch `pages` plus Forgejo-Webhook (git-pages; `.domains` ist abgeschafft, v2 ist für neue Konten aus), DNS CNAME auf
   `<user>.codeberg.page`. Lizenzseitig geklärt (`THIRD-PARTY-NOTICES.md`).
 - **Mehrere Codes in einem Bild.** Ein Produktfoto mit zwei Etiketten liefert sechs oder mehr
   Finder-Kandidaten; wir suchen daraus genau ein Tripel und ignorieren den Rest.

@@ -66,7 +66,7 @@ In dieser Reihenfolge, jede Stufe für sich nutzbar:
   statischer Host keine Header setzt). Der Weg dahin: `api.py` als transportneutrale Schicht,
   die Server und Worker gemeinsam aufrufen, plus die Encode-Richtung des Orakels — gegen den
   nativen Encoder matrixgleich geprüft (`tests/test_oracle_bridge.py`). **Rest bis
-  Veröffentlichung:** Pages-Repo, `.domains` ausfüllen, DNS, echter Safari/iOS-Test.
+  Veröffentlichung:** Pages-Branch `pages` plus Forgejo-Webhook (git-pages; `.domains` ist abgeschafft, v2 ist für neue Konten aus), DNS, echter Safari/iOS-Test.
   Die Vorgeschichte: **Spike gelungen**
   (`spike/pyodide/index.html`): der unveränderte Kern löst die harte Fixture im Browser in
   **12,4 s** (nativ ~4 s, Faktor ~3 — im prognostizierten Band), Ladezeit CPython+NumPy+OpenCV
@@ -77,14 +77,14 @@ In dieser Reihenfolge, jede Stufe für sich nutzbar:
   synchronen embind-Aufruf von zxing-wasm gerufen — **JSPI ist raus aus dem Pfad**, die
   Safari-Blockade damit architektonisch beseitigt (Realtest auf Safari steht aus). Noch
   offen: Assets selbst hosten statt CDN (Versionen pinnen), Encode-Richtung des Orakels,
-  Pages-Repo, `.domains`, DNS.
+  Pages-Branch `pages` plus Forgejo-Webhook (git-pages; `.domains` ist abgeschafft, v2 ist für neue Konten aus), DNS.
 - [ ] **5. Veröffentlichung auf Codeberg** — erledigt: Übersetzung (kein Deutsch mehr in
   `src/`, `tests/`, `scripts/`), `CONTRIBUTING`, erfundene EUI64 im Test, und
   `web/legal.html` mit Impressum und Datenschutzerklärung, verlinkt aus der Fußzeile beider
   Seiten. **Was noch fehlt und nur du tun kannst:** die vier TODO-Felder in `legal.html`
   (Name, Anschrift, E-Mail, Hoster-Link) — ein Test schlägt an, solange sie stehen; die
   Spenden-URLs in `app.js`; README-Badges auf den echten Repository-Pfad; Pages-Repo,
-  `.domains` und DNS; ein echter Safari/iOS-Test.
+  Pages-Branch `pages` plus Forgejo-Webhook und DNS; ein echter Safari/iOS-Test.
 - [ ] **6. Reichweite in der Nische** — der ausgearbeitete Plan steht in `REACH.md`:
   Startseite auf die Suchintention drehen, Links in fremder Troubleshooting-Doku
   (Zigbee2MQTT, ZHA), echte Hilfe in Foren-Threads, dann je ein Launch-Post
