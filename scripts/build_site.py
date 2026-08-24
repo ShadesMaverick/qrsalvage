@@ -50,17 +50,6 @@ WEB = ROOT / "src" / "qrsalvage" / "web"
 SITE = ROOT / "site"
 CACHE = ROOT / "vendor-cache"
 
-# The custom domain the published site should answer to, and the Pages address that keeps
-# working beside it. Empty means "no custom domain yet", and then no .domains file is written
-# at all -- see write_domains for why an invented placeholder is worse than an absent file.
-#
-# Note before filling PAGES_FALLBACK in: the account name is Shades_Maverick, and a hostname
-# cannot contain an underscore. Whether Codeberg maps such an account to shades-maverick,
-# rejects it, or serves it in a way browsers tolerate but a TLS certificate cannot cover, is
-# not something this file should guess. Open the Pages address in a browser once and put the
-# name that actually answers here.
-PAGES_DOMAIN = ""
-PAGES_FALLBACK = ""
 
 # Exact versions, never ranges. A static site is a frozen artefact: the visitor gets whatever
 # was vendored the day it was built, so the build has to be able to produce that same artefact
@@ -327,32 +316,6 @@ def copy_page(target: Path) -> None:
     # anyway, so method.html is simply the address.
 
 
-def write_domains(target: Path) -> None:
-    """Write the Codeberg Pages domain file -- and only when there is a domain to write.
-
-    Pages serves every repository at <user>.codeberg.page with no .domains file at all. The
-    file exists solely to claim *additional* names, so an empty one is not a stub waiting to be
-    filled: it is a build that says nothing, which is exactly right until a domain is owned.
-
-    The placeholder that used to stand here was worse than nothing. `qrsalvage.example.org`
-    claims a hostname this project does not control, and Pages would have served the site under
-    a name that resolves nowhere -- a launch-day failure that looks like a broken tool rather
-    than a missing DNS record.
-    """
-    if not PAGES_DOMAIN:
-        print("  .domains: skipped -- no custom domain set, Pages serves the default address")
-        return
-    (target / ".domains").write_text(
-        f"{PAGES_DOMAIN}\n"
-        f"{PAGES_FALLBACK}\n"
-        "# Codeberg Pages reads this file: one domain per line, the first one canonical.\n"
-        "# A domain listed here without the matching DNS record does nothing.\n",
-        encoding="utf-8",
-        newline="\n",
-    )
-    print(f"  .domains: {PAGES_DOMAIN} (canonical), {PAGES_FALLBACK}")
-
-
 def update_gitignore() -> None:
     """Keep the built site and the download cache out of the history."""
     path = ROOT / ".gitignore"
@@ -424,7 +387,6 @@ def main() -> int:
 
     print("page")
     copy_page(SITE)
-    write_domains(SITE)
     update_gitignore()
 
     print("\nsize")
@@ -464,10 +426,27 @@ def main() -> int:
     print("\nserve it locally to test:")
     print("  .venv\\Scripts\\python.exe -m http.server 8833 --directory site --bind 127.0.0.1")
     print("  then open http://127.0.0.1:8833/")
-    print("\npublishing: push the contents of site/ to the pages branch, edit site/.domains,")
-    print("and point DNS at Codeberg -- a CNAME from your domain to <user>.codeberg.page")
-    print("(an apex domain needs A/AAAA records instead). Without that record the .domains")
-    print("file is inert.")
+    # Codeberg Pages moved from the v2 server to git-pages, and the two publish differently.
+    # v2 read a .domains file out of the repository; git-pages does not -- its documentation
+    # says the file "is no longer necessary" and may be deleted. v2 is switched off for
+    # accounts created after the changeover, so for this project the new flow is the only one.
+    # What replaced .domains is a webhook that names the target, plus DNS records that
+    # authorise a repository to deploy to a domain. Verified against the live service in
+    # August 2026; the address answers over HTTPS with an underscore in the account name.
+    print("\npublishing to Codeberg Pages (git-pages, not the retired v2 server):")
+    print("  1. put the contents of site/ on a branch called 'pages' -- the branch name is")
+    print("     what the server looks for, and it is not the branch the code lives on")
+    print("  2. repository Settings -> Webhooks -> Add webhook -> Forgejo, with")
+    print("     Target URL  https://<user>.codeberg.page/<repository>/")
+    print("     Branch filter  pages")
+    print("  3. push that branch; the webhook publishes it")
+    print("\nfor a domain of your own, additionally:")
+    print("  CNAME  your.domain -> codeberg.page.   (apex: A 217.197.84.141 / AAAA")
+    print("         2a0a:4580:103f:c0de::2, or an ALIAS where the provider offers one)")
+    print("  TXT    _git-pages-repository.your.domain -> the HTTPS clone URL of the repo")
+    print("         (this is the authorisation: it says which repository may deploy here)")
+    print("  and a second webhook whose Target URL is that domain -- http:// for the first")
+    print("  deployment, https:// afterwards.")
     return 0
 
 
