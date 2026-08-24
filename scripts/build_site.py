@@ -50,6 +50,18 @@ WEB = ROOT / "src" / "qrsalvage" / "web"
 SITE = ROOT / "site"
 CACHE = ROOT / "vendor-cache"
 
+# The custom domain the published site should answer to, and the Pages address that keeps
+# working beside it. Empty means "no custom domain yet", and then no .domains file is written
+# at all -- see write_domains for why an invented placeholder is worse than an absent file.
+#
+# Note before filling PAGES_FALLBACK in: the account name is Shades_Maverick, and a hostname
+# cannot contain an underscore. Whether Codeberg maps such an account to shades-maverick,
+# rejects it, or serves it in a way browsers tolerate but a TLS certificate cannot cover, is
+# not something this file should guess. Open the Pages address in a browser once and put the
+# name that actually answers here.
+PAGES_DOMAIN = ""
+PAGES_FALLBACK = ""
+
 # Exact versions, never ranges. A static site is a frozen artefact: the visitor gets whatever
 # was vendored the day it was built, so the build has to be able to produce that same artefact
 # again. 0.28.0 is the version the spike in spike/pyodide measured, and it carries NumPy 2.2
@@ -316,16 +328,29 @@ def copy_page(target: Path) -> None:
 
 
 def write_domains(target: Path) -> None:
-    """Write the Codeberg Pages domain file, with a placeholder that has to be replaced."""
+    """Write the Codeberg Pages domain file -- and only when there is a domain to write.
+
+    Pages serves every repository at <user>.codeberg.page with no .domains file at all. The
+    file exists solely to claim *additional* names, so an empty one is not a stub waiting to be
+    filled: it is a build that says nothing, which is exactly right until a domain is owned.
+
+    The placeholder that used to stand here was worse than nothing. `qrsalvage.example.org`
+    claims a hostname this project does not control, and Pages would have served the site under
+    a name that resolves nowhere -- a launch-day failure that looks like a broken tool rather
+    than a missing DNS record.
+    """
+    if not PAGES_DOMAIN:
+        print("  .domains: skipped -- no custom domain set, Pages serves the default address")
+        return
     (target / ".domains").write_text(
-        "qrsalvage.example.org\n"
+        f"{PAGES_DOMAIN}\n"
+        f"{PAGES_FALLBACK}\n"
         "# Codeberg Pages reads this file: one domain per line, the first one canonical.\n"
-        "# Replace the placeholder above with the domain you own before publishing, and add\n"
-        "# <user>.codeberg.page on a line of its own if the default address should keep\n"
-        "# working. A domain listed here without the matching DNS record does nothing.\n",
+        "# A domain listed here without the matching DNS record does nothing.\n",
         encoding="utf-8",
         newline="\n",
     )
+    print(f"  .domains: {PAGES_DOMAIN} (canonical), {PAGES_FALLBACK}")
 
 
 def update_gitignore() -> None:

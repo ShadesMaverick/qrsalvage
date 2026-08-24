@@ -60,7 +60,7 @@ Quellverzeichnisses** installiert. Der letzte hat beim Schreiben gleich einen ec
 aufgedeckt: Die Oberfläche wurde relativ zum Repo-Wurzelverzeichnis gesucht und war gar nicht
 als Paketdaten deklariert — ein Wheel hätte keine Seite enthalten.
 
-**Noch offen:** `<owner>` im CI-Badge des README ersetzen, sobald das Repository existiert.
+**Erledigt:** Badge und Clone-URLs zeigen auf `codeberg.org/Shades_Maverick/qrsalvage`; `.woodpecker.yml` fährt dieselben Prüfungen, weil Codeberg keine GitHub Actions ausführt.
 
 ---
 
