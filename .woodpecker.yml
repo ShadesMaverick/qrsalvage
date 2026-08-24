@@ -1,0 +1,34 @@
+# Codeberg CI. The same gates as .github/workflows/ci.yml, which stays in the tree because it
+# still describes the cross-platform matrix and would run again the day a GitHub mirror exists
+# -- but Codeberg runs Woodpecker, so GitHub Actions never fire here and the README badge points
+# at this file's result.
+#
+# What is deliberately not reproduced: the five-way matrix over Linux, macOS, Windows and
+# Python 3.11 to 3.13. Woodpecker builds in containers, so macOS and Windows are out of reach,
+# and running three Linux Pythons here would triple the minutes for the platform this project
+# is *least* worried about. Windows is the primary platform and gets tested by hand on the
+# machine this is developed on; the matrix belongs to a mirror if one is ever set up.
+
+when:
+  - event: [push, pull_request]
+
+steps:
+  - name: checks
+    image: python:3.12
+    commands:
+      # opencv-python links against libGL and libglib even when nothing is ever displayed --
+      # the headless variant would not, which is a dependency change and not a CI decision.
+      - apt-get update -qq
+      - apt-get install -y --no-install-recommends libgl1 libglib2.0-0
+      # requirements.txt rather than bare names: it is where the version floors are written
+      # down, and a linter that drifts from the one contributors run turns a green local run
+      # into a red one over a rule nobody chose.
+      - pip install --no-cache-dir -r requirements.txt
+      - pip install --no-cache-dir -e .
+      - ruff check .
+      - ruff format --check .
+      - mypy
+      - pytest -q -m "not regression"
+      # The image corpus last, because it is the slow half and a failure in it means something
+      # different from a failure above: the recovery got worse, not the code.
+      - pytest -q -m regression

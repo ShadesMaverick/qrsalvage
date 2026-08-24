@@ -2,7 +2,7 @@
 
 # qrsalvage
 
-[![CI](https://github.com/<owner>/qrsalvage/actions/workflows/ci.yml/badge.svg)](https://github.com/<owner>/qrsalvage/actions/workflows/ci.yml)
+[![CI](https://ci.codeberg.org/api/badges/Shades_Maverick/qrsalvage/status.svg)](https://ci.codeberg.org/Shades_Maverick/qrsalvage)
 
 *recover QR codes from what's left of them*
 
@@ -60,7 +60,7 @@ pip install qrsalvage
 From source:
 
 ```
-git clone https://github.com/<owner>/qrsalvage
+git clone https://codeberg.org/Shades_Maverick/qrsalvage
 cd qrsalvage
 pip install -e .
 ```
