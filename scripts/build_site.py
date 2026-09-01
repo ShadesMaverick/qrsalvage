@@ -426,27 +426,27 @@ def main() -> int:
     print("\nserve it locally to test:")
     print("  .venv\\Scripts\\python.exe -m http.server 8833 --directory site --bind 127.0.0.1")
     print("  then open http://127.0.0.1:8833/")
-    # Codeberg Pages moved from the v2 server to git-pages, and the two publish differently.
-    # v2 read a .domains file out of the repository; git-pages does not -- its documentation
-    # says the file "is no longer necessary" and may be deleted. v2 is switched off for
-    # accounts created after the changeover, so for this project the new flow is the only one.
-    # What replaced .domains is a webhook that names the target, plus DNS records that
-    # authorise a repository to deploy to a domain. Verified against the live service in
-    # August 2026; the address answers over HTTPS with an underscore in the account name.
-    print("\npublishing to Codeberg Pages (git-pages, not the retired v2 server):")
-    print("  1. put the contents of site/ on a branch called 'pages' -- the branch name is")
-    print("     what the server looks for, and it is not the branch the code lives on")
-    print("  2. repository Settings -> Webhooks -> Add webhook -> Forgejo, with")
-    print("     Target URL  https://<user>.codeberg.page/<repository>/")
-    print("     Branch filter  pages")
-    print("  3. push that branch; the webhook publishes it")
-    print("\nfor a domain of your own, additionally:")
-    print("  CNAME  your.domain -> codeberg.page.   (apex: A 217.197.84.141 / AAAA")
-    print("         2a0a:4580:103f:c0de::2, or an ALIAS where the provider offers one)")
-    print("  TXT    _git-pages-repository.your.domain -> the HTTPS clone URL of the repo")
-    print("         (this is the authorisation: it says which repository may deploy here)")
-    print("  and a second webhook whose Target URL is that domain -- http:// for the first")
-    print("  deployment, https:// afterwards.")
+    # Nothing below has to be done by hand: .github/workflows/pages.yml runs this script on
+    # every push to main and hands site/ to the Pages service as an artefact. That indirection
+    # is the point -- the twenty-nine megabytes vendored above are binaries nobody in this
+    # project compiled, and a deployment branch would write them into the history on every
+    # publish. They are reproducible from this file, so they are built, not stored.
+    #
+    # Every reference the page makes is relative (see copy_page), so the address is a free
+    # choice rather than a constraint: the default project path and a domain of one's own both
+    # work, and so does opening the directory off a filesystem. What is not free is HTTPS --
+    # the camera mode asks for a lens and browsers only hand one out in a secure context, so
+    # the local server aside, the site has to be served over https:// to be whole.
+    print("\npublishing to GitHub Pages:")
+    print("  the workflow does it -- Settings -> Pages -> Source: GitHub Actions, once.")
+    print("  every push to main then rebuilds this directory and deploys it.")
+    print("  note: on a free plan Pages needs the repository to be public.")
+    print("\n  the default address is https://<user>.github.io/<repository>/ and needs no")
+    print("  further work -- the page addresses its own parts by name, not from the root.")
+    print("\nfor a domain of your own:")
+    print("  CNAME  www.your.domain -> <user>.github.io.   (apex: A records to GitHub's four")
+    print("         Pages addresses, or an ALIAS/ANAME where the provider offers one)")
+    print("  then Settings -> Pages -> Custom domain, and leave 'Enforce HTTPS' on.")
     return 0
 
 

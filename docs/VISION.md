@@ -15,10 +15,10 @@ akutes Problem und meist schon drei Apps erfolglos probiert.
 
 ## Wohin es soll
 
-- **FOSS, öffentlich auf Codeberg.** Apache-2.0; `LICENSE` und `THIRD-PARTY-NOTICES.md`
+- **FOSS, öffentlich auf GitHub.** Apache-2.0; `LICENSE` und `THIRD-PARTY-NOTICES.md`
   liegen im Repo. Alle Abhängigkeiten sind permissiv — nichts steht einer Veröffentlichung
-  oder Spendenfinanzierung im Weg.
-- **Statische Browser-Version, eigene Domain, kein Server.** Codeberg Pages liefert Dateien,
+  oder Spendenfinanzierung im Weg. Warum nicht Codeberg: siehe unten.
+- **Statische Browser-Version, eigene Domain, kein Server.** GitHub Pages liefert Dateien,
   die Rechnerei läuft per Pyodide + zxing-cpp-WASM im Browser des Besuchers. Das macht die
   Privacy-Aussage wörtlich wahr: Es gibt keinen Server, der Fotos oder Klartexte sehen könnte.
   Plan und ehrliche Kosten (~40–60 MB Erstladung, 2–5× langsamer) in `ISSUES.md`.
@@ -28,6 +28,38 @@ akutes Problem und meist schon drei Apps erfolglos probiert.
 - **Edutainment als Haltung.** Die Live-Ansicht zeigt echte Zwischenstände des Verfahrens,
   die Methodenseite erklärt sie, beide verweisen aufeinander. Wer wartet, lernt nebenbei,
   warum es funktioniert. Nichts wird animiert, was nicht wirklich passiert.
+
+### Warum nicht Codeberg (Entscheidung September 2026)
+
+Codeberg war bis hierhin das Ziel, und der Wechsel ist keine Geschmacksfrage. Die
+Mitgliederversammlung 2026 hat mit 358 zu 144 Stimmen eine Ergänzung der Nutzungsbedingungen
+beschlossen (§ 2 (1) 7, seit Juli 2026 in Kraft): Projekte, die überwiegend aus Code
+generativer KI-Werkzeuge bestehen, dürfen dort nicht geteilt werden — Claude ist im Text
+namentlich als Beispiel genannt. Begründet wird es mit ungeklärtem Urheberrechtsstatus und
+fehlenden Sicherungen gegen Schadcode; der begleitende Blogbeitrag nennt zusätzlich den
+Ressourcenverbrauch von Projekten, die mehr Rechenzeit und Speicher verbrauchen, als die
+beteiligten Menschen von Hand hätten erzeugen können.
+
+qrsalvage fällt darunter. Die Historie trägt in jedem Commit `Co-Authored-By: Claude`, es gibt
+keine Vor-LLM-Historie und keine Community — die beiden Ausnahmen, die Codeberg ausdrücklich
+nennt, greifen beide nicht. Dass der Gründungsfall echt ist, die Fotos echt sind und jede
+Erfolgsquote gemessen statt behauptet wurde, ändert daran nichts: Die Regel fragt nicht nach
+der Sorgfalt, sondern nach der Entstehung.
+
+Die Trailer aus der Historie zu entfernen, um die Regel zu unterlaufen, kam nicht in Frage.
+Ein Projekt, dessen einziges Kapital die Nachprüfbarkeit seiner Aussagen ist, kann nicht mit
+einer Fälschung anfangen. Also GitHub — dort gibt es keine solche Regel, die CI liegt ohnehin
+schon als `.github/workflows/ci.yml` im Baum, und Pages kann die 29 MB der Browser-Version
+ausliefern.
+
+Was das kostet, gehört mitgeschrieben: GitHub gehört Microsoft, ist nicht quelloffen, und die
+Datenschutzaussage der Seite muss ehrlich sagen, dass die Auslieferung dort stattfindet. Die
+Kernaussage bleibt davon unberührt — die Rechnerei läuft im Browser des Besuchers, das Foto
+wird nicht hochgeladen, und das erzwingt die CSP, nicht der Hoster.
+
+**Für den Launch-Post daraus die Konsequenz:** Die Entstehung wird offen genannt, nicht
+verschwiegen. Offen vorgetragen und mit `scripts/` nachprüfbar ist sie haltbar; unerwähnt und
+später entdeckt kostet sie genau die Glaubwürdigkeit, auf der `REACH.md` aufbaut.
 
 ## Die Spenden-Mechanik
 
@@ -66,7 +98,9 @@ In dieser Reihenfolge, jede Stufe für sich nutzbar:
   statischer Host keine Header setzt). Der Weg dahin: `api.py` als transportneutrale Schicht,
   die Server und Worker gemeinsam aufrufen, plus die Encode-Richtung des Orakels — gegen den
   nativen Encoder matrixgleich geprüft (`tests/test_oracle_bridge.py`). **Rest bis
-  Veröffentlichung:** Pages-Branch `pages` plus Forgejo-Webhook (git-pages; `.domains` ist abgeschafft, v2 ist für neue Konten aus), DNS, echter Safari/iOS-Test.
+  Veröffentlichung:** GitHub Pages einschalten (Source: GitHub Actions,
+  `.github/workflows/pages.yml` baut und deployt), echter Safari/iOS-Test. DNS erst, wenn
+  eine eigene Domain dazukommt — die Standardadresse braucht keins.
   Die Vorgeschichte: **Spike gelungen**
   (`spike/pyodide/index.html`): der unveränderte Kern löst die harte Fixture im Browser in
   **12,4 s** (nativ ~4 s, Faktor ~3 — im prognostizierten Band), Ladezeit CPython+NumPy+OpenCV
@@ -77,14 +111,15 @@ In dieser Reihenfolge, jede Stufe für sich nutzbar:
   synchronen embind-Aufruf von zxing-wasm gerufen — **JSPI ist raus aus dem Pfad**, die
   Safari-Blockade damit architektonisch beseitigt (Realtest auf Safari steht aus). Noch
   offen: Assets selbst hosten statt CDN (Versionen pinnen), Encode-Richtung des Orakels,
-  Pages-Branch `pages` plus Forgejo-Webhook (git-pages; `.domains` ist abgeschafft, v2 ist für neue Konten aus), DNS.
-- [ ] **5. Veröffentlichung auf Codeberg** — erledigt: Übersetzung (kein Deutsch mehr in
+  GitHub Pages einschalten (Source: GitHub Actions,
+  `.github/workflows/pages.yml` baut und deployt).
+- [ ] **5. Veröffentlichung auf GitHub** — erledigt: Übersetzung (kein Deutsch mehr in
   `src/`, `tests/`, `scripts/`), `CONTRIBUTING`, erfundene EUI64 im Test, und
   `web/legal.html` mit Impressum und Datenschutzerklärung, verlinkt aus der Fußzeile beider
   Seiten. **Was noch fehlt und nur du tun kannst:** die vier TODO-Felder in `legal.html`
   (Name, Anschrift, E-Mail, Hoster-Link) — ein Test schlägt an, solange sie stehen; die
-  Spenden-URLs in `app.js`; README-Badges auf den echten Repository-Pfad; Pages-Repo,
-  Pages-Branch `pages` plus Forgejo-Webhook und DNS; ein echter Safari/iOS-Test.
+  Spenden-URLs in `app.js`; README-Badges auf den echten Repository-Pfad; GitHub Pages
+  einschalten (Source: GitHub Actions); ein echter Safari/iOS-Test.
 - [ ] **6. Reichweite in der Nische** — der ausgearbeitete Plan steht in `REACH.md`:
   Startseite auf die Suchintention drehen, Links in fremder Troubleshooting-Doku
   (Zigbee2MQTT, ZHA), echte Hilfe in Foren-Threads, dann je ein Launch-Post

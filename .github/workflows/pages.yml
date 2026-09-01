@@ -1,0 +1,78 @@
+# Publish the static browser version to GitHub Pages.
+#
+# The point of this file is that no build artefact ever enters the repository. site/ is some
+# twenty-nine megabytes of vendored runtime -- CPython on WebAssembly, NumPy, OpenCV and the
+# zxing oracle -- and scripts/build_site.py fetches all of it from upstream, pinned by version
+# and checked against a SHA-256. Committing that to a branch would put binaries nobody here
+# compiled into the history and grow the repository by the same amount on every deployment.
+# Actions hands the built directory to the Pages service as an artefact instead, so the tree
+# stays what it is: source, a synthetic corpus, and documentation.
+#
+# build_site.py ends by auditing the shipped files for absolute URLs and exits non-zero if it
+# finds one it cannot account for. That is deliberately the gate here too -- the claim that the
+# photograph never leaves the visitor's machine is enforced by connect-src 'self', and a build
+# that reaches a CDN would break it silently. A red deployment is the correct outcome.
+
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time, and never cancel one that is already running: Pages publishes the
+# artefact of whichever run finishes, and cancelling mid-upload can leave the live site on an
+# older build with no indication why.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: pip install -e .
+
+      # The vendored runtime is pinned to exact versions and verified by digest, so a cache hit
+      # is the same bytes as a fresh download -- worth keeping, because it is thirty megabytes
+      # pulled from three separate hosts on every deployment otherwise. The key is the build
+      # script itself: it is where the versions and digests live, so changing either misses the
+      # cache by construction rather than by remembering to bump something.
+      - uses: actions/cache@v4
+        with:
+          path: vendor-cache
+          key: vendor-${{ hashFiles('scripts/build_site.py') }}
+
+      - run: python scripts/build_site.py
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    # Pages needs a public repository on a free plan, and a deploy job that fails on every push
+    # until that happens teaches everyone to ignore a red run -- which is the one signal worth
+    # keeping honest. Building still runs unconditionally, because the build is a real gate:
+    # it resolves the pinned wheels, checks their digests and audits the result for absolute
+    # URLs. So while the repository is private the vendoring is verified and only the
+    # publishing step stands down.
+    if: github.event.repository.visibility == 'public'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

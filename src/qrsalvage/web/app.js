@@ -413,15 +413,20 @@ let liveSizes = {};       // modules -> {wrong, total, quality}
 let liveFrame = false;    // requestAnimationFrame throttle
 let liveChosen = null;
 
+// The method links are relative on purpose, like every other reference the page makes. The
+// static build is served from wherever it is put -- a domain root, a project subpath such as
+// <user>.github.io/qrsalvage/, or a bare filesystem -- and "/method#grid" would leave that
+// directory and land at the host root under two of those three. method.html is the file's real
+// name; the local server answers /method as well, but only the name works everywhere.
 const STAGES = {
   image:   ['reading the photograph', null],
-  finders: ['looking for finder patterns', '/method#search'],
-  polarity:['trying inverted polarity', '/method#search'],
-  grid:    ['fitting the grid — coordinate descent on the known cells', '/method#grid'],
-  chosen:  ['version chosen', '/method#search'],
-  sampled: ['sampling — a probability for every module', '/method#posterior'],
-  repair:  ['Reed-Solomon with erasures', '/method#rs'],
-  probe:   ['probing the least certain cells', '/method#probe'],
+  finders: ['looking for finder patterns', 'method.html#search'],
+  polarity:['trying inverted polarity', 'method.html#search'],
+  grid:    ['fitting the grid — coordinate descent on the known cells', 'method.html#grid'],
+  chosen:  ['version chosen', 'method.html#search'],
+  sampled: ['sampling — a probability for every module', 'method.html#posterior'],
+  repair:  ['Reed-Solomon with erasures', 'method.html#rs'],
+  probe:   ['probing the least certain cells', 'method.html#probe'],
   member:  ['reading photographs', null],
   fusion:  ['fusing the photographs', null],
 };
