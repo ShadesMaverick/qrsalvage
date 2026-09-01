@@ -11,7 +11,7 @@ decision is in the docstring of the module it concerns.
 Then see it work:
 
 ```
-git clone https://codeberg.org/Shades_Maverick/qrsalvage
+git clone https://github.com/ShadesMaverick/qrsalvage
 cd qrsalvage
 python -m venv .venv
 pip install -r requirements.txt && pip install -e .

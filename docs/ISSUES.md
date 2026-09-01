@@ -60,7 +60,9 @@ Quellverzeichnisses** installiert. Der letzte hat beim Schreiben gleich einen ec
 aufgedeckt: Die Oberfläche wurde relativ zum Repo-Wurzelverzeichnis gesucht und war gar nicht
 als Paketdaten deklariert — ein Wheel hätte keine Seite enthalten.
 
-**Erledigt:** Badge und Clone-URLs zeigen auf `codeberg.org/Shades_Maverick/qrsalvage`; `.woodpecker.yml` fährt dieselben Prüfungen, weil Codeberg keine GitHub Actions ausführt.
+**Erledigt:** `.github/workflows/ci.yml` ist die CI, Badge und Clone-URLs zeigen auf das
+GitHub-Repository. `.woodpecker.yml` ist entfallen — es fuhr dieselben Prüfungen für Codeberg,
+und die Plattform ist seit September 2026 nicht mehr das Ziel (Begründung in `VISION.md`).
 
 ---
 
@@ -260,12 +262,19 @@ Einzelfall durchgeht.
   Architekturstücke haben das getragen: `api.py` (transportneutral, Server und Worker rufen
   dieselben Funktionen) und die synchrone Encode-Richtung des Orakels — ohne die wäre die
   Browser-Version ein reiner Leser gewesen, weil jeder Erfolg re-encodiert und der ganze
-  Katalog aus Re-Encodierungen besteht. **Offen:** Pages-Branch `pages` plus Forgejo-Webhook (git-pages; `.domains` ist abgeschafft, v2 ist für neue Konten aus), DNS-CNAME,
-  echter Safari/iOS-Test, und die wurzelrelativen Pfade (`/style.css`, `/method`) setzen die
-  Seite auf einem Domain-Root voraus — unter einer Projekt-URL mit Unterpfad bräuchte es
-  relative Links.
+  Katalog aus Re-Encodierungen besteht. **Offen:** GitHub Pages einschalten (Source: GitHub
+  Actions, `.github/workflows/pages.yml`), echter Safari/iOS-Test.
 
-- **Statische Browser-Version (Codeberg Pages + eigene Domain) — SPIKE ERLEDIGT.** Die Naht
+  **Nachtrag September 2026, eine alte Behauptung hier war falsch:** An dieser Stelle stand,
+  die Seite setze wurzelrelative Pfade und damit einen Domain-Root voraus. Nachgesehen: Die
+  Seiten adressieren durchweg relativ (`style.css`, `method.html`, `legal.html`, `backend.js`)
+  — die einzigen absoluten Verweise waren sieben `/method#…`-Links der Live-Ansicht in
+  `app.js`, jetzt auf `method.html#…` umgestellt. Damit läuft die Seite unter
+  `<user>.github.io/qrsalvage/` genauso wie unter einer eigenen Domain oder direkt vom
+  Dateisystem. Der `fetch("/api/solve")` in `backend-server.js` bleibt absolut und muss es
+  sein: den fährt nur der lokale Server, und der wohnt auf seinem eigenen Root.
+
+- **Statische Browser-Version (GitHub Pages + eigene Domain) — SPIKE ERLEDIGT.** Die Naht
   ist gebaut (`core/oracle.py`: zxing-cpp lazy, per `oracle.use()` austauschbar; der Kern
   importiert nachweislich ohne die Bindung — Test in test_solver.py). Der Spike
   (`spike/pyodide/index.html`, Anleitung im Dateikopf) löst die harte Fixture im Browser:
@@ -284,8 +293,9 @@ Einzelfall durchgeht.
   und hart erkämpfte Erfolge (>100 Versuche) tragen die Aufforderung, den re-encodierten Code
   vor dem Eintippen mit dem eigenen Handy gegenzuscannen. Upload-Deckel auf 64 MB für
   Kamera-Serien. **Restarbeit:** Assets selbst hosten statt CDN (Versionen pinnen),
-  Encode-Richtung bridgen (writeBarcode), Pages-Branch `pages` plus Forgejo-Webhook (git-pages; `.domains` ist abgeschafft, v2 ist für neue Konten aus), DNS CNAME auf
-  `<user>.codeberg.page`. Lizenzseitig geklärt (`THIRD-PARTY-NOTICES.md`).
+  Encode-Richtung bridgen (writeBarcode), GitHub Pages einschalten (Source: GitHub Actions,
+  `.github/workflows/pages.yml`). Lizenzseitig geklärt
+  (`THIRD-PARTY-NOTICES.md`).
 - **Mehrere Codes in einem Bild.** Ein Produktfoto mit zwei Etiketten liefert sechs oder mehr
   Finder-Kandidaten; wir suchen daraus genau ein Tripel und ignorieren den Rest.
 - **Symbologie-Grenze dokumentieren.** `structure.py`, `layout.py` und `qrspec.py` sind die
