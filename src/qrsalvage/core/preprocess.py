@@ -73,7 +73,13 @@ def prepare(
             # Grown by a couple of pixels: a stroke's anti-aliased fringe is only half
             # saturated, and through the blue channel that fringe survives as a thin dark
             # contour tracing exactly where the stroke was.
-            coloured = cv2.dilate(coloured, np.ones((5, 5), dtype=np.uint8))
+            # cv2.dilate hands back the dtype it was given, but its stub does not say so: it
+            # widens the result to "integer or floating", and numpy 2.5's stricter stubs then
+            # refuse that being assigned back onto a uint8 array. Stating the dtype restores
+            # what the call actually guarantees, and copy=False means saying it costs nothing.
+            coloured = cv2.dilate(coloured, np.ones((5, 5), dtype=np.uint8)).astype(
+                np.uint8, copy=False
+            )
             chan = chan.copy()
             chan[coloured > 0] = 128
     if invert:
