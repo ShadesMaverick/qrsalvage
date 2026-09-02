@@ -16,6 +16,13 @@ The input lives in idea_for_icon/, which is gitignored -- so this script cannot 
 a clean checkout, and that is on purpose: the draft carries someone else's watermark. Its
 outputs in docs/logo/ are the master copies from here on.
 
+**This script is behind its own outputs, and re-running it would undo work.** In September 2026
+the drop shadow and the speckles under the creature were removed -- reworked by hand at 256 px
+and propagated from there to every asset: the mark in all four sizes, the page axolotl, the
+social card and the lockup. The draft in idea_for_icon/ still carries the shadow, so a re-run
+regenerates it. Before using this script again, fix the draft; otherwise the assets in
+docs/logo/ are the newer truth and this file is only the record of how they were framed.
+
     python docs/make_logo.py
 """
 
