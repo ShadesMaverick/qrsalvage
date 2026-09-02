@@ -135,6 +135,13 @@ AUDIT_EXPLAINED: tuple[tuple[str, str], ...] = (
         "paypal.me|ko-fi.com|liberapay.com",
         "a donation link a visitor may click, never fetched by the page",
     ),
+    (
+        r"docs\.github\.com/|github\.com/ShadesMaverick/",
+        "links in the legal page -- the host's privacy statement and the repository. German "
+        "law requires the privacy notice to name who serves the page and where their statement "
+        "is, so unlike every other entry here this address cannot simply be dropped. Both are "
+        "href targets a reader chooses to follow, never fetched; connect-src 'self' is untouched",
+    ),
 )
 
 
