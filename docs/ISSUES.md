@@ -296,6 +296,16 @@ Einzelfall durchgeht.
   Encode-Richtung bridgen (writeBarcode), GitHub Pages einschalten (Source: GitHub Actions,
   `.github/workflows/pages.yml`). Lizenzseitig geklärt
   (`THIRD-PARTY-NOTICES.md`).
+- **Das Korpus löst unter OpenCV 5 — unbeabsichtigt gemessen (September 2026).** Der erste
+  CI-Lauf auf GitHub hat wegen der `>=`-Untergrenzen in `requirements.txt` numpy 2.5.2,
+  **opencv-python 5.0.0.93** und zxing-cpp 3.1.1 installiert, bei OpenCV also einen
+  Hauptversionssprung von 4.11. Der `regression`-Job ist damit grün durchgelaufen: Das
+  Bildkorpus löst unverändert. Das ist kein Freibrief — geprüft ist Linux/3.12 mit genau diesen
+  Versionen, nicht die Kombinationsfläche —, aber es ist mehr, als das Projekt vorher über
+  seine Robustheit gegen die Bildbibliothek wusste. Nebenbefund derselben Untergrenzen:
+  numpy 2.5.2 hat den `lint`-Job zerlegt, weil sein Stub PEP-695-Syntax verwendet, die mypy
+  gegen ein 3.11-Ziel nicht parsen kann; Ausweg und Preis stehen im Kommentar bei
+  `python_version` in `pyproject.toml`.
 - **Mehrere Codes in einem Bild.** Ein Produktfoto mit zwei Etiketten liefert sechs oder mehr
   Finder-Kandidaten; wir suchen daraus genau ein Tripel und ignorieren den Rest.
 - **Symbologie-Grenze dokumentieren.** `structure.py`, `layout.py` und `qrspec.py` sind die
