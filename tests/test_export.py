@@ -150,7 +150,11 @@ def test_matter_payload_yields_the_manual_pairing_code():
 
 
 def test_wifi_payload_honours_the_escaping():
-    fields = wifi_fields("WIFI:S:My\;Home;T:WPA;P:pa\\ss word;H:true;;")
+    # Both backslashes are written out. "\;" is not an escape Python knows, so it used to be
+    # left alone with a warning nobody saw on 3.11 -- 3.12 raises that to a SyntaxWarning and
+    # the language means to make it an error. Spelling it "\\;" keeps the string byte for byte
+    # what it was, which matters more here than anywhere: this test is about escaping.
+    fields = wifi_fields("WIFI:S:My\\;Home;T:WPA;P:pa\\ss word;H:true;;")
     assert fields is not None
     assert fields["ssid"] == "My;Home"
     assert fields["password"] == "pass word"

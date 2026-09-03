@@ -1,5 +1,9 @@
 # Python
 .venv/
+# The second interpreter, kept because the CI lint job runs on 3.12 and numpy 2.5 refuses to
+# install below it -- so a whole class of type error is invisible in .venv and only shows up
+# there. Same requirements, different Python; see CLAUDE.md.
+.venv312/
 __pycache__/
 *.py[cod]
 .pytest_cache/
