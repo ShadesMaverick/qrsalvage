@@ -235,9 +235,11 @@ def test_the_legal_page_is_reachable_and_still_has_blanks_to_fill(running_server
     # The claim the whole project rests on belongs here in plain words, not only in a README.
     assert "verlassen Ihr Gerät nicht" in page
 
-    # Fails once, loudly, on the day the operator's details are entered -- at which point this
-    # assertion has done its job and should be turned around to forbid the placeholders.
-    assert "TODO" in page, "placeholders are gone: invert this assertion to guard the real data"
+    # Turned around in September 2026, the day the operator's details went in. From here on a
+    # placeholder reappearing -- a template refactor, a revert, an overeager merge -- is the
+    # failure, because publishing with one would break a legal obligation, not a preference.
+    assert "TODO" not in page, "a placeholder came back into the legal page"
+    assert "Fabian Marius Freitag" in page, "the imprint lost the operator's name"
     connection.close()
 
 

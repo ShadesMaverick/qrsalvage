@@ -117,8 +117,10 @@ PAGE_FILES = (
 )
 
 # Namespaces, not addresses. An SVG names its dialect with a URL and no browser ever fetches
-# it; counting those as network access would drown the audit that matters.
-AUDIT_IGNORED = re.compile(r"^https?://(www\.)?w3\.org/")
+# it; the FAQ's structured data names schema.org the same way, as an @context a crawler
+# recognises by string comparison. Counting those as network access would drown the audit
+# that matters.
+AUDIT_IGNORED = re.compile(r"^https?://(www\.)?(w3\.org|schema\.org)(/|$)")
 AUDIT_URL = re.compile(rb"""https?://[^\s"'`<>)\\]+""")
 AUDIT_SUFFIXES = {".js", ".mjs", ".html", ".json", ".css", ".svg"}
 

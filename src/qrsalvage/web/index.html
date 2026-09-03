@@ -16,15 +16,20 @@
       script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline';
       img-src 'self' data: blob:; connect-src 'self'; worker-src 'self'; child-src 'self';
       object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'">
-<title>qrsalvage</title>
+<!-- The title is the search result's first line, so it carries the searcher's own words --
+     "QR code won't scan" -- before the project's name. Nobody searches for qrsalvage; see
+     docs/REACH.md, whose first sentence is exactly that. -->
+<title>QR code won't scan? Recover damaged, curved or engraved QR codes — qrsalvage</title>
 <!-- What a shared link looks like. This matters more than it seems: the plan for reaching the
      people who need this leans on links in other projects' troubleshooting pages and on a
      handful of posts, and every one of those renders a card rather than a URL. The image path
      is relative, which most crawlers resolve; the ones that insist on an absolute URL need the
      domain, so this gets revisited when there is one. -->
-<meta name="description" content="Recover damaged, curved, engraved or faded QR codes from a
-      photograph. Runs entirely in your browser -- nothing is uploaded.">
-<meta property="og:title" content="qrsalvage">
+<meta name="description" content="QR code won't scan? Recover damaged, scratched, faded or
+      laser-engraved QR codes from a photograph -- including codes on curved surfaces like
+      light bulbs, and Zigbee or Matter device labels. Runs entirely in your browser;
+      nothing is uploaded.">
+<meta property="og:title" content="qrsalvage — recover QR codes from what's left of them">
 <meta property="og:description" content="Recover damaged, curved, engraved or faded QR codes
       from a photograph. Runs entirely in your browser -- nothing is uploaded.">
 <meta property="og:image" content="qrsalvage-social.png">
@@ -54,6 +59,11 @@
        pair and three reader apps already tried. -->
   <p class="lead">A QR code that won't scan — scratched, faded, engraved, or wrapped around a
     curved surface? Drop a photograph. The recovery runs on your device; nothing is uploaded.</p>
+  <!-- One German sentence where German searchers land, not a translated twin of the page: the
+       founding case was searched for in German, and this line plus the German FAQ block below
+       is what answers that search. -->
+  <p class="note" lang="de">QR-Code lässt sich nicht scannen? Foto oben hineinziehen — alles
+    bleibt auf Ihrem Gerät. <a href="#faq-de">Häufige Fragen auf Deutsch</a>.</p>
 
   <div id="drop">
     <p><strong id="dropTitle">Drop a photograph here</strong>
@@ -216,12 +226,32 @@
     </details>
 
     <details>
-      <summary>The code is engraved, scratched or faded — barely any contrast</summary>
+      <summary>The code is engraved in metal or plastic, scratched or faded — barely any
+      contrast</summary>
       <p>Laser engraving and wear defeat readers because dark and light modules become nearly
       the same shade. qrsalvage estimates the two brightness levels from the parts of the code
       whose values are fixed by the standard, then scores every other cell against them — so
       even a few percent of contrast, spread unevenly across the label, can be enough. The
       <a href="method.html">method page</a> shows this step by step, with real figures.</p>
+    </details>
+
+    <details>
+      <summary>A Hue, IKEA, Aqara or Sonoff device label that no app will scan</summary>
+      <p>Those labels are tiny, and the physics is unforgiving: once a module of the code is
+      smaller than about five pixels in your photograph, the information simply is not there,
+      and no software can upscale it back. The fix is in the photograph, not the app — get as
+      close as your camera focuses, fill the frame with the label, and take several shots from
+      slightly different angles. This tool fuses them, and the measured gain from fusion is
+      larger than from any other step.</p>
+    </details>
+
+    <details>
+      <summary>The label is torn, or the print has partly worn away</summary>
+      <p>Missing is better than wrong. A QR code carries error correction that repairs twice as
+      many <em>known-missing</em> cells as misread ones, so qrsalvage marks what it cannot trust
+      as unknown instead of guessing — worn print becomes exactly the kind of damage the code
+      was designed to survive. A torn edge that bends the paper is handled too: the grid is
+      re-fitted before cells near the tear are read.</p>
     </details>
 
     <details>
@@ -241,6 +271,105 @@
       tool can recover it — and knowing that is worth more than a spinner that never ends.</p>
     </details>
   </section>
+
+  <!-- The founding case was German -- a Zigbee bulb bought in Germany, searched for in German.
+       These are the German search phrases, answered in German, on the same page rather than a
+       translated twin: the tool itself speaks English, and a second full page would be a
+       duplicate to maintain and to explain to crawlers. lang="de" marks the boundary. -->
+  <section id="faq-de" lang="de">
+    <h2>Häufige Fragen (deutsch)</h2>
+
+    <details>
+      <summary>Der QR-Code lässt sich nicht scannen — was kann ich noch tun?</summary>
+      <p>Oft eine ganze Menge. Eine Scanner-App braucht den ganzen Code in sauber; dieses
+      Werkzeug nimmt die Teile, die jeder QR-Code enthalten muss, als Eichmaß, misst daran die
+      Beschädigung und rekonstruiert den Rest über die eingebaute Fehlerkorrektur des Codes.
+      Es liest deutlich über den Punkt hinaus, an dem Handykameras aufgeben — und sagt ehrlich,
+      wenn zu viel physisch zerstört ist. Alles läuft in Ihrem Browser, das Foto wird nirgendwo
+      hochgeladen.</p>
+    </details>
+
+    <details>
+      <summary>Der Code sitzt auf einer gewölbten Fläche — einer LED-Lampe zum Beispiel</summary>
+      <p>Genau so ein Fall ist der Grund, warum es dieses Werkzeug gibt. Auf einer Wölbung
+      werden aus geraden Gitterlinien Kurven, daran scheitern normale Leser; hier wird ein
+      gebogenes Gitter an die Fläche angepasst, bevor eine einzige Zelle gelesen wird. Machen
+      Sie mehrere Fotos aus leicht verschiedenen Winkeln — was die Wölbung im einen verbirgt,
+      zeigt das andere, und alle werden gemeinsam gelesen.</p>
+    </details>
+
+    <details>
+      <summary>Zigbee-Install-Code oder Matter-Pairing-Code unlesbar</summary>
+      <p>Die kleinen gravierten oder gedruckten Geräte-Etiketten sind der häufigste Fall hier.
+      Nach der Rettung erkennt das Werkzeug, was der Inhalt ist — Zigbee-Install-Code,
+      Matter-Code, WLAN-Zugang — und zeigt die Felder, die Sie in Ihren Hub eintippen müssen,
+      inklusive des elfstelligen manuellen Matter-Codes. Ein Pairing-Code ist ein Geheimnis:
+      Er verlässt Ihr Gerät hier nicht, und Vorsicht, wo Sie ihn sonst einfügen.</p>
+    </details>
+
+    <details>
+      <summary>Muss ich das Foto irgendwohin hochladen?</summary>
+      <p>Nein — und das ist nachprüfbar. Die gesamte Rekonstruktion läuft in Ihrem Browser; es
+      gibt keinen Server, der Fotos entgegennehmen könnte, und die Sicherheitsrichtlinie der
+      Seite verbietet ihr, mit einem zu sprechen. Beim ersten Besuch lädt der Browser die
+      Rechenumgebung (rund 29&nbsp;MB, danach im Cache) — das ist der ehrliche Preis dafür,
+      dass nichts Ihr Gerät verlässt.</p>
+    </details>
+  </section>
+
+  <!-- Structured data for the FAQ above, one entry per question the sections answer. This is
+       inert JSON a crawler reads out of the markup -- the type attribute means no browser ever
+       executes it, so the strict CSP is untouched. Kept to the questions that are really
+       answered on this page: structured data that overpromises is the fastest way to lose the
+       rich result it exists for. -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "My QR code won't scan — can anything still read it?",
+        "acceptedAnswer": { "@type": "Answer", "text": "Often, yes. qrsalvage treats the parts every QR code must contain as a calibration target, measures the damage, and uses the code's own error correction to reconstruct what is missing — well past the point where phone cameras give up. It runs entirely in your browser; nothing is uploaded." }
+      },
+      {
+        "@type": "Question",
+        "name": "Can a QR code on a curved surface, like a light bulb, be read?",
+        "acceptedAnswer": { "@type": "Answer", "text": "Yes — a bowed grid is fitted to the surface before any cell is read. Take several photographs from slightly different angles; they are read together, and what the curvature hides in one, another still shows." }
+      },
+      {
+        "@type": "Question",
+        "name": "My Zigbee install code or Matter pairing code is unreadable — what now?",
+        "acceptedAnswer": { "@type": "Answer", "text": "After recovery the payload is recognised — Zigbee install code, Matter onboarding code, Wi-Fi credentials — and the fields you need to type into your hub are shown, including the 11-digit Matter manual pairing code. The code never leaves your device." }
+      },
+      {
+        "@type": "Question",
+        "name": "Can a laser-engraved, scratched or faded QR code with almost no contrast be recovered?",
+        "acceptedAnswer": { "@type": "Answer", "text": "Often. The two brightness levels are estimated from the parts of the code fixed by the standard, and every other cell is scored against them — a few percent of contrast, unevenly spread, can be enough." }
+      },
+      {
+        "@type": "Question",
+        "name": "Can I read a QR code from a photo without uploading it anywhere?",
+        "acceptedAnswer": { "@type": "Answer", "text": "Yes — the entire recovery runs inside your browser. There is no server that could receive the photograph, and the page's security policy forbids it from talking to one. The first visit downloads the recovery engine (about 29 MB, then cached)." }
+      },
+      {
+        "@type": "Question",
+        "name": "Der QR-Code lässt sich nicht scannen — was kann ich noch tun?",
+        "acceptedAnswer": { "@type": "Answer", "text": "Oft eine ganze Menge: Das Werkzeug nimmt die Pflichtteile jedes QR-Codes als Eichmaß, misst die Beschädigung und rekonstruiert den Rest über die eingebaute Fehlerkorrektur — komplett im Browser, ohne dass das Foto hochgeladen wird." }
+      },
+      {
+        "@type": "Question",
+        "name": "Kann man einen QR-Code auf einer gewölbten Fläche (LED-Lampe) lesen?",
+        "acceptedAnswer": { "@type": "Answer", "text": "Ja — vor dem Lesen wird ein gebogenes Gitter an die Fläche angepasst. Mehrere Fotos aus verschiedenen Winkeln werden gemeinsam gelesen; was die Wölbung im einen verbirgt, zeigt das andere." }
+      },
+      {
+        "@type": "Question",
+        "name": "Zigbee-Install-Code oder Matter-Pairing-Code unlesbar — was hilft?",
+        "acceptedAnswer": { "@type": "Answer", "text": "Nach der Rettung werden die Felder gezeigt, die in den Hub gehören — Zigbee-Install-Code, Matter-Code samt elfstelligem manuellem Pairing-Code, WLAN-Zugang. Der Code verlässt das eigene Gerät dabei nicht." }
+      }
+    ]
+  }
+  </script>
 
   <!-- Quiet on purpose. A person here has a problem to solve; the legal page is required to
        be reachable, not prominent. -->
