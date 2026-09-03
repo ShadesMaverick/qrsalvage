@@ -15,6 +15,8 @@ Alle Befehle in PowerShell aus dem Projekt-Root. Das Venv wird nie aktiviert, so
 adressiert — so ist immer eindeutig, welcher Interpreter läuft.
 
 - Setup (einmalig): `py -3.11 -m venv .venv`, dann `.venv\Scripts\python.exe -m pip install -r requirements.txt`, dann `.venv\Scripts\python.exe -m pip install -e .`
+- Zweites Venv (einmalig): dasselbe mit `py -3.12 -m venv .venv312`. Es ist kein Ersatz,
+  sondern der Ort, an dem die Versionen liegen, die die CI zieht
 - Code lesen: `.venv\Scripts\python.exe -m qrsalvage solve <bild> [--crop X0 Y0 X1 Y1]`
 - Mehrere Fotos desselben Codes: `.venv\Scripts\python.exe -m qrsalvage solve <bild1> <bild2> ...`
 - Katalog verschiedener Codes als A4-PDF: `.venv\Scripts\python.exe -m qrsalvage catalog <bilder...> [--titles ...]`
@@ -33,6 +35,10 @@ adressiert — so ist immer eindeutig, welcher Interpreter läuft.
 - Format: `.venv\Scripts\python.exe -m ruff format .`
 - Typen: `.venv\Scripts\python.exe -m mypy` (Konfiguration in `pyproject.toml`; der Kern
   verlangt vollständige Signaturen)
+- **Typen wie in der CI: `.venv312\Scripts\python.exe -m mypy`.** Das ist der Lauf, der zählt —
+  `.venv` hat numpy 2.4, der `lint`-Job hat 2.5, und die schärferen Stubs finden Dinge, die auf
+  3.11 gar nicht auftauchen können. Vor einem Push gehört dieser Aufruf dazu, sonst findet die
+  CI den Fehler vierzehn Minuten später
 - Statische Seite bauen: `.venv\Scripts\python.exe scripts\build_site.py` (schreibt `site/`,
   ~29 MB, Laufzeit selbst gehostet), testen mit
   `.venv\Scripts\python.exe -m http.server 8833 --directory site --bind 127.0.0.1`
@@ -41,8 +47,13 @@ Es gibt keinen Build-Schritt. Die Oberfläche ist eine statische HTML/JS-Datei, 
 
 ## Stack
 
-- Python 3.11 im lokalen `.venv` (nicht 3.14 — dafür fehlen OpenCV-Wheels; 3.12 und 3.13 sind
-  auf diesem Rechner nur Karteileichen im py-Launcher, die Installationen fehlen)
+- Python 3.11 im lokalen `.venv` (nicht 3.14 — dafür fehlen OpenCV-Wheels). 3.13 ist auf diesem
+  Rechner eine Karteileiche im py-Launcher, die Installation fehlt; **3.12.10 dagegen ist
+  vorhanden** und trägt das zweite Venv.
+- Zweites Venv `.venv312` auf Python 3.12, gitignoriert. Grund, gemessen und nicht vermutet:
+  numpy 2.5 verlangt Python ≥ 3.12, also ist es in `.venv` nicht installierbar — und der
+  `lint`-Job der CI läuft auf 3.12 und bekommt es. Seine schärferen Stubs haben zwei rote Läufe
+  erzeugt, die auf 3.11 unsichtbar waren. Was `.venv` nicht sehen kann, sieht dieses hier.
 - OpenCV, NumPy, Pillow für Bildverarbeitung; zxing-cpp für Decodier-Versuche auf Bildern
 - pytest, ruff, mypy
 - Oberfläche: eine HTML-Datei mit Canvas, ausgeliefert von einem lokalen Python-Server
