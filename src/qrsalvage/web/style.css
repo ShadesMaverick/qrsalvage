@@ -241,12 +241,12 @@ footer a:hover { color: var(--fg); }
 
 /* The questions people type, styled as quiet help rather than a landing-page section. Native
    <details> keeps the section script-free, which the CSP appreciates as much as we do. */
-#faq { margin-top: 3rem; max-width: 46rem; }
-#faq h2 { font-size: .8rem; letter-spacing: .14em; text-transform: uppercase;
+#faq, #faq-de { margin-top: 3rem; max-width: 46rem; }
+#faq h2, #faq-de h2 { font-size: .8rem; letter-spacing: .14em; text-transform: uppercase;
           color: var(--muted); }
-#faq details { border-bottom: 1px solid var(--line); }
-#faq summary { padding: .7rem 0; cursor: pointer; color: var(--fg); font-weight: 600;
+#faq details, #faq-de details { border-bottom: 1px solid var(--line); }
+#faq summary, #faq-de summary { padding: .7rem 0; cursor: pointer; color: var(--fg); font-weight: 600;
                list-style-position: outside; }
-#faq summary:hover { color: var(--pink-soft); }
-#faq p { margin: .2rem 0 .9rem 0; color: var(--muted); line-height: 1.55; }
-#faq a { color: var(--pink-soft); }
+#faq summary:hover, #faq-de summary:hover { color: var(--pink-soft); }
+#faq p, #faq-de p { margin: .2rem 0 .9rem 0; color: var(--muted); line-height: 1.55; }
+#faq a, #faq-de a { color: var(--pink-soft); }
