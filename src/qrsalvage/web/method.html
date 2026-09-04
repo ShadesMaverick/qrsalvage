@@ -12,7 +12,21 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self';
       script-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;
       connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
-<title>qrsalvage — how it works</title>
+<!-- Like the front page's title, this one leads with the searcher's problem before the
+     project's name -- "how to recover a damaged QR code" is a search, "how it works" is not.
+     The description and card matter here too: this is the page a Show-HN post and the
+     troubleshooting links point at, and every one of those renders a preview. -->
+<title>How a damaged QR code is recovered, step by step — qrsalvage</title>
+<meta name="description" content="The method behind qrsalvage: the cells every QR code must
+      contain as a calibration target, two brightness fields, a probability per module, and
+      Reed-Solomon erasures. With real figures.">
+<meta property="og:title" content="How a damaged QR code is recovered, step by step">
+<meta property="og:description" content="Calibration against the cells the standard fixes,
+      two brightness fields, a probability per module, Reed-Solomon erasures — the measured
+      method behind qrsalvage.">
+<meta property="og:image" content="qrsalvage-social.png">
+<meta property="og:type" content="article">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23232f3a'/%3E%3Crect x='8' y='3' width='7' height='7' fill='none' stroke='%23f2f4f5' stroke-width='1'/%3E%3Crect x='10' y='5' width='3' height='3' fill='%23f2f4f5'/%3E%3Crect x='5' y='4' width='2' height='2' fill='%23f07ea3'/%3E%3Crect x='2' y='7' width='2' height='2' fill='%23f07ea3'/%3E%3Crect x='5' y='10' width='2' height='2' fill='%23f2f4f5'/%3E%3C/svg%3E">
 <style>
   :root {
