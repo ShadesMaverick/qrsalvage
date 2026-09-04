@@ -26,9 +26,13 @@ function thanksHtml() {
     .map((d) => `<a href="${escapeHtml(d.url)}" target="_blank" rel="noopener noreferrer">` +
                 `<button>${escapeHtml(d.label)}</button></a>`)
     .join("");
+  // A named amount and a named purpose, because both are levers docs/REACH.md spells out: a
+  // concrete suggestion anchors where an open field creates a decision to abandon, and small
+  // donations measurably rise when the money has a stated destination.
   return `<div class="thanks"><img src="axolotl.png" alt="">
     <span>${escapeHtml(window.qrBackend.privacyNote)}
-    Saved your lamp? A small donation keeps the tool alive.</span>
+    Saved your lamp? <em>5&nbsp;€</em> — about what the rescued bulb was worth — covers the
+    domain and keeps this tool alive.</span>
     <span class="links">${links}</span></div>`;
 }
 const drop = $("drop"), fileInput = $("file"), status = $("status");

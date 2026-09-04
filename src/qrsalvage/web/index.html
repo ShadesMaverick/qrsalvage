@@ -25,8 +25,8 @@
      handful of posts, and every one of those renders a card rather than a URL. The image path
      is relative, which most crawlers resolve; the ones that insist on an absolute URL need the
      domain, so this gets revisited when there is one. -->
-<meta name="description" content="QR code won't scan? Recover damaged, scratched, faded or
-      laser-engraved QR codes from a photograph -- including codes on curved surfaces like
+<meta name="description" content="QR code won't scan? Recover damaged, scratched, faded,
+      blurry or laser-engraved QR codes from a photograph -- including codes on curved surfaces like
       light bulbs, and Zigbee or Matter device labels. Runs entirely in your browser;
       nothing is uploaded.">
 <meta property="og:title" content="qrsalvage — recover QR codes from what's left of them">
@@ -238,7 +238,8 @@
     <details>
       <summary>A Hue, IKEA, Aqara or Sonoff device label that no app will scan</summary>
       <p>Those labels are tiny, and the physics is unforgiving: once a module of the code is
-      smaller than about five pixels in your photograph, the information simply is not there,
+      smaller than about five pixels in your photograph, or the photo is so blurry that
+      neighbouring modules smear into each other, the information simply is not there,
       and no software can upscale it back. The fix is in the photograph, not the app — get as
       close as your camera focuses, fill the frame with the label, and take several shots from
       slightly different angles. This tool fuses them, and the measured gain from fusion is
@@ -368,6 +369,26 @@
         "acceptedAnswer": { "@type": "Answer", "text": "Nach der Rettung werden die Felder gezeigt, die in den Hub gehören — Zigbee-Install-Code, Matter-Code samt elfstelligem manuellem Pairing-Code, WLAN-Zugang. Der Code verlässt das eigene Gerät dabei nicht." }
       }
     ]
+  }
+  </script>
+
+  <!-- A second block naming what this page is: a free tool that runs in the browser. The FAQ
+       block above answers the searcher's questions; this one answers the crawler's -- search
+       engines and AI assistants that recommend tools read exactly these fields. Same rule as
+       above: only claims the page itself keeps. No URL yet -- that field waits for the domain,
+       like the og:image note in <head>. -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "qrsalvage",
+    "description": "Recovers damaged, scratched, faded, blurry, laser-engraved and curved-surface QR codes from photographs — including Zigbee install codes and Matter pairing codes. Runs entirely in the browser; nothing is uploaded.",
+    "applicationCategory": "UtilitiesApplication",
+    "operatingSystem": "Any — runs in the browser",
+    "browserRequirements": "Requires WebAssembly",
+    "inLanguage": ["en", "de"],
+    "isAccessibleForFree": true,
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" }
   }
   </script>
 
