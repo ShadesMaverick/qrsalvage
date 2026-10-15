@@ -14,6 +14,7 @@ concerns -- upload limits, headers, status codes -- stay with the transport, in 
 from __future__ import annotations
 
 import base64
+import binascii
 import math
 import threading
 import uuid
@@ -24,7 +25,7 @@ import cv2
 import numpy as np
 
 from .core.decoding import reencode, render
-from .core.pipeline import solve, solve_many
+from .core.pipeline import ENSEMBLE_MODES, solve, solve_many
 from .export import (
     PAYLOAD_HINTS,
     payload_fields,
@@ -96,8 +97,18 @@ def solve_payload(payload: dict, progress: ProgressFn | None = None) -> dict:
 
     images: list[np.ndarray] = []
     for entry in encoded:
-        raw = base64.b64decode(entry.split(",", 1)[-1])
-        image = cv2.imdecode(np.frombuffer(raw, dtype=np.uint8), cv2.IMREAD_COLOR)
+        if not isinstance(entry, str):
+            return {"ok": False, "failure": "each photograph must be a base64 string"}
+        try:
+            raw = base64.b64decode(entry.split(",", 1)[-1], validate=True)
+        except (binascii.Error, ValueError):
+            return {"ok": False, "failure": "the photograph is not valid base64 data"}
+        if not raw:
+            return {"ok": False, "failure": "the image data is empty"}
+        try:
+            image = cv2.imdecode(np.frombuffer(raw, dtype=np.uint8), cv2.IMREAD_COLOR)
+        except cv2.error:
+            image = None
         if image is None:
             which = f" ({len(images) + 1} of {len(encoded)})" if len(encoded) > 1 else ""
             return {"ok": False, "failure": f"the file{which} could not be read as an image"}
@@ -139,10 +150,16 @@ def solve_payload(payload: dict, progress: ProgressFn | None = None) -> dict:
     # use should get the most it can use, not an error about a number that hurt nobody.
     budget = max(1, min(budget, _MAX_BUDGET))
     if len(images) == 1:
+        ensemble = payload.get("ensemble", "off")
+        if ensemble not in ENSEMBLE_MODES:
+            return {
+                "ok": False,
+                "failure": f"unknown ensemble mode: {ensemble!r}",
+            }
         result = solve(
             images[0],
             budget=budget,
-            ensemble=payload.get("ensemble", "off"),
+            ensemble=ensemble,
             finder_points=points,
             progress=progress,
         )

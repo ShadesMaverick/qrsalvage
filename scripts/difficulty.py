@@ -24,6 +24,11 @@ from qrsalvage.core.decoding import reencode
 from qrsalvage.core.pipeline import solve
 from qrsalvage.synth import Damage, render_photo
 
+if __package__:
+    from scripts.measurements import classify_recovery
+else:  # direct execution: ``python scripts/difficulty.py``
+    from measurements import classify_recovery  # type: ignore[import-not-found,no-redef]
+
 # Same length, same character set and same field structure as a real Zigbee pairing payload,
 # so the measurements stay comparable -- but entirely made up. A real one would put a device
 # secret into a public repository.
@@ -77,20 +82,22 @@ def wilson(successes: int, trials: int, z: float = 1.96) -> tuple[float, float]:
 def measure(damage: Damage, samples: int, budget: int):
     """Solve `samples` independent images of the same damage level."""
     matrix = reencode(TEXT)
-    successes = 0
+    correct = wrong = 0
     wrong_cells: list[int] = []
     attempts = 0
     start = time.perf_counter()
     for seed in range(samples):
         photo = render_photo(matrix, damage, seed=seed)
         result = solve(photo, budget=budget)
-        successes += int(result.solved)
+        outcome = classify_recovery(result.text, TEXT)
+        correct += int(outcome == "correct")
+        wrong += int(outcome == "wrong")
         attempts += result.candidates_tried
         if result.wrong_sampled is not None:
             wrong_cells.append(result.wrong_sampled)
     ordered = sorted(wrong_cells)
     median = ordered[len(ordered) // 2] if ordered else float("nan")
-    return successes, median, attempts, time.perf_counter() - start
+    return correct, wrong, median, attempts, time.perf_counter() - start
 
 
 def main() -> int:
@@ -107,17 +114,17 @@ def main() -> int:
         field, values = AXES[name]
         print(f"\n--- {name} (all other damage held at the baseline) ---")
         print(
-            f"{name:>12} {'solved':>10} {'rate':>7} {'95% interval':>16} "
+            f"{name:>12} {'correct':>10} {'wrong':>7} {'rate':>7} {'95% interval':>16} "
             f"{'wrong (median)':>16} {'attempts':>9} {'sec':>6}"
         )
         for value in values:
             changes: dict[str, Any] = {field: value}
             damage = replace(BASELINE, **changes)
-            successes, median, attempts, seconds = measure(damage, args.samples, args.budget)
-            low, high = wilson(successes, args.samples)
-            rate = successes / args.samples
+            correct, wrong, median, attempts, seconds = measure(damage, args.samples, args.budget)
+            low, high = wilson(correct, args.samples)
+            rate = correct / args.samples
             print(
-                f"{value:12.2f} {successes:5d}/{args.samples:<4d} {rate:7.0%} "
+                f"{value:12.2f} {correct:5d}/{args.samples:<4d} {wrong:7d} {rate:7.0%} "
                 f"{f'[{low:.0%}, {high:.0%}]':>16} {median:16.0f} {attempts:9d} {seconds:6.0f}",
                 flush=True,  # otherwise everything sits in the buffer when redirected to a file
             )

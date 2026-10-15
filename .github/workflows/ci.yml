@@ -77,6 +77,23 @@ jobs:
           python scripts/make_fixtures.py
           pytest -m regression -q
 
+  benchmark-contract:
+    # The release benchmark is deliberately not run in full on every commit -- the sealed
+    # holdout is evidence for a release candidate, not another development set to optimise
+    # against. CI does hold the public contract around it: the varied payload panel, exact-text
+    # outcome classes, disjoint seed sets, flat JSONL/CSV rows and the explicit holdout gate.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: pip install -e .
+      - run: pytest tests/test_benchmark.py tests/test_measurements.py -q
+      - run: python -m scripts.benchmark --help
+
   wheel:
     # Installing from a built wheel, not from the checkout. The browser interface is a data
     # file inside the package, and the difference between "works from source" and "ships" is

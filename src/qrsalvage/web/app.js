@@ -7,16 +7,15 @@
 "use strict";
 const $ = (id) => document.getElementById(id);
 
-/* Where the thanks go, once the accounts exist. Fill in the URLs — for example
-   "https://ko-fi.com/yourname" and "https://liberapay.com/yourname" — and the card appears;
-   empty URLs keep the page silent about money. The ask lives on the success card and nowhere
+/* Where the thanks go. A verified URL makes its button appear; an empty one keeps the page
+   silent about that provider. The ask lives on the success card and nowhere
    else: a donation is reciprocity, and reciprocity has a moment. It shares its sentence with
    the privacy fact because that answers the unspoken question of what this tool lives on. */
 const DONATE = [
   // PayPal first: for a German audience it is the button people recognise and already have.
-  { label: "PayPal", url: "" },      // e.g. "https://paypal.me/yourname"
+  { label: "PayPal", url: "" },
   { label: "Ko-fi", url: "https://ko-fi.com/shadesmaverick" },
-  { label: "LiberaPay", url: "" },   // e.g. "https://liberapay.com/yourname"
+  { label: "LiberaPay", url: "" },
 ];
 
 function thanksHtml() {

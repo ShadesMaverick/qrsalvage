@@ -42,6 +42,11 @@ from qrsalvage.core.decoding import reencode
 from qrsalvage.core.pipeline import solve
 from qrsalvage.synth import Damage, render_photo
 
+if __package__:
+    from scripts.measurements import classify_recovery
+else:  # direct execution
+    from measurements import classify_recovery  # type: ignore[import-not-found,no-redef]
+
 # Same shape as a real Zigbee pairing payload, entirely made up. See difficulty.py.
 TEXT = "Z:0123456789ABCDEF$I:00112233445566778899AABBCCDDEEFF1234%M:0000$D:0000000000"
 
@@ -75,17 +80,21 @@ def wilson(successes: int, total: int) -> tuple[float, float]:
     )
 
 
-def measure(damage: Damage, rounds: int, samples: int, budget: int) -> tuple[int, float, float]:
+def measure(
+    damage: Damage, rounds: int, samples: int, budget: int
+) -> tuple[int, int, float, float]:
     matrix = reencode(TEXT)
     previous = sampling.ROBUST_ROUNDS
     sampling.ROBUST_ROUNDS = rounds
     try:
-        solved = 0
+        correct = wrong_text = 0
         wrong: list[int] = []
         start = time.perf_counter()
         for seed in range(samples):
             result = solve(render_photo(matrix, damage, seed=seed), budget=budget)
-            solved += int(result.solved)
+            outcome = classify_recovery(result.text, TEXT)
+            correct += int(outcome == "correct")
+            wrong_text += int(outcome == "wrong")
             if result.wrong_known is not None:
                 wrong.append(result.wrong_known)
         seconds = time.perf_counter() - start
@@ -93,7 +102,7 @@ def measure(damage: Damage, rounds: int, samples: int, budget: int) -> tuple[int
         sampling.ROBUST_ROUNDS = previous
     ordered = sorted(wrong)
     median = float(ordered[len(ordered) // 2]) if ordered else float("nan")
-    return solved, median, seconds
+    return correct, wrong_text, median, seconds
 
 
 def main() -> int:
@@ -109,13 +118,17 @@ def main() -> int:
     for name, damage in chosen.items():
         print(f"\n--- {name} ---")
         print(
-            f"{'rounds':>7} {'solved':>10} {'rate':>7} {'95% interval':>16} {'wrong':>7} {'sec':>7}"
+            f"{'rounds':>7} {'correct':>10} {'bad text':>8} {'rate':>7} "
+            f"{'95% interval':>16} {'cells':>7} {'sec':>7}"
         )
         for rounds in args.rounds:
-            solved, median, seconds = measure(damage, rounds, args.samples, args.budget)
-            low, high = wilson(solved, args.samples)
+            correct, wrong_text, median, seconds = measure(
+                damage, rounds, args.samples, args.budget
+            )
+            low, high = wilson(correct, args.samples)
             print(
-                f"{rounds:7d} {solved:5d}/{args.samples:<4d} {solved / args.samples:7.0%} "
+                f"{rounds:7d} {correct:5d}/{args.samples:<4d} {wrong_text:8d} "
+                f"{correct / args.samples:7.0%} "
                 f"{f'[{low:.0%}, {high:.0%}]':>16} {median:7.0f} {seconds:7.0f}",
                 flush=True,
             )

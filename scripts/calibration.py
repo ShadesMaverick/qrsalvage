@@ -29,6 +29,11 @@ from qrsalvage.core.decoding import reencode
 from qrsalvage.core.pipeline import solve
 from qrsalvage.synth import Damage, render_photo
 
+if __package__:
+    from scripts.measurements import bootstrap_image_metrics
+else:  # direct execution
+    from measurements import bootstrap_image_metrics  # type: ignore[import-not-found,no-redef]
+
 # Synthetic payload, same shape and length as a real pairing code. See scripts/difficulty.py.
 TEXT = "Z:0123456789ABCDEF$I:00112233445566778899AABBCCDDEEFF1234%M:0000$D:0000000000"
 BASELINE = Damage(contrast=0.20, curvature=0.30, module_px=8.0, stain=0.0)
@@ -87,6 +92,10 @@ def main() -> int:
 
     for name, damage in LEVELS:
         pooled: dict[str, list[tuple[float, bool]]] = {"border": [], "middle": []}
+        images: dict[str, list[tuple[np.ndarray, np.ndarray]]] = {
+            "border": [],
+            "middle": [],
+        }
         used = 0
         for seed in range(args.samples):
             photo = render_photo(matrix, damage, seed=seed)
@@ -105,6 +114,7 @@ def main() -> int:
                 pooled[region].extend(
                     zip(claimed[mask].tolist(), correct[mask].tolist(), strict=True)
                 )
+                images[region].append((posterior[mask], truth[mask]))
 
         print(f"\n--- {name} ({used} of {args.samples} images usable) ---")
         print(f"{'claimed':>16} {'border n':>9} {'right':>7} {'middle n':>9} {'right':>7}")
@@ -136,6 +146,15 @@ def main() -> int:
             overall = sum(r for _, r in values) / total
             expected_error[region] = ece
             print(f"{region}: {total} cells, {overall:.2%} right overall, ECE {ece:.4f}")
+            intervals = bootstrap_image_metrics(images[region], seed=1729)
+            details = []
+            for metric in ("brier", "log_loss", "ece"):
+                interval = intervals[metric]
+                details.append(
+                    f"{metric} {interval['estimate']:.4f} "
+                    f"[{interval['low']:.4f}, {interval['high']:.4f}]"
+                )
+            print(f"{region}, image-bootstrap 95%: " + "; ".join(details))
         if "border" in expected_error and "middle" in expected_error:
             ratio = expected_error["middle"] / max(expected_error["border"], 1e-9)
             print(f"middle miscalibration is {ratio:.1f}x the border's")

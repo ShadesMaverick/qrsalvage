@@ -20,6 +20,7 @@ import pytest
 from qrsalvage.server import Handler, catalog_payload, export_payload, solve_payload
 
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "engraved-curved-hard.png"
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def _data_url(path: Path) -> str:
@@ -241,6 +242,13 @@ def test_the_legal_page_is_reachable_and_still_has_blanks_to_fill(running_server
     assert "TODO" not in page, "a placeholder came back into the legal page"
     assert "Fabian Marius Freitag" in page, "the imprint lost the operator's name"
     connection.close()
+
+
+def test_the_success_card_points_at_the_live_kofi_page():
+    script = (ROOT / "src" / "qrsalvage" / "web" / "app.js").read_text(encoding="utf-8")
+
+    assert 'url: "https://ko-fi.com/shadesmaverick"' in script
+    assert "ko-fi.com/yourname" not in script
 
 
 def test_every_figure_the_method_page_asks_for_is_served(running_server):

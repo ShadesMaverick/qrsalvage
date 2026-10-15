@@ -34,6 +34,11 @@ from qrsalvage.core.pipeline import MEMBER_BUDGET, SolveResult, _decode_chain, s
 from qrsalvage.core.structure import structure_mask
 from qrsalvage.synth import Damage, render_photo
 
+if __package__:
+    from scripts.measurements import classify_recovery
+else:  # direct execution
+    from measurements import classify_recovery  # type: ignore[import-not-found,no-redef]
+
 # Same shape and length as a real Zigbee pairing payload, and entirely made up.
 TEXT = "Z:0123456789ABCDEF$I:00112233445566778899AABBCCDDEEFF1234%M:0000$D:0000000000"
 
@@ -78,7 +83,7 @@ def photograph(damage: Damage, rng: np.random.Generator, seed: int) -> np.ndarra
     return render_photo(reencode(TEXT), varied, seed=seed)
 
 
-def trial(damage: Damage, count: int, budget: int, seed: int) -> tuple[int, dict[str, bool]]:
+def trial(damage: Damage, count: int, budget: int, seed: int) -> tuple[int, int, dict[str, bool]]:
     """One trial: `count` photographs, solved alone and then fused by every rule.
 
     Every photograph is solved once, at the full budget. That is the fair baseline -- what the
@@ -88,7 +93,9 @@ def trial(damage: Damage, count: int, budget: int, seed: int) -> tuple[int, dict
     """
     rng = np.random.default_rng(seed)
     members = [solve(photograph(damage, rng, seed * 100 + i), budget=budget) for i in range(count)]
-    alone = sum(int(m.solved) for m in members)
+    outcomes_alone = [classify_recovery(m.text, TEXT) for m in members]
+    alone = sum(outcome == "correct" for outcome in outcomes_alone)
+    alone_wrong = sum(outcome == "wrong" for outcome in outcomes_alone)
 
     usable = [m for m in members if m.matrix is not None]
 
@@ -97,9 +104,9 @@ def trial(damage: Damage, count: int, budget: int, seed: int) -> tuple[int, dict
         return member.wrong_known, -member.timing
 
     usable.sort(key=reliability)
-    outcomes = dict.fromkeys(RULES, False)
+    outcomes: dict[str, bool] = dict.fromkeys(RULES, False)
     if len(usable) < 2:
-        return alone, outcomes
+        return alone, alone_wrong, outcomes
 
     modules = usable[0].modules
     same = [m for m in usable if m.modules == modules]
@@ -111,7 +118,7 @@ def trial(damage: Damage, count: int, budget: int, seed: int) -> tuple[int, dict
         mm = ModuleMatrix(consensus.posterior, known_dark, known_light)
         search, _ = _decode_chain(mm, budget)
         outcomes[rule] = search.text == TEXT
-    return alone, outcomes
+    return alone, alone_wrong, outcomes
 
 
 def main() -> int:
@@ -141,18 +148,25 @@ def main() -> int:
             changes: dict[str, Any] = {field: level}
             damage = replace(base, **changes)
             alone_total = 0
+            alone_wrong_total = 0
             wins = dict.fromkeys(RULES, 0)
             start = time.perf_counter()
             for sample in range(args.samples):
-                alone, outcomes = trial(damage, args.images, args.budget, seed=sample + 1)
+                alone, alone_wrong, outcomes = trial(
+                    damage, args.images, args.budget, seed=sample + 1
+                )
                 alone_total += alone
+                alone_wrong_total += alone_wrong
                 for rule, ok in outcomes.items():
                     wins[rule] += int(ok)
 
             images = args.samples * args.images
             low, high = wilson(alone_total, images)
             rate = alone_total / images
-            cells = [f"{alone_total:3d}/{images:<3d} {rate:4.0%} [{low:.0%},{high:.0%}]"]
+            wrong_note = f" !{alone_wrong_total}" if alone_wrong_total else ""
+            cells = [
+                f"{alone_total:3d}/{images:<3d} {rate:4.0%} [{low:.0%},{high:.0%}]{wrong_note}"
+            ]
             for rule in RULES:
                 low, high = wilson(wins[rule], args.samples)
                 cells.append(
@@ -167,6 +181,7 @@ def main() -> int:
             )
 
     print("\nsingle-image rate counts every photograph; fusion rate counts every trial")
+    print("!N marks N valid decodes with the wrong known payload")
     return 0
 
 

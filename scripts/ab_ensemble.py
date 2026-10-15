@@ -21,6 +21,11 @@ from qrsalvage.core.decoding import reencode
 from qrsalvage.core.pipeline import solve
 from qrsalvage.synth import Damage, render_photo
 
+if __package__:
+    from scripts.measurements import classify_recovery
+else:  # direct execution
+    from measurements import classify_recovery  # type: ignore[import-not-found,no-redef]
+
 # Synthetic payload, same shape and length as a real pairing code. See scripts/difficulty.py.
 TEXT = "Z:0123456789ABCDEF$I:00112233445566778899AABBCCDDEEFF1234%M:0000$D:0000000000"
 BASELINE = Damage(contrast=0.20, curvature=0.30, module_px=8.0, stain=0.0)
@@ -35,21 +40,23 @@ LEVELS = (
 
 def run(damage: Damage, samples: int, budget: int, ensemble: str):
     matrix = reencode(TEXT)
-    successes = 0
+    correct = wrong_text = 0
     wrong: list[int] = []
     attempts = 0
     start = time.perf_counter()
     for seed in range(samples):
         photo = render_photo(matrix, damage, seed=seed)
         result = solve(photo, budget=budget, ensemble=ensemble)
-        successes += int(result.solved)
+        outcome = classify_recovery(result.text, TEXT)
+        correct += int(outcome == "correct")
+        wrong_text += int(outcome == "wrong")
         attempts += result.candidates_tried
         # wrong_sampled, not wrong_known: what is measured is the sampling the search actually
         # ran on. wrong_known scores the grid fit and is identical across all modes.
         wrong.append(result.wrong_sampled if result.wrong_sampled is not None else -1)
     valid = sorted(w for w in wrong if w >= 0)
     median = valid[len(valid) // 2] if valid else float("nan")
-    return successes, median, attempts, time.perf_counter() - start
+    return correct, wrong_text, median, attempts, time.perf_counter() - start
 
 
 def main() -> int:
@@ -63,14 +70,16 @@ def main() -> int:
     levels = [level for level in LEVELS if args.levels is None or level[0] in args.levels]
     print(f"{args.samples} images per level, budget {args.budget}, modes {args.modes}\n")
     print(
-        f"{'level':>12} {'mode':>10} {'solved':>10} "
+        f"{'level':>12} {'mode':>10} {'correct':>10} {'wrong':>7} "
         f"{'wrong (median)':>16} {'attempts':>9} {'sec':>6}"
     )
     for name, damage in levels:
         for mode in args.modes:
-            successes, median, attempts, seconds = run(damage, args.samples, args.budget, mode)
+            correct, wrong_text, median, attempts, seconds = run(
+                damage, args.samples, args.budget, mode
+            )
             print(
-                f"{name:>12} {mode:>10} {successes:5d}/{args.samples:<4d} "
+                f"{name:>12} {mode:>10} {correct:5d}/{args.samples:<4d} {wrong_text:7d} "
                 f"{median:16.0f} {attempts:9d} {seconds:6.0f}",
                 flush=True,  # otherwise everything sits in the buffer when redirected to a file
             )
