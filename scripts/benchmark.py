@@ -1,4 +1,4 @@
-"""Benchmark v2: varied QR layouts, sealed holdout seeds, and machine-readable evidence.
+"""Benchmark v2: varied QR layouts, a disjoint release panel, and machine-readable evidence.
 
 The original instruments deliberately answer one question at a time, but most of them use one
 payload and the same low-numbered seeds. Repeating those seeds while tuning turns them into a
@@ -6,9 +6,11 @@ training set. This runner complements, rather than replaces, those diagnostic ax
 cover versions 1 through 6, every error-correction level and six distinct masks; development and
 release evidence use disjoint payloads and renderer seeds; every case is written as JSONL or CSV.
 
-The holdout is intentionally inconvenient. It only runs as one complete, frozen panel when
+The release panel is intentionally inconvenient. It only runs as one complete panel when
 ``--release-candidate`` is explicit, so looking at its first three cases while tuning is not an
-option accidentally offered by the CLI.
+option accidentally offered by the CLI. Its cases are committed and reproducible, not secret;
+their evidentiary value comes from disjoint payloads and seeds and from running them only at a
+release boundary.
 
 Usage:
     python -m scripts.benchmark --split dev --samples 4 --out out/benchmark-dev.jsonl
@@ -116,7 +118,7 @@ RESULT_FIELDS = (
 def selected_seeds(
     split: Split, samples: int | None = None, *, release_candidate: bool = False
 ) -> tuple[int, ...]:
-    """Return development samples, or the complete sealed holdout for a release candidate."""
+    """Return development samples, or the complete disjoint release panel."""
     if split == "holdout":
         if not release_candidate:
             raise ValueError("the holdout only runs with --release-candidate")

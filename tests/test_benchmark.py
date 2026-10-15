@@ -43,7 +43,7 @@ def test_payload_panel_spans_versions_ecc_levels_and_masks():
     assert payloads_for_split("holdout") == HOLDOUT_PAYLOADS
 
 
-def test_development_and_holdout_seeds_are_disjoint_and_frozen():
+def test_development_and_release_seeds_are_disjoint_and_declared():
     assert DEV_SEEDS == (0, 1, 2, 3, 4, 5, 6, 7)
     assert HOLDOUT_SEEDS == (1009, 2027, 3067, 4099, 5147, 6203, 7283, 8363)
     assert not set(DEV_SEEDS) & set(HOLDOUT_SEEDS)
