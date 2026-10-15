@@ -84,10 +84,11 @@ On the command line, pass the photographs yourself:
 qrsalvage solve photo1.jpg photo2.jpg photo3.jpg
 ```
 
-Photographs taken from different angles get *different* cells wrong, and where they disagree the
-fused reading lands near a half — which is exactly what the search needs to be told. This is the
-only ensemble in the project with a positive measurement behind it. Three photographs against
-one, over fourteen trials per level:
+In the synthetic benchmark below, photographs taken from different angles get *different* cells
+wrong, and where they disagree the fused reading lands near a half — which is exactly what the
+search needs to be told. This is the only ensemble in the project with a positive measurement
+behind it. These are benchmark results, not a promised success rate for an arbitrary real label:
+three synthetic photographs against one, over fourteen trials per level:
 
 | damage | one photograph | three, fused |
 |---|---|---|
@@ -176,8 +177,10 @@ guaranteed-valid code rather than a reconstruction that happened to pass.
 ## How well it works
 
 Measured on synthetic cases with known answers, varying contrast while holding the other damage
-constant, 20 images per level. `contrast` is the fraction of full black the engraving reaches;
-the real bulb photograph sits near 0.15.
+constant, 20 images per level. Every number below belongs to this generator, payload and damage
+axis; it maps the method's behaviour rather than estimating its success rate in the wild.
+`contrast` is the fraction of full black the engraving reaches; the real bulb photograph sits
+near 0.15.
 
 | contrast | solved | rate | 95 % interval |
 |---|---|---|---|
@@ -211,10 +214,11 @@ limit is resolution:
 | 4.0 | 1/5 |
 | 3.0 | 0/5 |
 
-**Below about five pixels per module there is nothing to recover.** Not "hard": the information
-is no longer in the image. That number is worth knowing before you spend an evening on a
-photograph — it tells you to take a better one instead. Real damage moves the threshold upward,
-never down.
+**In this benchmark the recovery rate collapses between five and four pixels per module.** One
+of five idealised cases still recovered at four, so five is practical guidance, not a universal
+physical constant. Real blur, perspective and damage move the useful threshold upward. The
+actionable advice is unchanged: take a closer, sharper photograph instead of trusting digital
+upscaling.
 
 ### On real photographs
 
@@ -253,7 +257,9 @@ scriptable pipeline with a text interface that automation can drive.
 
 ## Limitations
 
-- **About five pixels per module is the floor**, measured above. Below it, no algorithm helps.
+- **About five pixels per module is the practical floor in the synthetic resolution benchmark.**
+  Real blur, perspective and damage can require more; an unusually clean image can occasionally
+  recover below it.
 - **QR Code only.** Not Data Matrix, Aztec or PDF417. The method generalises but each symbology
   needs its own structure model, layout and Reed-Solomon parameters.
 - **Reed-Solomon repair covers versions 1 to 10.** Larger codes are read but not repaired; the

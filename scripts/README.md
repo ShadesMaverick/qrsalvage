@@ -9,6 +9,7 @@ rates are involved, and is safe to run repeatedly.
 |---|---|
 | `difficulty.py` | How does the success rate degrade along one damage axis (contrast, curvature, resolution, stain, tear, curl, remnant, dome, worn, marker), all else held at baseline? The primary regression instrument. |
 | `calibration.py` | Does the posterior mean what it says? Reliability of claimed confidence, split into border (known cells) and middle (data cells) — the split is the point. |
+| `benchmark.py` | Does a release candidate generalise across QR versions 1–6, every ECC level and varied masks? Writes exact-answer outcomes, budget and git/diff provenance as JSONL/CSV; development and release panels use disjoint payloads and seeds. A release run fails on any wrong decode or unresolved case. Run as `python -m scripts.benchmark`. |
 | `multi_image.py` | What do several photographs of one code buy over a single one, and under which fusion rule? Single images scored at the same budget, paired trials. |
 | `ab_bow.py` | Flat homography against the bowed grid on curved surfaces; the flat axis is the control. |
 | `ab_coherence.py` | The grid objective with and without the coherence term over the unknown cells: does listening to the middle rescue trapped descents without choosing tidy-looking wrong sizes? Result at `COHERENCE_WEIGHT` in `geometry.py`. |

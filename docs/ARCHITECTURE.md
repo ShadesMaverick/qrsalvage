@@ -45,8 +45,10 @@ decode chain             pipeline.py:_decode_chain
 text  (+ re-encoded clean matrix, exports, catalogue)
 ```
 
-`pipeline.py` composes all of this and decides nothing itself. `qrspec.py`, `structure.py`
-and `layout.py` are the tables and placement rules of ISO/IEC 18004 — the only
+`pipeline.py` composes these stages and owns their control flow. The small ranking and escalation
+rules it applies live in `policy.py`, where they can be tested without image processing or shell
+concerns. `qrspec.py`, `structure.py` and `layout.py` are the tables and placement rules of
+ISO/IEC 18004 — the only
 symbology-specific modules; `galois.py` is GF(256) Reed-Solomon with erasure support.
 
 ## Reading order
@@ -59,8 +61,9 @@ Read the modules in the order the method page explains them — each is short:
 4. `matrix.py` — the three states, confidence, flip cost
 5. `galois.py` + `repair.py` — Reed-Solomon, and why an honest "unknown" is worth two guesses
 6. `decoding.py` + `oracle.py` — the outside oracle and the ordered probe
-7. `pipeline.py` — composition only; also `solve_many` (photograph fusion)
-8. `ensemble.py` — three ensembles, two of them measured useless and documented as such
+7. `policy.py` — evidence ranking and escalation gates used by the recovery path
+8. `pipeline.py` — orchestration and control flow; also `solve_many` (photograph fusion)
+9. `ensemble.py` — three ensembles, two of them measured useless and documented as such
 
 ## The three invariants
 

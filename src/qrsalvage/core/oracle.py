@@ -15,7 +15,9 @@ exist -- in the browser it never does.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 
 import numpy as np
 
@@ -24,6 +26,9 @@ EncodeFn = Callable[[str, str | None], np.ndarray]
 
 _decode_backend: DecodeFn | None = None
 _encode_backend: EncodeFn | None = None
+_scoped_backend: ContextVar[tuple[DecodeFn, EncodeFn] | None] = ContextVar(
+    "qrsalvage_oracle_backend", default=None
+)
 
 
 def use(decode: DecodeFn, encode: EncodeFn) -> None:
@@ -35,6 +40,21 @@ def use(decode: DecodeFn, encode: EncodeFn) -> None:
     """
     global _decode_backend, _encode_backend
     _decode_backend, _encode_backend = decode, encode
+
+
+@contextmanager
+def using(decode: DecodeFn, encode: EncodeFn) -> Iterator[None]:
+    """Install an oracle for one scope, then restore the previous process state.
+
+    Browser startup still uses :func:`use` for its process-long backend. Tests and embedding
+    applications need a bounded form: without restoration, one caller silently changes every
+    later recovery in the process.
+    """
+    token = _scoped_backend.set((decode, encode))
+    try:
+        yield
+    finally:
+        _scoped_backend.reset(token)
 
 
 def _native() -> tuple[DecodeFn, EncodeFn]:
@@ -71,14 +91,32 @@ def _native() -> tuple[DecodeFn, EncodeFn]:
 def decode(image: np.ndarray) -> str | None:
     """One decode attempt by the oracle. Never raises; an unreadable image is None."""
     global _decode_backend, _encode_backend
-    if _decode_backend is None:
+    scoped = _scoped_backend.get()
+    if scoped is not None:
+        backend = scoped[0]
+    elif _decode_backend is None:
         _decode_backend, _encode_backend = _native()
-    return _decode_backend(image)
+        backend = _decode_backend
+    else:
+        backend = _decode_backend
+    try:
+        return backend(image)
+    except Exception:
+        # An oracle is an optional boundary implementation. Whether native or injected, its
+        # contract is unreadable -> None; a backend exception must not escape as a different
+        # meaning merely because the runtime supplied the function.
+        return None
 
 
 def encode(text: str, ec_level: str | None = None) -> np.ndarray:
     """Encode afresh through the oracle, at the requested error correction level."""
     global _decode_backend, _encode_backend
-    if _encode_backend is None:
+    scoped = _scoped_backend.get()
+    if scoped is not None:
+        backend = scoped[1]
+    elif _encode_backend is None:
         _decode_backend, _encode_backend = _native()
-    return _encode_backend(text, ec_level)
+        backend = _encode_backend
+    else:
+        backend = _encode_backend
+    return backend(text, ec_level)

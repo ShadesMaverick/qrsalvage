@@ -37,6 +37,7 @@ from .geometry import (
 )
 from .layout import read_format
 from .matrix import ModuleMatrix
+from .policy import attempt_error_rate, choose_grid, fusion_rank, should_restart
 from .preprocess import prepare
 from .qrspec import block_plan
 from .repair import RepairResult, repair_progressive, repair_scattered
@@ -455,11 +456,7 @@ def _attempt(
 
 def _error_rate(attempt: _Attempt) -> float:
     """Fraction of known cells the best grid of an attempt gets wrong. 1.0 if it found none."""
-    fits = attempt[4]
-    if not fits:
-        return 1.0
-    best = min(fits, key=lambda f: (f.wrong_known, -f.quality))
-    return best.wrong_known / max(best.known_total, 1)
+    return attempt_error_rate(attempt[4])
 
 
 def _rescale_to_working_range(
@@ -776,7 +773,7 @@ def solve(
     if not fits:
         return SolveResult(text=None, finders=shown_finders, failure="no grid could be fitted")
 
-    best = min(fits, key=lambda f: (f.wrong_known, -f.quality))
+    best = choose_grid(fits)
     known_dark, known_light = structure_mask(best.modules)
 
     # Only the winner earns the bow: on every candidate size it would multiply the search cost,
@@ -803,7 +800,7 @@ def solve(
 
     # Before the bow, because a bow fitted onto a misplaced grid is a bow spent bending the
     # wrong thing -- and because the restart is what decides whether the grid is placed at all.
-    if COARSE_RESTART and best.wrong_known > COARSE_RESTART_THRESHOLD * max(best.known_total, 1):
+    if COARSE_RESTART and should_restart(best, COARSE_RESTART_THRESHOLD):
         best = restart_coarse(gray, best, known_dark, known_light, on_step=grid_event("restart"))
     if BOW_REFINE:
         best = refine_bow(gray, best, known_dark, known_light, on_step=grid_event("bow"))
@@ -1018,6 +1015,7 @@ def solve_many(
             crop=crop,
             sizes=sizes,
             budget=budget,
+            band=band,
             invert=invert,
             finder_points=finder_points,
             progress=progress,
@@ -1037,6 +1035,7 @@ def solve_many(
             crop=crop,
             sizes=sizes,
             budget=member_budget,
+            band=band,
             invert=invert,
             finder_points=finder_points,
             progress=tagged,
@@ -1059,11 +1058,6 @@ def solve_many(
     # fusion rejects them itself and *records* it. An earlier version filtered them out here,
     # and the page then reported "1 photograph fused" to someone who had just given it two,
     # with no word about where the other one went.
-    def fusion_rank(member: SolveResult) -> tuple[int, float]:
-        # usable is filtered on matrix, and solve() sets matrix, wrong_known and timing together.
-        assert member.wrong_known is not None and member.timing is not None
-        return member.wrong_known, -member.timing
-
     usable.sort(key=fusion_rank)
     best = usable[0]
     assert best.modules is not None  # a member with a matrix always carries its grid's size
