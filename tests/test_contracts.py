@@ -131,3 +131,40 @@ def test_oracle_scopes_do_not_leak_between_threads():
         thread.join()
 
     assert answers == {"first": "first", "second": "second"}
+
+
+def test_unconfirmed_repair_cannot_invent_a_payload(monkeypatch):
+    modules = 21
+    posterior = np.full((modules, modules), 0.99)
+    known_dark, known_light = pipeline.structure_mask(modules)
+    matrix = pipeline.ModuleMatrix(posterior, known_dark, known_light)
+    hard = matrix.hard()
+    invented = hard.copy()
+    invented[~matrix.locked] = ~invented[~matrix.locked]
+    plan = pipeline.block_plan(1, "L")
+    repair = pipeline.RepairResult(
+        matrix=invented,
+        ecc="L",
+        blocks=1,
+        erasures_used=plan.ec_per_block - 2,
+        errors_corrected=1,
+    )
+
+    monkeypatch.setattr(
+        pipeline, "decode_matrix", lambda candidate: "INVENTED" if candidate is invented else None
+    )
+    monkeypatch.setattr(pipeline, "repair_progressive", lambda *args, **kwargs: repair)
+    monkeypatch.setattr(
+        pipeline,
+        "repair_scattered",
+        lambda *args, **kwargs: pipeline.RepairResult(matrix=None),
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "ordered_search",
+        lambda *args, **kwargs: pipeline.SearchResult(text=None, candidates_tried=0),
+    )
+
+    search, _ = pipeline._decode_chain(matrix, budget=1)
+
+    assert search.text is None
