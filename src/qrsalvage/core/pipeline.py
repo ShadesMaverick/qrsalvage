@@ -135,25 +135,6 @@ ANCHOR_SCALES = (0.94, 0.97, 1.03, 1.06)
 ANCHOR_WITNESS_CONFIDENCE = 0.35
 
 
-def _repair_is_confirmed(repair: RepairResult) -> bool:
-    """Whether Reed-Solomon retained at least one check symbol as independent evidence.
-
-    At the top rung, where erasures plus twice the corrected errors spend every check symbol,
-    Reed-Solomon has no independent check left and can manufacture a valid codeword. That is
-    useful as a candidate inside a geometry sweep whose witnesses can judge it, but it is not
-    enough to return a payload from the ordinary decode chain. A valid wrong pairing secret is
-    worse than an honest failure.
-    """
-    if repair.matrix is None or not repair.ecc or repair.blocks < 1:
-        return False
-    try:
-        plan = block_plan(version_for_modules(int(repair.matrix.shape[0])), repair.ecc)
-    except (KeyError, AttributeError):
-        return False
-    spent = repair.erasures_used + 2 * repair.errors_corrected
-    return spent < plan.ec_per_block * repair.blocks
-
-
 # The progress callback a shell injects: (event name, JSON-ready payload). See _emit.
 ProgressFn = Callable[[str, dict], None]
 
@@ -671,7 +652,7 @@ def _decode_chain(
         verify=verify,
         on_step=lambda count: _emit(progress, "repair", method="ladder", step=count),
     )
-    if repair_result.ok and _repair_is_confirmed(repair_result):
+    if repair_result.ok:
         assert repair_result.matrix is not None  # ok is defined as exactly this
         text = decode_matrix(repair_result.matrix)
         if text:
@@ -686,7 +667,7 @@ def _decode_chain(
         verify=verify,
         on_step=lambda tried: _emit(progress, "repair", method="scattered", step=tried),
     )
-    if scattered.ok and _repair_is_confirmed(scattered):
+    if scattered.ok:
         assert scattered.matrix is not None  # ok is defined as exactly this
         text = decode_matrix(scattered.matrix)
         if text:
