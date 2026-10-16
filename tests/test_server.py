@@ -251,6 +251,26 @@ def test_the_success_card_points_at_the_live_kofi_page():
     assert "ko-fi.com/yourname" not in script
 
 
+def test_the_public_page_declares_its_canonical_address_and_search_files():
+    page = (ROOT / "src" / "qrsalvage" / "web" / "index.html").read_text(encoding="utf-8")
+    robots = (ROOT / "src" / "qrsalvage" / "web" / "robots.txt").read_text(encoding="utf-8")
+    sitemap = (ROOT / "src" / "qrsalvage" / "web" / "sitemap.xml").read_text(encoding="utf-8")
+
+    public = "https://shadesmaverick.github.io/qrsalvage/"
+    assert f'<link rel="canonical" href="{public}">' in page
+    assert f'<meta property="og:url" content="{public}">' in page
+    assert f'<meta property="og:image" content="{public}qrsalvage-social.png">' in page
+    assert f'"url": "{public}"' in page
+    assert f"Sitemap: {public}sitemap.xml" in robots
+    assert public in sitemap
+
+
+def test_search_discovery_files_are_part_of_the_static_build():
+    from scripts.build_site import PAGE_FILES
+
+    assert {"robots.txt", "sitemap.xml"} <= set(PAGE_FILES)
+
+
 def test_every_figure_the_method_page_asks_for_is_served(running_server):
     """A missing figure is invisible from the outside: the page still renders, just emptier.
 
