@@ -49,6 +49,12 @@ def test_payload_carries_everything_the_page_shows():
         assert key in answer, f"missing from the response: {key}"
     assert answer["clean_png"].startswith("data:image/png;base64,")
     assert set(answer["grid"].replace("\n", "")) <= {"#", ".", "?"}
+    assert answer["payload_info"] == {
+        "kind": "text",
+        "label": "Plain text",
+        "hint": "Plain text. No recognised QR payload format was assumed.",
+        "fields": {},
+    }
     assert json.dumps(answer)  # must survive serialisation, i.e. no numpy types leaked through
 
 
@@ -117,6 +123,7 @@ def test_a_matter_code_arrives_with_its_manual_pairing_code():
     assert answer["ok"] is True
     info = answer["payload_info"]
     assert info["kind"] == "matter"
+    assert info["label"] == "Matter onboarding code"
     assert info["fields"]["manual_pairing_code"] == "3497-011-2332"
     assert info["fields"]["setup_passcode"] == "20202021"
     assert "Home Assistant" in info["hint"]
@@ -263,6 +270,20 @@ def test_the_public_page_declares_its_canonical_address_and_search_files():
     assert f'"url": "{public}"' in page
     assert f"Sitemap: {public}sitemap.xml" in robots
     assert public in sitemap
+
+
+def test_the_public_page_leads_with_general_qr_recovery():
+    page = (ROOT / "src" / "qrsalvage" / "web" / "index.html").read_text(encoding="utf-8")
+    script = (ROOT / "src" / "qrsalvage" / "web" / "app.js").read_text(encoding="utf-8")
+    head, body = page.split("</head>", 1)
+
+    assert "damaged qr code recovery" in head.lower()
+    general_examples = ("packaging", "tickets", "documents", "product labels")
+    assert all(phrase in head.lower() for phrase in general_examples)
+    assert "including codes on curved surfaces like light bulbs" not in head.lower()
+    assert "every qr code can carry something different" in body.lower()
+    assert "saved your qr code?" in script.lower()
+    assert "saved your lamp?" not in script.lower()
 
 
 def test_search_discovery_files_are_part_of_the_static_build():

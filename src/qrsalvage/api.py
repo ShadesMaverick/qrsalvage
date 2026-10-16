@@ -28,6 +28,7 @@ from .core.decoding import reencode, render
 from .core.pipeline import ENSEMBLE_MODES, solve, solve_many
 from .export import (
     PAYLOAD_HINTS,
+    PAYLOAD_LABELS,
     payload_fields,
     to_catalog_pdf,
     to_html_report,
@@ -187,7 +188,12 @@ def solve_payload(payload: dict, progress: ProgressFn | None = None) -> dict:
         recognised = payload_fields(result.text)
         if recognised:
             kind, fields = recognised
-            out["payload_info"] = {"kind": kind, "hint": PAYLOAD_HINTS[kind], "fields": fields}
+            out["payload_info"] = {
+                "kind": kind,
+                "label": PAYLOAD_LABELS[kind],
+                "hint": PAYLOAD_HINTS[kind],
+                "fields": fields,
+            }
     if result.fusion is not None:
         out["fusion"] = {
             "photographs": result.fusion.members,

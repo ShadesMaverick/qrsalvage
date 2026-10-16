@@ -204,8 +204,10 @@ Einzelfall durchgeht.
   ein Frame pro Druck. Taschenlampen-Knopf, wo der Browser sie hergibt; Stream wird beim
   Schließen freigegeben; verweigerte Berechtigung fällt freundlich auf den Dateiweg zurück.
   Ende-zu-Ende geprüft über einen gefälschten Kamera-Stream (Canvas mit driftendem Foto).
-- **Payload-Intelligenz für die Smart-Home-Nische — ERLEDIGT.** `matter_fields` decodiert den
-  Base38-Payload (Bitfelder, Verhoeff-Prüfziffer) und leitet den 11-stelligen manuellen
+- **Payload-Intelligenz ohne Zweck-Raten — ERLEDIGT.** Erkannt werden URL, E-Mail, Telefon,
+  SMS, Geo-URI, vCard, WLAN sowie die spezialisierten Zigbee- und Matter-Formate; alles andere
+  bleibt ausdrücklich Klartext. `matter_fields` decodiert den Base38-Payload (Bitfelder,
+  Verhoeff-Prüfziffer) und leitet den 11-stelligen manuellen
   Pairing-Code ab — verankert am kanonischen Matter-Testvektor (MT:Y.K9042C00KA0648G00 →
   3497-011-2332, Passcode 20202021, Discriminator 0xF00). `wifi_fields` parst WIFI:-Payloads
   samt Escaping. Die Seite zeigt Hinweis und Felder unter dem Klartext; im JSON-Export opt-in

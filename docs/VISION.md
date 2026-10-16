@@ -8,10 +8,10 @@ deutsch.
 ## Warum es dieses Werkzeug gibt
 
 Etliche QR-Reader scheiterten am Pairing-Code einer Zigbee-LED-Lampe, weil der Code auf der
-Wölbung sitzt. Diese eine Lampe ist der Gründungsfall — und zugleich die Marktdefinition: Die
-Zielgruppe sind Smart-Home-Nutzer mit Zigbee- und Matter-Geräten, gewölbten Lampen, winzigen
-gravierten Etiketten, toten Hubs und gebraucht gekauften Geräten. Wer hier landet, hat ein
-akutes Problem und meist schon drei Apps erfolglos probiert.
+Wölbung sitzt. Diese eine Lampe ist der Gründungsfall, nicht die Marktgrenze. Die Zielgruppe sind
+Menschen mit beschädigten QR-Codes auf Verpackungen, Tickets, Dokumenten, Schildern,
+Inventaretiketten, Produkten und Geräten. Wer hier landet, hat ein akutes Problem und meist schon
+mehrere Scanner erfolglos probiert. Smart-Home-Codes bleiben ein besonders sensibler Spezialfall.
 
 ## Wohin es soll
 
@@ -76,18 +76,18 @@ Zahl, die realistisch dabei herauskommt.
 
 In dieser Reihenfolge, jede Stufe für sich nutzbar:
 
-- [x] **1. Kamera-Modus mit Bewegungs-Serie** *(Rettungsquote)* — „Halte die Kamera auf die
-  Lampe und beweg sie langsam": Live-Vorschau per `getUserMedia`, automatisch 3–5 Frames
+- [x] **1. Kamera-Modus mit Bewegungs-Serie** *(Rettungsquote)* — „Halte die Kamera auf den
+  Code und beweg sie langsam": Live-Vorschau per `getUserMedia`, automatisch 3–5 Frames
   greifen, direkt in `solve_many`. Die Fusion ist der stärkste gemessene Hebel
   (36–81 % einzeln → 93–100 % fusioniert), aber niemand macht von Hand drei Fotos — aus dem
   erklärungsbedürftigen Feature wird eine Geste. Läuft auf 127.0.0.1 und später auf HTTPS.
-- [x] **2. Payload-Intelligenz für die Nische** *(Rettungsquote/Erlebnis)* — Matter (`MT:…`)
-  und WLAN (`WIFI:…`) zerlegen wie heute Zigbee, und nach der Rettung die Folgefrage
-  beantworten: was ist das, und wo gebe ich es ein. Aufschlüsselung opt-in, Klartext bleibt
-  lokal.
-- [x] **3. Die Spendenkarte** *(Moment; URLs nachtragen, siehe ISSUES)* — der Ask auf der Erfolgskarte, klein, unter dem
-  Klartext, zusammen mit der Privacy-Aussage: „Lief komplett auf deinem Gerät. Lampe
-  gerettet? 5 € halten das Werkzeug am Leben." Nicht auf der Startseite.
+- [x] **2. Konservative Payload-Intelligenz** *(Rettungsquote/Erlebnis)* — URL, Kontaktkarte,
+  E-Mail, Telefon, SMS, Geo-URI, WLAN, Zigbee und Matter nur anhand ihrer eigenen Syntax
+  erkennen. Alles andere bleibt Klartext; Produkt und Zweck werden nie geraten. Aufschlüsselung
+  bleibt opt-in und lokal.
+- [x] **3. Die Spendenkarte** *(Moment; URLs nachtragen, siehe ISSUES)* — der Ask auf der
+  Erfolgskarte, klein, unter dem Klartext, zusammen mit der Privacy-Aussage: „Lief komplett auf
+  deinem Gerät. QR-Code gerettet? 5 € halten das Werkzeug am Leben." Nicht auf der Startseite.
 - [x] **4. Statische Seite — GEBAUT und im Browser verifiziert.** `scripts/build_site.py`
   schreibt `site/` (29 MB, alles selbst gehostet: Pyodide 0.28.0, NumPy 2.2.5, OpenCV 4.11,
   zxing-wasm 2.2.4, das eigene Wheel). Gemessen: Kaltstart unter 9 s über localhost, das
@@ -113,19 +113,16 @@ In dieser Reihenfolge, jede Stufe für sich nutzbar:
   offen: Assets selbst hosten statt CDN (Versionen pinnen), Encode-Richtung des Orakels,
   GitHub Pages einschalten (Source: GitHub Actions,
   `.github/workflows/pages.yml` baut und deployt).
-- [ ] **5. Veröffentlichung auf GitHub** — erledigt: Übersetzung (kein Deutsch mehr in
+- [x] **5. Veröffentlichung auf GitHub** — erledigt: Übersetzung (kein Deutsch mehr in
   `src/`, `tests/`, `scripts/`), `CONTRIBUTING`, erfundene EUI64 im Test, und
   `web/legal.html` mit Impressum und Datenschutzerklärung, verlinkt aus der Fußzeile beider
-  Seiten. **Was noch fehlt und nur du tun kannst:** die vier TODO-Felder in `legal.html`
-  (Name, Anschrift, E-Mail, Hoster-Link) — ein Test schlägt an, solange sie stehen; die
-  Spenden-URLs in `app.js`; README-Badges auf den echten Repository-Pfad; GitHub Pages
-  einschalten (Source: GitHub Actions); ein echter Safari/iOS-Test.
-- [ ] **6. Reichweite in der Nische** — der ausgearbeitete Plan steht in `REACH.md`:
-  Startseite auf die Suchintention drehen, Links in fremder Troubleshooting-Doku
-  (Zigbee2MQTT, ZHA), echte Hilfe in Foren-Threads, dann je ein Launch-Post
-  (Show HN, r/homeassistant) mit der Gründungsgeschichte. Kernsatz: niemand sucht qrsalvage,
-  alle suchen ihr Problem — wir werben nicht, wir liegen bereit. Dort steht auch die ehrliche
-  Ertragserwartung (100–300 €/Jahr) und was wir bewusst *nicht* tun.
+  Seiten. Repository und Browser-App sind öffentlich; Rechtstext, Ko-fi-Link, README-Verweise
+  und GitHub Pages sind eingerichtet. Ein echter Safari/iOS-Test bleibt offen.
+- [ ] **6. Reichweite für konkrete Schadensfälle** — der ausgearbeitete Plan steht in
+  `REACH.md`: Startseite auf allgemeine Suchintentionen drehen, sachliche Links in passender
+  Troubleshooting-Dokumentation, echte Hilfe in Foren-Threads und anschließend je ein
+  Launch-Post. Kernsatz: niemand sucht qrsalvage, alle suchen ihr Problem — wir werben nicht,
+  wir liegen bereit.
 
 Danach, bewusst nachrangig (verbreitert statt vertieft):
 
@@ -144,5 +141,5 @@ Browser-Version konsumiert sie unverändert.
 
 1. Hilft es im Rettungsmoment, oder verbreitert es nur die Liste?
 2. Läuft es ohne Server — heute auf 127.0.0.1, morgen statisch im Browser?
-3. Stärkt es die Smart-Home-Nische, oder verwässert es den Fokus?
+3. Vertieft es die Rettung beschädigter QR-Codes, ohne unbelegte Universalversprechen?
 4. Ist sein Nutzen messbar, bevor er behauptet wird?

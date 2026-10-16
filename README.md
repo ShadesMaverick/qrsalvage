@@ -11,12 +11,14 @@
 **[Use qrsalvage in your browser](https://shadesmaverick.github.io/qrsalvage/)** —
 the photograph and recovered payload stay on your device.
 
-A QR code laser-engraved onto the curved dome of a light bulb. Grey on white, roughly nine
-pixels per module in the only photograph that exists of it, a glare gradient across the middle
-and a yellowed stain over one corner. No phone reads it. No online decoder reads it. It took
-its owner a year and a half.
+qrsalvage recovers QR codes from damaged photographs and difficult surfaces: scratched or faded
+packaging, torn tickets, worn documents, signs, inventory tags, product labels and devices. It
+does not need to know what the code belongs to or what it contains.
 
-qrsalvage reads codes like that.
+The project began with a QR code laser-engraved onto the curved dome of a light bulb: grey on
+white, roughly nine pixels per module in the only photograph that existed, with a glare gradient
+across the middle and a yellowed stain over one corner. No phone or online decoder read it.
+qrsalvage reads codes like that, but is not limited to that use case.
 
 ![input, recovered matrix and re-encoded result](docs/example.png)
 
@@ -132,21 +134,22 @@ about 1.4 mm across. SVG and PDF carry that size for real; the PNG is for sharin
 the payload alongside the figures that say how much to trust it, and `html` is a self-contained
 report showing the photograph, the recovered matrix and the evidence between them.
 
-Recognised payloads — Zigbee install codes, Matter onboarding codes, Wi-Fi credentials — are
-explained next to the recovered text: what the code is and where one types it. For Matter that
-includes the derived 11-digit *manual pairing code*, which is precisely what a person whose
-code cannot be scanned needs. In the JSON export the split is opt-in via `--split-payload`:
-install codes, passcodes and network keys are secrets, not identifiers.
+Recognised payloads — web addresses, contact cards, email and phone links, locations, Wi-Fi
+credentials, Zigbee install codes and Matter onboarding codes — are labelled and explained next
+to the recovered text. Anything else remains plain text rather than being guessed. For Matter,
+the result includes the derived 11-digit *manual pairing code*. In the JSON export, structured
+fields are opt-in via `--split-payload`; install codes, passcodes and network keys are secrets,
+not identifiers.
 
 Turn a pile of photographs of *different* codes into a printable register:
 
 ```
-qrsalvage catalog lampe.jpg heizung.jpg tor.jpg --titles "LED Lampe Bad" "Heizung" "Gartentor"
+qrsalvage catalog box.jpg ticket.jpg sign.jpg --titles "Archive box 14" "Ticket A" "North gate"
 ```
 
 Every photograph is recovered on its own and the result is one A4 PDF, three entries per page:
 the re-encoded code at a real physical size on the left, its content on the right, your title
-above — because the payload identifies the code, but the title identifies the lamp. Duplicate
+above — because the payload identifies the code, but the title identifies the physical item. Duplicate
 photographs of one code fold into a single entry, and titles default to the file names. The
 same catalogue is built in the browser: drop the pile, switch to "different codes", name each
 card, download.

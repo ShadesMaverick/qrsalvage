@@ -25,13 +25,12 @@ function thanksHtml() {
     .map((d) => `<a href="${escapeHtml(d.url)}" target="_blank" rel="noopener noreferrer">` +
                 `<button>${escapeHtml(d.label)}</button></a>`)
     .join("");
-  // A named amount and a named purpose, because both are levers docs/REACH.md spells out: a
-  // concrete suggestion anchors where an open field creates a decision to abandon, and small
-  // donations measurably rise when the money has a stated destination.
+  // A named amount and a named purpose make the ask concrete rather than leaving an empty
+  // decision. The wording applies equally to every kind of recovered QR code.
   return `<div class="thanks"><img src="axolotl.png" alt="">
     <span>${escapeHtml(window.qrBackend.privacyNote)}
-    Saved your lamp? <em>5&nbsp;€</em> — about what the rescued bulb was worth — covers the
-    domain and keeps this tool alive.</span>
+    Saved your QR code? <em>5&nbsp;€</em> helps maintain the recovery engine and keeps this
+    private browser tool available.</span>
     <span class="links">${links}</span></div>`;
 }
 const drop = $("drop"), fileInput = $("file"), status = $("status");
@@ -136,7 +135,7 @@ async function openCamera() {
     : "Fill the frame with the code — one press, one photograph, one catalogue entry.";
   $("capture").textContent = mode === "one" ? "Capture 4 frames" : "Capture";
 
-  // A torch helps exactly where this tool gets used: lamp sockets and dark corners.
+  // A torch helps on shadowed, reflective and low-contrast labels in dark corners.
   const track = cameraStream.getVideoTracks()[0];
   const capabilities = track.getCapabilities ? track.getCapabilities() : {};
   $("torch").classList.toggle("hidden", !capabilities.torch);
@@ -725,9 +724,8 @@ function render(a) {
   const payload = $("payload");
   payload.classList.toggle("miss", !a.ok);
   if (a.ok) {
-    // The follow-up question, answered in place: what is this, and where does one type it.
-    // For Matter the derived manual pairing code is the star -- it exists precisely for the
-    // case where scanning is not an option, which is this tool's entire audience.
+    // Identify only formats evidenced by the recovered bytes. Product, brand and purpose remain
+    // unknown unless the payload itself says otherwise; plain text is a valid, honest answer.
     let knowledge = "";
     if (a.payload_info) {
       const rows = Object.entries(a.payload_info.fields)
@@ -736,7 +734,8 @@ function render(a) {
           `<dt>${escapeHtml(key.replace(/_/g, " "))}</dt><dd>${escapeHtml(String(value))}</dd>`)
         .join("");
       knowledge =
-        `<div class="knowledge"><div class="note">${escapeHtml(a.payload_info.hint)}</div>
+        `<div class="knowledge"><div class="payload-kind">${escapeHtml(a.payload_info.label)}</div>
+         <div class="note">${escapeHtml(a.payload_info.hint)}</div>
          <dl>${rows}</dl>
          <div class="note quiet">${escapeHtml(a.payload_info.fields.warning || "")}</div></div>`;
     }
@@ -805,8 +804,9 @@ function render(a) {
 
   token = a.token || null;
   $("exports").classList.toggle("hidden", !a.exportable);
-  // The split is only offered when there is a recognised payload to split.
-  $("splitRow").style.display = a.ok && a.payload_info ? "flex" : "none";
+  // Plain text is identified for the result card but has no component fields to export.
+  $("splitRow").style.display = a.ok && a.payload_info && a.payload_info.kind !== "text"
+    ? "flex" : "none";
 }
 
 async function download(format) {
