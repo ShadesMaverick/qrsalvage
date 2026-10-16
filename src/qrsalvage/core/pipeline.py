@@ -35,7 +35,7 @@ from .geometry import (
     select_finder_triple,
     third_finder_candidates,
 )
-from .layout import read_format
+from .layout import codeword_positions, read_format
 from .matrix import ModuleMatrix
 from .policy import attempt_error_rate, choose_grid, fusion_rank, should_restart
 from .preprocess import prepare
@@ -133,6 +133,45 @@ ANCHOR_SCALES = (0.94, 0.97, 1.03, 1.06)
 # sweep keep searching, and on one seed the very case that had produced byte garbage went on
 # to decode correctly from a later basin. The final tally is at ANCHOR_SWEEP above.
 ANCHOR_WITNESS_CONFIDENCE = 0.35
+# A bit this close to 0.5 is effectively absent from the photograph. The cutoff is deliberately
+# narrow: it recognizes exact featureless damping and numerical residue around it, not ordinary
+# low contrast. The release panel exposed the distinction: valid wrong payloads had seven to ten
+# such codewords under seven L-level checks; the worn cases correctly recovered at the decoding
+# boundary had none.
+REPAIR_UNKNOWN_CONFIDENCE = 0.02
+
+
+def repair_has_sufficient_evidence(mm: ModuleMatrix, repair: RepairResult) -> bool:
+    """Reject a repaired payload when the photograph leaves too many codewords unknown.
+
+    Reed-Solomon can only identify a unique answer when the count of effectively erased
+    codewords does not exceed its check symbols. The repair routine erases a selected prefix,
+    but a featureless patch can leave additional codewords at exact probability 0.5 outside
+    that prefix. A decoder accepting the resulting valid matrix would then report one arbitrary
+    member of many possible payloads.
+    """
+    if repair.matrix is None or not repair.ecc or repair.blocks < 1:
+        return False
+    # The format field chooses ECC and mask before the payload is even read. A corrected format
+    # header plus a repaired payload lets two uncertain layers certify each other; require the
+    # redundant header copies to agree exactly before returning repaired text.
+    if repair.format_distance not in (None, 0):
+        return False
+    try:
+        version = version_for_modules(mm.modules)
+        plan = block_plan(version, repair.ecc)
+        positions = codeword_positions(mm.modules, version, repair.ecc)
+    except KeyError:
+        return False
+    flat = mm.posterior.ravel()
+    for block_positions in positions:
+        unknown = sum(
+            min(abs(float(flat[position]) - 0.5) for position in word) < REPAIR_UNKNOWN_CONFIDENCE
+            for word in block_positions
+        )
+        if unknown > plan.ec_per_block:
+            return False
+    return True
 
 
 # The progress callback a shell injects: (event name, JSON-ready payload). See _emit.
@@ -652,7 +691,7 @@ def _decode_chain(
         verify=verify,
         on_step=lambda count: _emit(progress, "repair", method="ladder", step=count),
     )
-    if repair_result.ok:
+    if repair_result.ok and repair_has_sufficient_evidence(mm, repair_result):
         assert repair_result.matrix is not None  # ok is defined as exactly this
         text = decode_matrix(repair_result.matrix)
         if text:
@@ -667,7 +706,7 @@ def _decode_chain(
         verify=verify,
         on_step=lambda tried: _emit(progress, "repair", method="scattered", step=tried),
     )
-    if scattered.ok:
+    if scattered.ok and repair_has_sufficient_evidence(mm, scattered):
         assert scattered.matrix is not None  # ok is defined as exactly this
         text = decode_matrix(scattered.matrix)
         if text:
