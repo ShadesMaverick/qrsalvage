@@ -92,21 +92,36 @@ def format_positions(modules: int) -> tuple[list[tuple[int, int]], list[tuple[in
     return first, second
 
 
+def read_format_copies(matrix: np.ndarray) -> tuple[tuple[str, int, int] | None, ...]:
+    """Decode each redundant format copy independently, preserving disagreement."""
+    candidates: list[tuple[str, int, int] | None] = []
+    for positions in format_positions(matrix.shape[0]):
+        raw = 0
+        for bit, (row, col) in enumerate(positions):
+            if matrix[row, col]:
+                raw |= 1 << bit
+        candidates.append(decode_format(raw))
+    return tuple(candidates)
+
+
+def read_format_consensus(matrix: np.ndarray) -> tuple[str, int, int] | None:
+    """Return one format layout only when all readable redundant copies agree."""
+    candidates = [candidate for candidate in read_format_copies(matrix) if candidate is not None]
+    if not candidates:
+        return None
+    layouts = {(ecc, mask) for ecc, mask, _distance in candidates}
+    if len(layouts) != 1:
+        return None
+    return min(candidates, key=lambda candidate: candidate[2])
+
+
 def read_format(matrix: np.ndarray) -> tuple[str, int, int] | None:
     """Read the format information from both copies and take the more credible one.
 
     Two independent copies, each with its own BCH protection: a misreading shows up here before
     it propagates through the entire decoding.
     """
-    candidates = []
-    for positions in format_positions(matrix.shape[0]):
-        raw = 0
-        for bit, (r, c) in enumerate(positions):
-            if matrix[r, c]:
-                raw |= 1 << bit
-        decoded = decode_format(raw)
-        if decoded is not None:
-            candidates.append(decoded)
+    candidates = [candidate for candidate in read_format_copies(matrix) if candidate is not None]
 
     if not candidates:
         return None

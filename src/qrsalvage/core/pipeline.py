@@ -35,7 +35,7 @@ from .geometry import (
     select_finder_triple,
     third_finder_candidates,
 )
-from .layout import codeword_positions, read_format
+from .layout import codeword_positions, read_format, read_format_consensus, read_format_copies
 from .matrix import ModuleMatrix
 from .policy import attempt_error_rate, choose_grid, fusion_rank, should_restart
 from .preprocess import prepare
@@ -141,26 +141,32 @@ ANCHOR_WITNESS_CONFIDENCE = 0.35
 REPAIR_UNKNOWN_CONFIDENCE = 0.02
 
 
-def repair_has_sufficient_evidence(mm: ModuleMatrix, repair: RepairResult) -> bool:
-    """Reject a repaired payload when the photograph leaves too many codewords unknown.
+def matrix_has_sufficient_evidence(
+    mm: ModuleMatrix,
+    ecc: str,
+    format_distance: int | None = None,
+    *,
+    require_exact_format: bool = False,
+) -> bool:
+    """Reject a decoded payload when the photograph leaves too many codewords unknown.
 
     Reed-Solomon can only identify a unique answer when the count of effectively erased
-    codewords does not exceed its check symbols. The repair routine erases a selected prefix,
-    but a featureless patch can leave additional codewords at exact probability 0.5 outside
-    that prefix. A decoder accepting the resulting valid matrix would then report one arbitrary
-    member of many possible payloads.
+    codewords does not exceed its check symbols. A featureless patch can leave more complete
+    codewords absent than the chosen decoder route acknowledges. Accepting any valid matrix in
+    that state -- direct, repaired, or found by probing -- would report one arbitrary member of
+    many possible payloads.
     """
-    if repair.matrix is None or not repair.ecc or repair.blocks < 1:
+    if not ecc:
         return False
     # The format field chooses ECC and mask before the payload is even read. A corrected format
     # header plus a repaired payload lets two uncertain layers certify each other; require the
     # redundant header copies to agree exactly before returning repaired text.
-    if repair.format_distance not in (None, 0):
+    if require_exact_format and format_distance not in (None, 0):
         return False
     try:
         version = version_for_modules(mm.modules)
-        plan = block_plan(version, repair.ecc)
-        positions = codeword_positions(mm.modules, version, repair.ecc)
+        plan = block_plan(version, ecc)
+        positions = codeword_positions(mm.modules, version, ecc)
     except KeyError:
         return False
     flat = mm.posterior.ravel()
@@ -172,6 +178,40 @@ def repair_has_sufficient_evidence(mm: ModuleMatrix, repair: RepairResult) -> bo
         if unknown > plan.ec_per_block:
             return False
     return True
+
+
+def repair_has_sufficient_evidence(mm: ModuleMatrix, repair: RepairResult) -> bool:
+    """Apply the shared payload-evidence contract to one Reed-Solomon result."""
+    if repair.matrix is None or not repair.ecc or repair.blocks < 1:
+        return False
+    observed = _repair_format(mm.hard())
+    if observed is None or (observed[0], observed[1]) != (repair.ecc, repair.mask):
+        return False
+    return matrix_has_sufficient_evidence(
+        mm, repair.ecc, repair.format_distance, require_exact_format=True
+    )
+
+
+def _unambiguous_format(matrix: np.ndarray) -> tuple[str, int, int] | None:
+    """Read one ECC/mask choice only when all readable format copies agree."""
+    return read_format_consensus(matrix)
+
+
+def _repair_format(matrix: np.ndarray) -> tuple[str, int, int] | None:
+    """Require two agreeing readable copies and one exact witness for payload repair."""
+    copies = read_format_copies(matrix)
+    if len(copies) != 2 or any(candidate is None for candidate in copies):
+        return None
+    candidates = [candidate for candidate in copies if candidate is not None]
+    layouts = {(ecc, mask) for ecc, mask, _distance in candidates}
+    if len(layouts) != 1 or not any(distance == 0 for _ecc, _mask, distance in candidates):
+        return None
+    return min(candidates, key=lambda candidate: candidate[2])
+
+
+def _observed_format(mm: ModuleMatrix) -> tuple[str, int, int] | None:
+    """Read unambiguous format evidence from the measured hard matrix."""
+    return _unambiguous_format(mm.hard())
 
 
 # The progress callback a shell injects: (event name, JSON-ready payload). See _emit.
@@ -679,8 +719,9 @@ def _decode_chain(
     (ANCHOR_WITNESS_CONFIDENCE) before adopting what this chain returns.
     """
     hard = mm.hard()
+    header = _observed_format(mm)
     text = decode_matrix(hard)
-    if text:
+    if text and header is not None and matrix_has_sufficient_evidence(mm, header[0]):
         return SearchResult(text=text, candidates_tried=1, matrix=hard), None
 
     verify = lambda m: decode_matrix(m) is not None  # noqa: E731 - two words, used twice
@@ -721,6 +762,10 @@ def _decode_chain(
         budget=budget,
         on_step=lambda tried: _emit(progress, "probe", tried=tried, budget=budget),
     )
+    if search.text is not None:
+        candidate_header = None if search.matrix is None else _unambiguous_format(search.matrix)
+        if candidate_header is None or not matrix_has_sufficient_evidence(mm, candidate_header[0]):
+            return SearchResult(text=None, candidates_tried=search.candidates_tried), repair_result
     return search, repair_result
 
 

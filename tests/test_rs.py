@@ -16,13 +16,15 @@ from qrsalvage.core.layout import (
     codeword_positions,
     deinterleave,
     extract_codewords,
+    format_positions,
     function_mask,
     interleave,
     place_codewords,
     placement_order,
     read_format,
+    read_format_consensus,
 )
-from qrsalvage.core.qrspec import BLOCK_PLANS, TOTAL_CODEWORDS, block_plan
+from qrsalvage.core.qrspec import BLOCK_PLANS, TOTAL_CODEWORDS, block_plan, format_bits
 from qrsalvage.core.repair import repair_progressive, repair_scattered
 from qrsalvage.core.structure import version_for_modules
 
@@ -134,6 +136,19 @@ def test_extract_and_place_back_returns_the_same_matrix(version):
     rebuilt[~function_mask(matrix.shape[0])] = False
     place_codewords(rebuilt, codewords, mask)
     assert np.array_equal(rebuilt, matrix)
+
+
+def test_format_consensus_rejects_two_exact_but_different_copies():
+    matrix = reencode("FORMAT-COPY-CONFLICT", ecc="L")
+    header = read_format(matrix)
+    assert header is not None
+    first, _second = format_positions(matrix.shape[0])
+    conflicting = format_bits("M", header[1])
+    for bit, (row, col) in enumerate(first):
+        matrix[row, col] = bool(conflicting & (1 << bit))
+
+    assert read_format(matrix) == ("M", header[1], 0)
+    assert read_format_consensus(matrix) is None
 
 
 @pytest.mark.parametrize("version", VERSIONS)
