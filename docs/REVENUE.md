@@ -4,6 +4,13 @@ Stand: Oktober 2026. Das ist ein Experimentplan, keine Umsatzprognose. Das Ziel 
 erreicht, wenn mindestens 35 € netto in drei aufeinanderfolgenden Kalendermonaten eingegangen
 sind. Klicks, Sterne und Absichtserklärungen zählen nicht als Umsatz.
 
+Technischer Release-Stand: Das disjunkte synthetische Release-Panel auf Commit `dfaa6a8` lieferte
+139 exakte Wiederherstellungen, 5 ehrliche Fehlschläge und keinen gültigen falschen Klartext in
+144 Fällen (96,5 % exakt; Wilson-95-%-Intervall 92,1–98,5 %). Das ist Evidenz für genau diesen
+Generator und dieses Panel, nicht für beliebige reale Etiketten. Bei null beobachteten Fehltexten
+liegt die einseitige exakte 95-%-Obergrenze für ihre Fallrate noch bei 2,1 %; „kein Fehltext
+beobachtet" ist daher keine Nullrisiko-Behauptung.
+
 ## Was der Markt bereits sagt
 
 Der allgemeine "kaputten QR-Code reparieren"-Markt ist besetzt und preislich schwierig: Semacode,
