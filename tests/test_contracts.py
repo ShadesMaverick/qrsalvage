@@ -131,3 +131,59 @@ def test_oracle_scopes_do_not_leak_between_threads():
         thread.join()
 
     assert answers == {"first": "first", "second": "second"}
+
+
+def test_repair_evidence_rejects_more_unknown_codewords_than_redundancy_covers():
+    modules = 21
+    posterior = np.full((modules, modules), 0.99)
+    known_dark, known_light = pipeline.structure_mask(modules)
+    matrix = pipeline.ModuleMatrix(posterior, known_dark, known_light)
+    positions = pipeline.codeword_positions(modules, 1, "L")[0]
+    plan = pipeline.block_plan(1, "L")
+    for word in positions[: plan.ec_per_block + 1]:
+        matrix.posterior.flat[word[0]] = 0.5
+    repair = pipeline.RepairResult(
+        matrix=matrix.hard(),
+        ecc="L",
+        format_distance=0,
+        blocks=1,
+        erasures_used=plan.ec_per_block,
+    )
+
+    assert not pipeline.repair_has_sufficient_evidence(matrix, repair)
+
+
+def test_repair_evidence_accepts_the_unique_decoding_boundary():
+    modules = 29
+    posterior = np.full((modules, modules), 0.99)
+    known_dark, known_light = pipeline.structure_mask(modules)
+    matrix = pipeline.ModuleMatrix(posterior, known_dark, known_light)
+    positions = pipeline.codeword_positions(modules, 3, "L")[0]
+    plan = pipeline.block_plan(3, "L")
+    for word in positions[: plan.ec_per_block]:
+        matrix.posterior.flat[word[0]] = 0.5
+    repair = pipeline.RepairResult(
+        matrix=matrix.hard(),
+        ecc="L",
+        format_distance=0,
+        blocks=1,
+        erasures_used=plan.ec_per_block - 2,
+        errors_corrected=1,
+    )
+
+    assert pipeline.repair_has_sufficient_evidence(matrix, repair)
+
+
+def test_repair_evidence_rejects_a_corrected_format_header():
+    modules = 21
+    posterior = np.full((modules, modules), 0.99)
+    known_dark, known_light = pipeline.structure_mask(modules)
+    matrix = pipeline.ModuleMatrix(posterior, known_dark, known_light)
+    repair = pipeline.RepairResult(
+        matrix=matrix.hard(),
+        ecc="L",
+        format_distance=1,
+        blocks=1,
+    )
+
+    assert not pipeline.repair_has_sufficient_evidence(matrix, repair)
