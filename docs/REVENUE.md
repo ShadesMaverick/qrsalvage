@@ -10,6 +10,8 @@ Technischer Release-Stand: Das disjunkte synthetische Release-Panel auf Commit `
 Generator und dieses Panel, nicht für beliebige reale Etiketten. Bei null beobachteten Fehltexten
 liegt die einseitige exakte 95-%-Obergrenze für ihre Fallrate noch bei 2,1 %; „kein Fehltext
 beobachtet" ist daher keine Nullrisiko-Behauptung.
+Die 144 Rohzeilen liegen unter `docs/evidence/benchmark-release-dfaa6a8.jsonl`
+(SHA-256 `965fd6b4315323ca3f7d5861d50d4986ec364efa509187fa4dd3ff6f872b654e`).
 
 ## Was der Markt bereits sagt
 
