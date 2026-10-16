@@ -63,6 +63,7 @@ disallow_incomplete_defs = true
 [tool.pytest.ini_options]
 minversion = "8.0"
 addopts = "-q --strict-markers"
+pythonpath = ["."]
 testpaths = ["tests"]
 markers = [
     "regression: laeuft gegen das Bildkorpus in fixtures/, langsam",
