@@ -8,6 +8,9 @@
 
 *recover QR codes from what's left of them*
 
+**[Use qrsalvage in your browser](https://shadesmaverick.github.io/qrsalvage/)** —
+the photograph and recovered payload stay on your device.
+
 A QR code laser-engraved onto the curved dome of a light bulb. Grey on white, roughly nine
 pixels per module in the only photograph that exists of it, a glare gradient across the middle
 and a yellowed stain over one corner. No phone reads it. No online decoder reads it. It took
