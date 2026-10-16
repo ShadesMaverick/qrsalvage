@@ -104,6 +104,8 @@ PAGE_FILES = (
     "index.html",
     "method.html",
     "legal.html",
+    "robots.txt",
+    "sitemap.xml",
     "app.js",
     "worker.js",
     "style.css",
@@ -143,6 +145,11 @@ AUDIT_EXPLAINED: tuple[tuple[str, str], ...] = (
         "law requires the privacy notice to name who serves the page and where their statement "
         "is, so unlike every other entry here this address cannot simply be dropped. Both are "
         "href targets a reader chooses to follow, never fetched; connect-src 'self' is untouched",
+    ),
+    (
+        r"shadesmaverick\.github\.io/qrsalvage/",
+        "the canonical site address in search metadata, structured data and the sitemap; these "
+        "are crawler declarations, not browser fetches",
     ),
 )
 
