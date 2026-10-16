@@ -89,7 +89,7 @@ Break any of these and the project stops being itself:
 | **Backend** | `web/backend-server.js` / `web/backend-worker.js`, one of them installed as `backend.js` | the page from where the work happens — loopback HTTP or Pyodide in a worker |
 | **Progress** | `progress=` callback on `solve()`/`solve_many()` | live reporting from the core without the core knowing who listens; feeds the CLI, the NDJSON stream and the worker unchanged |
 | **Fusion** | `ensemble.fuse_images`, rules in `FUSION_RULES` | how several photographs of one code are combined |
-| **Payload intelligence** | `export.payload_fields` | recognising what a recovered text *is* (Zigbee, Matter, Wi-Fi) |
+| **Payload intelligence** | `export.payload_fields` | conservatively identifying recovered content (Zigbee, Matter, Wi-Fi, URL, email, phone, SMS, geo, vCard or plain text) without guessing its product or purpose |
 | **Symbology boundary** | `structure.py`, `layout.py`, `qrspec.py` | the only QR-specific modules; a new symbology is a new set of these, not a parameter |
 
 ## Where do I change …

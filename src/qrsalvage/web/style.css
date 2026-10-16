@@ -215,6 +215,8 @@
   #splitRow { display: flex; gap: .5rem; align-items: flex-start; margin-top: .9rem;
               max-width: 46rem; }
   .knowledge { margin-top: .9rem; padding-top: .8rem; border-top: 1px solid var(--line); }
+  .payload-kind { color: var(--pink-soft); font: 600 .76rem/1.2 var(--mono);
+                  letter-spacing: .08em; text-transform: uppercase; }
   .thanks {
     display: flex; gap: .8rem; align-items: center; flex-wrap: wrap;
     margin-top: .9rem; padding-top: .85rem; border-top: 1px solid var(--line);

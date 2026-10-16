@@ -16,10 +16,11 @@ Die 144 Rohzeilen liegen unter `docs/evidence/benchmark-release-dfaa6a8.jsonl`
 ## Was der Markt bereits sagt
 
 Der allgemeine "kaputten QR-Code reparieren"-Markt ist besetzt und preislich schwierig: Semacode,
-QR Repair und EAN Check bieten browserbasierte Wiederherstellung kostenlos an.[1][2][3] qrsalvage
-sollte deshalb nicht als weiterer universeller QR-Reparierer auftreten. Sein belastbarer Vorsprung
-ist enger: gewölbte und gravierte Gerätecodes, Mehrbildfusion, diagnostizierte Unsicherheit,
-Smart-Home-Payloads und nachvollziehbare Messungen.
+QR Repair und EAN Check bieten browserbasierte Wiederherstellung kostenlos an.[1][2][3].
+qrsalvage tritt trotzdem mit einem universellen Einstieg auf, weil dieselben Schadensbilder auf
+Verpackungen, Tickets, Dokumenten, Schildern, Inventaretiketten, Produkten und Geräten vorkommen.
+Die Differenzierung bleibt technisch konkret: gewölbte und gravierte Codes, Mehrbildfusion,
+diagnostizierte Unsicherheit, konservative Inhaltserkennung und nachvollziehbare Messungen.
 
 Diese Nische hat einen konkreten Arbeitsablauf. Einige Bosch-Geräte benötigen den langen Inhalt
 des QR-Codes als Zigbee-Install-Code; die nebenstehende Kurzfassung reicht ausdrücklich nicht.[4]

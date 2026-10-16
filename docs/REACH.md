@@ -9,9 +9,10 @@ und was das realistisch einbringt. Wie alles unter `docs/` deutsch und an uns ge
 **Niemand sucht qrsalvage. Alle suchen ihr Problem.**
 
 Kein Mensch abonniert ein QR-Rettungswerkzeug, folgt seinem Account oder erinnert sich in
-sechs Monaten an seinen Namen. Es gibt genau einen Moment, in dem jemand uns will: Die Lampe
-ist gekauft, die App verlangt den Code, der Code ist unlesbar, drei Reader haben versagt, und
-die Person tippt entnervt eine Suchanfrage. Dieser Moment ist der ganze Markt.
+sechs Monaten an seinen Namen. Es gibt genau einen Moment, in dem jemand uns will: Ein Code auf
+einer Verpackung, einem Ticket, Dokument, Schild, Produktetikett oder Gerät ist unlesbar,
+mehrere Reader haben versagt, und die Person tippt entnervt eine Suchanfrage. Dieser Moment ist
+der ganze Markt.
 
 Daraus folgt die Strategie vollständig: **Wir werben nicht, wir liegen bereit.** Jede Maßnahme
 in diesem Dokument beantwortet die Frage „Sind wir in diesem Moment auffindbar und sofort
@@ -20,8 +21,9 @@ nach Marketing aussieht.
 
 Das Ziel „die Leute denken QR → mein Tool" ist deshalb nicht über Bekanntheit zu erreichen,
 sondern über **Auffindbarkeit plus einen Empfehlungsreflex bei den wenigen, die oft gefragt
-werden**: die Hilfsbereiten in den Smart-Home-Foren. Nicht tausend Nutzer müssen uns kennen,
-sondern die fünfzig Leute, die in jedem Forum die Antworten schreiben.
+werden**: Hilfsbereite in Reparatur-, Technik-, Archiv-, Inventar- und Smart-Home-Communities.
+Nicht tausend Nutzer müssen uns kennen, sondern die Menschen, die in solchen Fällen Antworten
+geben.
 
 ## Die ehrliche Zahl
 
@@ -63,8 +65,8 @@ Vertrauensfrage — und wir können sie wörtlich wahr beantworten, weil es kein
 Nicht „qrsalvage — recover QR codes from what's left of them" als Erstes, sondern das Problem
 der suchenden Person, in ihren Worten. Erst danach der Name.
 
-- Erste Zeile sinngemäß: **„Der QR-Code deines Geräts lässt sich nicht scannen? Foto hochladen
-  — alles bleibt auf deinem Gerät."**
+- Erste Zeile sinngemäß: **„Beschädigter QR-Code auf Verpackung, Ticket, Dokument, Schild oder
+  Produkt? Foto auswählen — alles bleibt auf deinem Gerät."**
 - Direkt darunter der Knopf, keine Erklärstrecke davor. Wer hier landet, ist genervt.
 - Die Erklärung (Methodenseite, Live-Ansicht) ist der Glaubwürdigkeitsbeweis *danach*, nicht
   die Begrüßung.
@@ -77,6 +79,7 @@ gehören wörtlich auf die Seite (in Überschriften, FAQ-Abschnitten, `<title>`,
 
 - „QR code won't scan" / „QR-Code lässt sich nicht scannen"
 - „QR code damaged / scratched / faded / blurry"
+- „QR code on packaging / ticket / document / product label"
 - „QR code on curved surface" — unser Gründungsfall, erstaunlich wenig besetzt
 - „Zigbee install code unreadable", „Matter pairing code QR damaged"
 - „Hue / IKEA / Aqara / Sonoff QR code scan failed"
@@ -144,8 +147,9 @@ sonst drei Absätze braucht. Ohne dieses GIF keinen Post.
 
 Die Mechanik steht (Karte auf der Erfolgsseite, unter dem Klartext). Was sie besser macht:
 
-- **Konkreter Betrag statt offenem Feld.** „5 € — ungefähr das, was die gerettete Lampe wert
-  war." Ein Vorschlag verankert; ein leeres Feld erzeugt Entscheidungslast und damit Abbruch.
+- **Konkreter Betrag statt offenem Feld.** „QR-Code gerettet? 5 € helfen, die Recovery-Engine
+  zu pflegen und das private Browserwerkzeug verfügbar zu halten." Ein Vorschlag verankert;
+  ein leeres Feld erzeugt Entscheidungslast und damit Abbruch.
 - **Zweckbindung nennen.** „Deckt Domain und Weiterentwicklung." Kleinspenden steigen messbar,
   wenn der Zweck konkret ist.
 - **Die Privacy-Aussage steht direkt daneben**, weil sie im selben Moment ihre Wirkung

@@ -15,13 +15,17 @@ from __future__ import annotations
 
 import base64
 import html
+import ipaddress
 import json
+import re
 from dataclasses import dataclass
+from urllib.parse import unquote, urlsplit
 
 import numpy as np
 
 MM_PER_INCH = 25.4
 POINTS_PER_INCH = 72.0
+_HEX = re.compile(r"[0-9A-Fa-f]+")
 
 
 @dataclass(frozen=True)
@@ -289,22 +293,36 @@ def zigbee_fields(text: str) -> dict | None:
     identifier, and writing it into its own labelled field makes it that much easier to paste
     somewhere it does not belong.
     """
-    if not text.startswith("Z:"):
+    if not text.startswith("Z:") or text.endswith(("$", "%")):
         return None
     fields: dict[str, str] = {}
     for chunk in text.replace("%", "$").split("$"):
-        if len(chunk) > 2 and chunk[1] == ":":
-            fields[chunk[0]] = chunk[2:]
-    if "Z" not in fields:
+        if len(chunk) <= 2 or chunk[1] != ":" or chunk[0] in fields:
+            return None
+        fields[chunk[0]] = chunk[2:]
+    if any(re.fullmatch(r"[A-Z0-9]", key) is None or not value for key, value in fields.items()):
+        return None
+    if "Z" not in fields or "I" not in fields:
+        return None
+    eui64 = fields.get("Z", "")
+    install_code = fields.get("I", "")
+    if not re.fullmatch(r"[0-9A-Fa-f]{16}", eui64):
+        return None
+    # Zigbee 3.0 uses a 16-byte secret plus a two-byte CRC. Zigbee Smart Energy also permits
+    # 6-, 8- and 12-byte secrets, each followed by the same two-byte CRC.
+    if len(install_code) not in {16, 20, 28, 36} or not _HEX.fullmatch(install_code):
+        return None
+    raw_install_code = bytes.fromhex(install_code)
+    expected_crc = _crc16_x25(raw_install_code[:-2]).to_bytes(2, "little")
+    if raw_install_code[-2:] != expected_crc:
         return None
 
     out = {
-        "eui64": fields["Z"],
-        "eui64_colons": ":".join(fields["Z"][i : i + 2] for i in range(0, len(fields["Z"]), 2)),
+        "eui64": eui64,
+        "eui64_colons": ":".join(eui64[i : i + 2] for i in range(0, len(eui64), 2)),
+        "install_code": install_code[:-4],
+        "install_code_crc": install_code[-4:],
     }
-    if "I" in fields and len(fields["I"]) >= 36:
-        out["install_code"] = fields["I"][:-4]
-        out["install_code_crc"] = fields["I"][-4:]
     if "M" in fields:
         out["model"] = fields["M"]
     if "D" in fields:
@@ -315,9 +333,8 @@ def zigbee_fields(text: str) -> dict | None:
 
 # --- what a recovered payload actually is ------------------------------------------------
 #
-# The person who just rescued a code faces the follow-up question at once: what is this, and
-# where do I type it? For the smart-home payloads this tool exists for, that question has a
-# precise answer, so it gets computed rather than left as an exercise.
+# The person who just rescued a code faces the follow-up question at once: what is this? Answer
+# only when the payload's own grammar establishes a type; the physical object never does.
 
 # Matter's onboarding payload is base38 over this exact alphabet (Matter spec 5.1.3).
 _BASE38 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-."
@@ -357,6 +374,16 @@ def _verhoeff_digit(digits: str) -> int:
     return _VERHOEFF_INV[checksum]
 
 
+def _crc16_x25(data: bytes) -> int:
+    """Return the Zigbee install-code CRC (CRC-16/X-25)."""
+    crc = 0xFFFF
+    for byte in data:
+        crc ^= byte
+        for _ in range(8):
+            crc = (crc >> 1) ^ 0x8408 if crc & 1 else crc >> 1
+    return crc ^ 0xFFFF
+
+
 def _base38_decode(encoded: str) -> bytes:
     """Matter's base38: five characters carry three bytes, the tail four-to-two or two-to-one."""
     out = bytearray()
@@ -376,24 +403,64 @@ def _base38_decode(encoded: str) -> bytes:
     return bytes(out)
 
 
-def matter_fields(text: str) -> dict | None:
-    """Unpack a Matter onboarding payload, if that is what this is.
+def _valid_matter_optional_tlv(data: bytes) -> bool:
+    """Validate the optional-data subset accepted by Matter's setup-payload parser."""
+    if not data or data[0] != 0x15:  # anonymous-tagged structure
+        return False
+    index = 1
+    tags: set[int] = set()
+    fixed_sizes = (1, 2, 4, 8, 1, 2, 4, 8)
+    while index < len(data):
+        control = data[index]
+        index += 1
+        element_type = control & 0x1F
+        tag_control = control >> 5
+        if element_type == 0x18:
+            return tag_control == 0 and index == len(data)
+        # The reference parser accepts string or integer optional values. Vendor tags live in
+        # 0x80..0xff; common tag 0 (serial number) may be a string or unsigned integer.
+        if tag_control != 1 or element_type not in {*range(8), *range(0x0C, 0x10)}:
+            return False
+        if index >= len(data):
+            return False
+        tag = data[index]
+        index += 1
+        if tag in tags:
+            return False
+        tags.add(tag)
+        if tag < 0x80:
+            if tag != 0 or element_type not in {*range(4, 8), *range(0x0C, 0x10)}:
+                return False
+        elif element_type not in {*range(4), *range(0x0C, 0x10)}:
+            return False
+        if element_type < 8:
+            value_size = fixed_sizes[element_type]
+        else:
+            length_size = 1 << (element_type - 0x0C)
+            if index + length_size > len(data):
+                return False
+            value_size = int.from_bytes(data[index : index + length_size], "little")
+            index += length_size
+        if index + value_size > len(data):
+            return False
+        if element_type >= 0x0C:
+            try:
+                data[index : index + value_size].decode("utf-8")
+            except UnicodeDecodeError:
+                return False
+        index += value_size
+    return False
 
-    The QR string hides the one thing a person with an unscannable code needs most: the
-    11-digit *manual pairing code* that every commissioner accepts typed in. It is derivable
-    from the discriminator and the passcode (Matter spec 5.1.4), so it gets derived -- that is
-    the difference between handing someone a rescued string and handing them a paired lamp.
-    """
-    if not text.startswith("MT:"):
-        return None
+
+def _matter_segment_fields(encoded: str) -> dict | None:
+    """Validate and unpack one base38 segment of a Matter onboarding payload."""
     try:
-        # Concatenated multi-device payloads join segments with '*'; the first one carries us.
-        packed = _base38_decode(text[3:].split("*", 1)[0])
-        if len(packed) < 11:
-            return None
-        bits = int.from_bytes(packed[:11], "little")
+        packed = _base38_decode(encoded)
     except ValueError:
         return None
+    if len(packed) < 11 or (len(packed) > 11 and not _valid_matter_optional_tlv(packed[11:])):
+        return None
+    bits = int.from_bytes(packed[:11], "little")
 
     version = bits & 0x7
     vendor_id = (bits >> 3) & 0xFFFF
@@ -403,62 +470,506 @@ def matter_fields(text: str) -> dict | None:
     discriminator = (bits >> 45) & 0xFFF
     passcode = (bits >> 57) & 0x7FFFFFF
     padding = (bits >> 84) & 0xF
-    if version != 0 or padding != 0:
-        return None  # not a payload this spec revision describes; better honest than wrong
+    disallowed_passcodes = {
+        0,
+        11_111_111,
+        22_222_222,
+        33_333_333,
+        44_444_444,
+        55_555_555,
+        66_666_666,
+        77_777_777,
+        88_888_888,
+        99_999_999,
+        12_345_678,
+        87_654_321,
+    }
+    if (
+        version != 0
+        or padding != 0
+        or flow == 3
+        or discovery & ~0x3F
+        or passcode >= 100_000_000
+        or passcode in disallowed_passcodes
+        or vendor_id > 0xFFF4
+        or (product_id == 0 and vendor_id != 0)
+    ):
+        return None
 
-    # Manual pairing code, spec 5.1.4: 1 + 5 + 4 digits, then a Verhoeff check digit.
-    first = discriminator >> 10
+    short_discriminator = discriminator >> 8
+    first = (short_discriminator >> 2) | (4 if flow != 0 else 0)
     middle = ((discriminator & 0x300) << 6) | (passcode & 0x3FFF)
     last = passcode >> 14
     digits = f"{first}{middle:05d}{last:04d}"
+    if flow != 0:
+        digits += f"{vendor_id:05d}{product_id:05d}"
     manual = digits + str(_verhoeff_digit(digits))
+    display_manual = f"{manual[:4]}-{manual[4:7]}-{manual[7:]}" if flow == 0 else manual
 
     capabilities = [
-        name for bit, name in ((1, "SoftAP"), (2, "BLE"), (4, "on network")) if discovery & bit
+        name
+        for bit, name in (
+            (1, "SoftAP"),
+            (2, "BLE"),
+            (4, "on network"),
+            (8, "Wi-Fi PAF"),
+            (16, "NFC"),
+            (32, "Thread"),
+        )
+        if discovery & bit
     ]
     return {
-        "manual_pairing_code": f"{manual[:4]}-{manual[4:7]}-{manual[7:]}",
+        "manual_pairing_code": display_manual,
         "setup_passcode": f"{passcode:08d}",
         "discriminator": discriminator,
         "vendor_id": vendor_id,
         "product_id": product_id,
-        "commissioning_flow": {0: "standard", 1: "user intent", 2: "custom"}.get(flow, flow),
+        "commissioning_flow": {0: "standard", 1: "user intent", 2: "custom"}[flow],
         "discovery": ", ".join(capabilities) if capabilities else "none advertised",
         "warning": "passcode and manual code commission the device. Treat them like keys.",
     }
+
+
+def matter_fields(text: str) -> dict | None:
+    """Unpack a complete Matter onboarding payload, if that is what this is.
+
+    The QR string hides the one thing a person with an unscannable code needs most: the
+    11-digit *manual pairing code* that every commissioner accepts typed in. It is derivable
+    from the discriminator and the passcode (Matter spec 5.1.4), so it gets derived -- that is
+    the difference between handing someone a rescued string and a usable recovery.
+    """
+    if not text.startswith("MT:"):
+        return None
+    encoded_segments = text[3:].split("*")
+    if not encoded_segments or any(not segment for segment in encoded_segments):
+        return None
+    parsed_segments = [_matter_segment_fields(segment) for segment in encoded_segments]
+    if any(fields is None for fields in parsed_segments):
+        return None
+    first_fields = parsed_segments[0]
+    assert first_fields is not None
+    if len(parsed_segments) > 1:
+        first_fields["onboarding_payloads"] = len(parsed_segments)
+    return first_fields
 
 
 def wifi_fields(text: str) -> dict | None:
     """Split a WIFI: credential payload -- router labels wear off like every other label."""
     if not text.upper().startswith("WIFI:"):
         return None
+    if not text.endswith(";;"):
+        return None
     fields: dict[str, str] = {}
     key, buffer, index = "", [], 5
-    while index < len(text):
+    while index < len(text) - 1:
         char = text[index]
         if char == "\\" and index + 1 < len(text):
             buffer.append(text[index + 1])
             index += 2
             continue
-        if char == ":" and not key and len(buffer) <= 2:
+        if char == ":" and not key and 0 < len(buffer) <= 3:
             key = "".join(buffer)
             buffer = []
         elif char == ";":
             if key:
+                allowed = {"T", "S", "P", "H", "E", "PH2", "A", "I"}
+                if key.upper() not in allowed or key.upper() in fields:
+                    return None
+                if not buffer and key.upper() != "P":
+                    return None
                 fields[key.upper()] = "".join(buffer)
+            elif buffer:
+                return None
+            else:
+                return None
             key, buffer = "", []
         else:
             buffer.append(char)
         index += 1
-    if "S" not in fields:
+    if key or buffer or not fields.get("S"):
         return None
     out: dict[str, str | bool] = {"ssid": fields["S"], "security": fields.get("T", "open")}
     if fields.get("P"):
         out["password"] = fields["P"]
-    if fields.get("H", "").lower() == "true":
-        out["hidden"] = True
+    hidden = fields.get("H", "").lower()
+    if hidden in {"true", "false"}:
+        out["hidden"] = hidden == "true"
+    elif hidden and not fields.get("PH2"):
+        out["phase2_method"] = fields["H"]
+    for source, target in (
+        ("E", "eap_method"),
+        ("PH2", "phase2_method"),
+        ("A", "anonymous_identity"),
+        ("I", "identity"),
+    ):
+        if fields.get(source):
+            out[target] = fields[source]
     out["warning"] = "the password is the network key. Do not publish it."
     return out
+
+
+def _unescape_vcard(value: str) -> str:
+    """Unescape the small common subset used by contact-card QR codes."""
+    return (
+        value.replace("\\n", "\n")
+        .replace("\\N", "\n")
+        .replace("\\,", ",")
+        .replace("\\;", ";")
+        .replace("\\\\", "\\")
+    )
+
+
+def _vcard_lines(text: str) -> list[str]:
+    """Normalise line endings and unfold continuation lines from a vCard."""
+    lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    unfolded: list[str] = []
+    for line in lines:
+        if line.startswith((" ", "\t")) and unfolded:
+            unfolded[-1] += line[1:]
+        else:
+            unfolded.append(line)
+    return unfolded
+
+
+def _split_escaped(value: str, delimiter: str) -> list[str]:
+    """Split on unescaped delimiters while preserving escapes for later decoding."""
+    parts: list[str] = []
+    buffer: list[str] = []
+    escaped = False
+    for char in value:
+        if char == delimiter and not escaped:
+            parts.append("".join(buffer))
+            buffer = []
+        else:
+            buffer.append(char)
+        escaped = char == "\\" and not escaped
+    parts.append("".join(buffer))
+    return parts
+
+
+def _valid_percent_escapes(value: str) -> bool:
+    """Return whether each percent sign starts one complete hexadecimal escape."""
+    index = 0
+    while index < len(value):
+        if value[index] == "%":
+            escaped = value[index + 1 : index + 3]
+            if index + 2 >= len(value) or not re.fullmatch(r"[0-9A-Fa-f]{2}", escaped):
+                return False
+            index += 3
+        else:
+            index += 1
+    return True
+
+
+def _uri_query(query: str, *, plus_as_space: bool = False) -> dict[str, list[str]] | None:
+    """Parse URI query fields, optionally applying HTML-form plus decoding."""
+    values: dict[str, list[str]] = {}
+    if not query:
+        return values
+    for pair in query.split("&"):
+        key, separator, value = pair.partition("=")
+        if not key:
+            return None
+        if plus_as_space:
+            key, value = key.replace("+", " "), value.replace("+", " ")
+        decoded_key = unquote(key)
+        decoded_value = unquote(value) if separator else ""
+        values.setdefault(decoded_key, []).append(decoded_value)
+    return values
+
+
+def _valid_host(host: str | None) -> bool:
+    """Accept an IP address or a syntactically valid DNS-style host name."""
+    if not host:
+        return False
+    candidate = host.rstrip(".")
+    if not candidate or len(candidate) > 253:
+        return False
+    try:
+        ipaddress.ip_address(candidate)
+        return True
+    except ValueError:
+        pass
+    try:
+        ascii_host = candidate.encode("idna").decode("ascii")
+    except UnicodeError:
+        return False
+    return all(
+        0 < len(label) <= 63
+        and re.fullmatch(r"[A-Za-z0-9-]+", label) is not None
+        and not label.startswith("-")
+        and not label.endswith("-")
+        for label in ascii_host.split(".")
+    )
+
+
+def _valid_email_address(address: str) -> bool:
+    """Validate the conservative ASCII address subset useful for QR mail links."""
+    if address.count("@") != 1 or any(char.isspace() for char in address):
+        return False
+    local, host = address.rsplit("@", 1)
+    if (
+        not local
+        or len(local) > 64
+        or local.startswith(".")
+        or local.endswith(".")
+        or ".." in local
+        or re.fullmatch(r"[A-Za-z0-9.!#$&'*+/=?^_`{|}~-]+", local) is None
+    ):
+        return False
+    return _valid_host(host)
+
+
+def _valid_phone_number(number: str) -> bool:
+    """Recognise a conservative subset of RFC 3966 telephone subscriber strings."""
+    if any(char.isspace() for char in number):
+        return False
+    subscriber, *parameters = number.split(";")
+    global_number = subscriber.startswith("+")
+    subscriber_pattern = r"\+[0-9().-]+" if global_number else r"[0-9A-Fa-f*#().-]+"
+    if re.fullmatch(subscriber_pattern, subscriber) is None:
+        return False
+    significant = "0123456789" if global_number else "0123456789ABCDEFabcdef*#"
+    if not any(char in significant for char in subscriber):
+        return False
+    names: set[str] = set()
+    parameter_values: dict[str, str | None] = {}
+    for parameter in parameters:
+        match = re.fullmatch(
+            r"([A-Za-z][A-Za-z0-9-]*)(?:=([A-Za-z0-9.!~*'()\[\]/:&+$%_-]+))?",
+            parameter,
+        )
+        if match is None or match[1].lower() in names:
+            return False
+        name, value = match[1].lower(), match[2]
+        names.add(name)
+        parameter_values[name] = value
+        if name in {"ext", "isub", "phone-context"} and not value:
+            return False
+        if name.startswith("m-"):
+            return False  # unknown mandatory extension
+    if {"ext", "isub"} <= names:
+        return False
+    if not global_number and "phone-context" not in names:
+        return False
+    context = parameter_values.get("phone-context")
+    valid_context = context is None or (
+        _valid_host(context) or re.fullmatch(r"\+[0-9().-]*[0-9][0-9().-]*", context) is not None
+    )
+    return valid_context
+
+
+def _valid_sms_number(number: str) -> bool:
+    """Recognise global numbers, national numbers and service short codes used by SMSTO."""
+    return (
+        not any(char.isspace() for char in number)
+        and re.fullmatch(r"\+?[0-9*#().-]+", number) is not None
+        and any(char.isdigit() for char in number)
+    )
+
+
+def _geo_coordinates(value: str) -> str | None:
+    """Validate WGS-84 latitude/longitude and return the coordinate portion."""
+    coordinates, *parameters = value.split(";")
+    seen: set[str] = set()
+    for index, parameter in enumerate(parameters):
+        match = re.fullmatch(r"([A-Za-z][A-Za-z0-9-]*)(?:=([A-Za-z0-9.+_-]+))?", parameter)
+        if match is None or match[1].lower() in seen:
+            return None
+        name, parameter_value = match[1].lower(), match[2]
+        seen.add(name)
+        if name == "crs":
+            if index != 0 or parameter_value is None or parameter_value.lower() != "wgs84":
+                return None
+        elif name == "u":
+            expected_index = 1 if "crs" in seen else 0
+            if (
+                index != expected_index
+                or parameter_value is None
+                or re.fullmatch(r"(?:\d+(?:\.\d*)?|\.\d+)", parameter_value) is None
+            ):
+                return None
+            try:
+                uncertainty = float(parameter_value)
+            except ValueError:
+                return None
+            if not np.isfinite(uncertainty) or uncertainty < 0:
+                return None
+        # Extension parameters still identify a geo URI. Their semantics are left uninterpreted.
+    parts = coordinates.split(",")
+    if len(parts) not in {2, 3}:
+        return None
+    try:
+        patterns = (r"-?\d{1,2}(?:\.\d+)?", r"-?\d{1,3}(?:\.\d+)?", r"-?\d+(?:\.\d+)?")
+        coordinate_parts = zip(patterns, parts, strict=False)
+        if any(re.fullmatch(pattern, part) is None for pattern, part in coordinate_parts):
+            return None
+        numbers = [float(part) for part in parts]
+    except ValueError:
+        return None
+    if not all(np.isfinite(number) for number in numbers):
+        return None
+    if not (-90 <= numbers[0] <= 90 and -180 <= numbers[1] <= 180):
+        return None
+    return coordinates
+
+
+def common_payload_fields(text: str) -> tuple[str, dict] | None:
+    """Identify common QR payload formats without inferring what they are used for.
+
+    The scheme and format markers are evidence; a brand, product or purpose would be a guess.
+    Unknown content deliberately falls through to plain text in ``payload_fields``.
+    """
+    stripped = text.strip()
+    if not stripped:
+        return None
+
+    try:
+        parsed = urlsplit(stripped)
+    except ValueError:
+        parsed = None
+    if parsed is not None and parsed.scheme.lower() in {"http", "https"}:
+        try:
+            valid_port = parsed.port is None or 0 < parsed.port <= 65535
+            host = parsed.hostname
+        except ValueError:
+            valid_port, host = False, None
+        if (
+            valid_port
+            and _valid_host(host)
+            and not any(char.isspace() for char in stripped)
+            and _valid_percent_escapes(stripped)
+        ):
+            return "url", {"url": stripped}
+
+    if (
+        parsed is not None
+        and parsed.scheme.lower() == "mailto"
+        and _valid_percent_escapes(stripped)
+    ):
+        address = unquote(parsed.path)
+        addresses = address.split(",")
+        if address and all(_valid_email_address(item) for item in addresses):
+            fields = {"address": address}
+            query = _uri_query(parsed.query)
+            if query is None:
+                return None
+            for source, target in (("subject", "subject"), ("body", "body")):
+                if query.get(source):
+                    fields[target] = query[source][0]
+            return "email", fields
+
+    if stripped.lower().startswith("tel:") and _valid_percent_escapes(stripped):
+        number = unquote(stripped[4:])
+        if _valid_phone_number(number):
+            return "phone", {"number": number}
+
+    if stripped.upper().startswith(("SMSTO:", "MMSTO:")):
+        rest = stripped.split(":", 1)[1]
+        number, separator, message = rest.partition(":")
+        if _valid_sms_number(number):
+            fields = {"number": number}
+            if separator and message:
+                fields["message"] = message
+            return "sms", fields
+
+    if (
+        parsed is not None
+        and parsed.scheme.lower() in {"sms", "mms"}
+        and _valid_percent_escapes(stripped)
+    ):
+        number = unquote(parsed.path)
+        if _valid_sms_number(number):
+            fields = {"number": number}
+            query = _uri_query(parsed.query)
+            if query is None:
+                return None
+            if query.get("body"):
+                fields["message"] = query["body"][0]
+            return "sms", fields
+
+    if parsed is not None and parsed.scheme.lower() == "geo" and _valid_percent_escapes(stripped):
+        coordinates = _geo_coordinates(parsed.path)
+        if coordinates is not None:
+            location_fields: dict[str, str | float] = {"coordinates": coordinates}
+            raw_parameters = parsed.path.split(";")[1:]
+            parameters = {
+                name.lower(): value
+                for name, _, value in (parameter.partition("=") for parameter in raw_parameters)
+            }
+            if parameters.get("crs"):
+                location_fields["crs"] = parameters["crs"].lower()
+            if parameters.get("u"):
+                location_fields["uncertainty_m"] = float(parameters["u"])
+            query = _uri_query(parsed.query, plus_as_space=True)
+            if query is None:
+                return None
+            if query.get("q"):
+                location_fields["query"] = query["q"][0]
+            return "location", location_fields
+
+    lines = _vcard_lines(stripped)
+    if lines[0].upper() == "BEGIN:VCARD" and lines[-1].upper() == "END:VCARD":
+        if len(lines) < 4:
+            return None
+        values: dict[str, str] = {}
+        raw_values: dict[str, str] = {}
+        property_names: list[str] = []
+        for line in lines[1:-1]:
+            key, separator, value = line.partition(":")
+            name_and_group, *vcard_parameters = key.split(";")
+            name_parts = name_and_group.rsplit(".", 1)
+            if len(name_parts) == 2 and not all(
+                re.fullmatch(r"[A-Za-z0-9-]+", part) for part in name_parts
+            ):
+                return None
+            bare_key = name_parts[-1].upper()
+            valid_name = re.fullmatch(r"[A-Z0-9-]+", bare_key) is not None
+            valid_parameters = all(
+                re.fullmatch(r"[A-Za-z0-9-]+(?:=[^:;]+)?", parameter) is not None
+                for parameter in vcard_parameters
+            )
+            if (
+                not separator
+                or not valid_name
+                or not valid_parameters
+                or (bare_key == "VERSION" and vcard_parameters)
+            ):
+                return None
+            property_names.append(bare_key)
+            values.setdefault(bare_key, _unescape_vcard(value))
+            raw_values.setdefault(bare_key, value)
+        version = values.get("VERSION")
+        names_are_valid = (
+            property_names.count("N") >= 1
+            if version == "2.1"
+            else property_names.count("FN") >= 1
+            and (version != "3.0" or property_names.count("N") >= 1)
+        )
+        if (
+            property_names.count("VERSION") != 1
+            or version not in {"2.1", "3.0", "4.0"}
+            or not names_are_valid
+            or (version == "4.0" and lines[1].upper() != "VERSION:4.0")
+        ):
+            return None
+        fields = {}
+        for source, target in (
+            ("FN", "name"),
+            ("ORG", "organisation"),
+            ("TEL", "phone"),
+            ("EMAIL", "email"),
+            ("URL", "url"),
+            ("ADR", "address"),
+        ):
+            if values.get(source):
+                fields[target] = values[source]
+        if "name" not in fields and values.get("N"):
+            parts = [_unescape_vcard(part) for part in _split_escaped(raw_values["N"], ";")]
+            fields["name"] = " ".join(part for part in parts[1::-1] if part)
+        if fields:
+            return "contact", fields
+    return None
 
 
 PAYLOAD_HINTS = {
@@ -467,6 +978,27 @@ PAYLOAD_HINTS = {
     "matter": "A Matter onboarding code. Add the device in Home Assistant, Apple Home or "
     "Google Home — and where scanning is not an option, type the manual pairing code instead.",
     "wifi": "Wi-Fi credentials — network name and key, ready to join.",
+    "url": "A web address. The destination is shown exactly as recovered; check the domain "
+    "before opening it.",
+    "email": "An email link. Check the address and any pre-filled text before sending.",
+    "phone": "A telephone number.",
+    "sms": "A text-message link. Check the number and message before sending.",
+    "location": "A map location or search.",
+    "contact": "A contact card. Review the recovered fields before importing it.",
+    "text": "Plain text. No recognised QR payload format was assumed.",
+}
+
+PAYLOAD_LABELS = {
+    "zigbee": "Zigbee install code",
+    "matter": "Matter onboarding code",
+    "wifi": "Wi-Fi credentials",
+    "url": "Web address",
+    "email": "Email link",
+    "phone": "Telephone number",
+    "sms": "Text-message link",
+    "location": "Map location",
+    "contact": "Contact card",
+    "text": "Plain text",
 }
 
 
@@ -485,13 +1017,14 @@ PAYLOAD_SECRETS = {
 
 
 def payload_fields(text: str) -> tuple[str, dict] | None:
-    """Recognise and split a payload: (kind, fields), or None for plain content."""
+    """Recognise and split a payload without guessing its real-world purpose."""
     parsers = (("zigbee", zigbee_fields), ("matter", matter_fields), ("wifi", wifi_fields))
     for kind, parser in parsers:
         fields = parser(text)
         if fields:
             return kind, fields
-    return None
+    common = common_payload_fields(text)
+    return common if common is not None else ("text", {})
 
 
 def to_json(result, include_payload: bool = True, split_payload: bool = False) -> str:
@@ -535,7 +1068,7 @@ def to_json(result, include_payload: bool = True, split_payload: bool = False) -
             warning = PAYLOAD_SECRETS.get(recognised[0])
             if warning is not None:
                 out["payload_warning"] = warning
-            if split_payload:
+            if split_payload and recognised[1]:
                 out[recognised[0]] = recognised[1]
     return json.dumps(out, indent=2) + "\n"
 
