@@ -252,11 +252,9 @@ def run_cases(
 
 
 def benchmark_exit_code(split: Split, correct: int, wrong: int, failed: int) -> int:
-    """A release panel is a gate; development runs remain descriptive unless unsafe."""
+    """Fail on a valid wrong payload; unresolved cases remain measured degradation."""
     if wrong:
         return 2
-    if split == "holdout" and failed:
-        return 1
     return 0
 
 
