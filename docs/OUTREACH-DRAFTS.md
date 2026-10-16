@@ -21,6 +21,20 @@ Linkziel: die veröffentlichte qrsalvage-Seite. Erst nach öffentlichem Deployme
 Warum dieser Text vertretbar ist: Er ergänzt nur Geräteseiten, auf denen Zigbee2MQTT bereits das
 Scannen des langen QR-Inhalts verlangt. Er behauptet keine allgemeine Erfolgsquote.
 
+Erster konkreter Zielort: `docs/devices/BMCT-SLZ.md`, direkt nach dem Pairing-Absatz in der
+handgeschriebenen Notes-Sektion. Die Seite verlangt ausdrücklich den 95-stelligen alphanumerischen
+QR-Inhalt. Weitere Bosch-Seiten mit demselben Ablauf werden erst nach Resonanz auf diesen einzelnen
+Vorschlag angefasst; kein breit gestreuter Link-PR.
+
+Geplanter Patch:
+
+> If the QR label is present but no normal scanner can read it, [qrsalvage](PUBLIC_URL) can try to
+> recover a faded, curved or damaged code locally in the browser. The photo and recovered install
+> code are not uploaded. Do not post the recovered value publicly because it is a pairing secret.
+
+`PUBLIC_URL` erst unmittelbar vor dem PR durch die verifizierte öffentliche URL ersetzen. Falls
+das Projekt zu diesem Zeitpunkt noch nicht öffentlich nutzbar ist, wird kein PR eröffnet.
+
 ## Antwort in einem konkreten Hilfethread
 
 > The short code printed next to the symbol may not be the full install-code value expected by
