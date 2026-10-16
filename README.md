@@ -2,6 +2,8 @@
 
 # qrsalvage
 
+![A damaged synthetic QR photograph being recovered locally in the browser](assets/demo.gif)
+
 [![CI](https://github.com/ShadesMaverick/qrsalvage/actions/workflows/ci.yml/badge.svg)](https://github.com/ShadesMaverick/qrsalvage/actions/workflows/ci.yml)
 
 *recover QR codes from what's left of them*
