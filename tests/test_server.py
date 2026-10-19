@@ -17,6 +17,7 @@ from pathlib import Path
 import cv2
 import pytest
 
+from qrsalvage.core.decoding import reencode, render
 from qrsalvage.server import Handler, catalog_payload, export_payload, solve_payload
 
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "engraved-curved-hard.png"
@@ -101,6 +102,54 @@ def test_a_single_image_may_still_arrive_under_the_old_key():
     assert single["ok"] is True and listed["ok"] is True
     assert single["text"] == listed["text"]
     assert "fusion" not in listed, "one photograph is not a fusion"
+
+
+def test_whole_photo_direct_decode_is_available_through_the_shared_api():
+    text = "https://example.com/recovery?a=" + "x" * 134
+    page = render(reencode(text, ecc="Q"), scale=2, quiet=0)
+    stretched = cv2.resize(
+        page,
+        (page.shape[1], round(page.shape[0] * 1.9)),
+        interpolation=cv2.INTER_NEAREST,
+    )
+    ok, encoded = cv2.imencode(".png", stretched)
+    assert ok
+
+    answer = solve_payload(
+        {"image": "data:image/png;base64," + base64.b64encode(encoded.tobytes()).decode("ascii")}
+    )
+
+    assert answer["ok"] is True
+    assert answer["text"] == text
+    assert answer["source"] == "direct"
+    assert answer["candidates_tried"] == 1
+    assert answer["exportable"] is True
+    assert answer["clean_png"].startswith("data:image/png;base64,")
+
+    data_url = "data:image/png;base64," + base64.b64encode(encoded.tobytes()).decode("ascii")
+    bridged = solve_payload({"image": data_url}, trusted_direct_text=text)
+    assert bridged["ok"] is True
+    assert bridged["text"] == text
+    assert bridged["source"] == "direct"
+
+
+def test_direct_decode_text_cannot_be_supplied_in_the_request_payload():
+    answer = solve_payload({"image": _data_url(FIXTURE), "direct_text": "invented"})
+
+    assert answer["ok"] is True
+    assert answer["text"] != "invented"
+    assert answer["source"] == "recovery"
+
+
+def test_trusted_direct_decode_can_identify_a_member_of_a_multi_image_request():
+    payload = {"images": [_data_url(FIXTURE), _data_url(FIXTURE)]}
+
+    answer = solve_payload(payload, trusted_direct_texts=[None, "MEMBER-TWO"])
+
+    assert answer["ok"] is True
+    assert answer["text"] == "MEMBER-TWO"
+    assert answer["source"] == "direct"
+    assert answer["images_given"] == 2
 
 
 def test_a_matter_code_arrives_with_its_manual_pairing_code():
@@ -290,6 +339,15 @@ def test_search_discovery_files_are_part_of_the_static_build():
     from scripts.build_site import PAGE_FILES
 
     assert {"robots.txt", "sitemap.xml"} <= set(PAGE_FILES)
+
+
+def test_browser_direct_reader_is_bounded_and_checks_each_photograph():
+    worker = (ROOT / "src" / "qrsalvage" / "web" / "worker.js").read_text(encoding="utf-8")
+
+    assert "const MAX_DIRECT_PIXELS = 16_000_000" in worker
+    assert "bitmap.width * bitmap.height > MAX_DIRECT_PIXELS" in worker
+    assert "targetWidth * targetHeight > MAX_DIRECT_PIXELS" in worker
+    assert "for (const entry of encoded)" in worker
 
 
 def test_every_figure_the_method_page_asks_for_is_served(running_server):

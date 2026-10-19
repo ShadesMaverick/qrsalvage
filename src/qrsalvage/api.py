@@ -25,7 +25,7 @@ import cv2
 import numpy as np
 
 from .core.decoding import reencode, render
-from .core.pipeline import ENSEMBLE_MODES, solve, solve_many
+from .core.pipeline import ENSEMBLE_MODES, SolveResult, solve, solve_many
 from .export import (
     PAYLOAD_HINTS,
     PAYLOAD_LABELS,
@@ -82,7 +82,13 @@ def _png_data_url(matrix: np.ndarray, scale: int = 8) -> str:
     return "data:image/png;base64," + base64.b64encode(_png_bytes(matrix, scale)).decode("ascii")
 
 
-def solve_payload(payload: dict, progress: ProgressFn | None = None) -> dict:
+def solve_payload(
+    payload: dict,
+    progress: ProgressFn | None = None,
+    *,
+    trusted_direct_text: str | None = None,
+    trusted_direct_texts: list[str | None] | None = None,
+) -> dict:
     """Run one recovery and return everything the page needs, as plain JSON types.
 
     Accepts either a single ``image`` or a list under ``images``. Several photographs of one
@@ -142,6 +148,14 @@ def solve_payload(payload: dict, progress: ProgressFn | None = None) -> dict:
     else:
         points = None
 
+    if trusted_direct_texts is None:
+        trusted_direct_texts = [trusted_direct_text] + [None] * (len(images) - 1)
+    if len(trusted_direct_texts) != len(images) or any(
+        text is not None and (not isinstance(text, str) or not text)
+        for text in trusted_direct_texts
+    ):
+        return {"ok": False, "failure": "direct decode results must match the photographs"}
+
     try:
         budget = int(payload.get("budget", 4000))
     except (TypeError, ValueError):
@@ -150,7 +164,10 @@ def solve_payload(payload: dict, progress: ProgressFn | None = None) -> dict:
     # anybody reads back, only how hard to try. A caller who asks for more than the descent can
     # use should get the most it can use, not an error about a number that hurt nobody.
     budget = max(1, min(budget, _MAX_BUDGET))
-    if len(images) == 1:
+    direct_text = next((text for text in trusted_direct_texts if text is not None), None)
+    if direct_text is not None and points is None:
+        result = SolveResult(text=direct_text, candidates_tried=1, source="direct")
+    elif len(images) == 1:
         ensemble = payload.get("ensemble", "off")
         if ensemble not in ENSEMBLE_MODES:
             return {
@@ -177,6 +194,7 @@ def solve_payload(payload: dict, progress: ProgressFn | None = None) -> dict:
         "images_given": len(images),
         "finders": [{"x": x, "y": y} for x, y, _ in result.finders],
         "candidates_tried": result.candidates_tried,
+        "source": result.source,
         # The level the original carried. The catalogue re-encodes from text alone, and
         # without this a reprinted label would silently get whatever level the encoder likes.
         "ecc": result.ecc,
@@ -240,7 +258,7 @@ def solve_payload(payload: dict, progress: ProgressFn | None = None) -> dict:
         while len(_RECENT) > _RECENT_LIMIT:
             _RECENT.popitem(last=False)
     out["token"] = token
-    out["exportable"] = result.decoded_matrix is not None
+    out["exportable"] = result.solved or result.decoded_matrix is not None
     return out
 
 

@@ -48,6 +48,10 @@ const PYODIDE = (sameOrigin ? requested : VENDORED).href;
 const post = (message) => self.postMessage(message);
 const boot = (stage, since) =>
   post({ type: "boot", stage, seconds: Math.round((performance.now() - since) / 100) / 10 });
+// The shared API accepts larger photographs, but duplicating one into canvases for speculative
+// aspect-ratio correction would multiply its memory. Larger frames skip this cheap preflight and
+// continue through the normal recovery path without another full-size RGBA allocation.
+const MAX_DIRECT_PIXELS = 16_000_000;
 
 let pyodide = null;
 let handleJson = null;
@@ -70,7 +74,18 @@ async function armOracle(zxing) {
   // Safari 16.4 as the floor for the whole tool; a bare ImageData asks for nothing newer than
   // the module worker already does.
   const blank = new ImageData(new Uint8ClampedArray(32 * 32 * 4), 32, 32);
-  await zxing.readBarcodes(blank, { formats: ["QRCode"], tryInvert: false });
+  // Match the native oracle's explicit options. The wrapper otherwise enables `tryHarder`,
+  // rotation and downscaling by default while `readBarcodesFromPixmap` receives whatever this
+  // warmup captured; spelling the choices out makes the browser/native contract deliberate.
+  await zxing.readBarcodes(blank, {
+    formats: ["QRCode"],
+    tryHarder: true,
+    tryRotate: true,
+    tryInvert: false,
+    tryDownscale: true,
+    maxNumberOfSymbols: 1,
+    returnErrors: false,
+  });
   mod.readBarcodesFromPixmap = readOriginal;
 
   // The writer's options object, captured the same way and reused with the level patched in.
@@ -104,13 +119,59 @@ async function armOracle(zxing) {
       if (results.size() === 0) return null;
       const first = results.get(0);
       try {
-        return first.text;
+        return first.isValid && !first.error ? first.text : null;
       } finally {
         release(first);
       }
     } finally {
       release(results);
     }
+  };
+
+  // Keep the public wrapper too. The synchronous bridge above is essential for the thousands
+  // of matrix probes Python performs inside one solve; a whole uploaded photograph is attempted
+  // only once, so the normal wrapper can preserve every reader heuristic exactly as shipped.
+  self.zxDecodePhoto = async (rgbaBytes, width, height) => {
+    const pixels = new Uint8ClampedArray(rgbaBytes);
+    const options = {
+      formats: ["QRCode"],
+      tryHarder: true,
+      tryRotate: true,
+      tryInvert: false,
+      tryDownscale: true,
+      maxNumberOfSymbols: 1,
+      returnErrors: false,
+    };
+    // zxing-cpp native reads the motivating non-square screenshot as-is. The current WASM build
+    // does not, but succeeds as soon as the same pixels are normalised toward a square. Trying a
+    // small fixed transform set is cheap (one attempt per uploaded photograph) and checksum-safe.
+    const attempts = [[width, height]];
+    if (width !== height) {
+      const side = Math.min(Math.max(width, height), Math.floor(Math.sqrt(MAX_DIRECT_PIXELS)));
+      const geometricMean = Math.round(Math.sqrt(width * height));
+      attempts.push([side, side], [geometricMean, geometricMean]);
+    }
+    const source = new OffscreenCanvas(width, height);
+    source.getContext("2d").putImageData(new ImageData(pixels, width, height), 0, 0);
+    for (const [targetWidth, targetHeight] of attempts) {
+      if (targetWidth * targetHeight > MAX_DIRECT_PIXELS) continue;
+      try {
+        let image;
+        if (targetWidth === width && targetHeight === height) {
+          image = new ImageData(pixels, width, height);
+        } else {
+          const canvas = new OffscreenCanvas(targetWidth, targetHeight);
+          const context = canvas.getContext("2d");
+          context.drawImage(source, 0, 0, targetWidth, targetHeight);
+          image = context.getImageData(0, 0, targetWidth, targetHeight);
+        }
+        const first = (await zxing.readBarcodes(image, options))[0];
+        if (first && first.isValid && !first.error && first.text) return first.text;
+      } catch {
+        // Allocation or one reader attempt failing must fall through to the recovery pipeline.
+      }
+    }
+    return null;
   };
 
   self.zxEncodeSync = (text, ecLevel) => {
@@ -165,10 +226,12 @@ def _progress(event, data):
     js.reportProgress(json.dumps({"type": event, **data}))
 
 
-def handle_json(kind, payload_json):
+def handle_json(kind, payload_json, direct_texts=None):
     payload = json.loads(payload_json)
     if kind == "solve":
-        return json.dumps(api.solve_payload(payload, progress=_progress))
+        return json.dumps(
+            api.solve_payload(payload, progress=_progress, trusted_direct_texts=direct_texts)
+        )
     raise ValueError("unknown request: " + kind)
 
 
@@ -226,9 +289,35 @@ self.onmessage = async ({ data }) => {
   const { id, kind, payload } = data;
   try {
     await booted;
-    const body = JSON.stringify(payload);
+    let body = JSON.stringify(payload);
     if (kind === "solve") {
-      post({ id, type: "result", result: JSON.parse(handleJson(kind, body)) });
+      const encoded = payload.images || (payload.image ? [payload.image] : []);
+      const directTexts = [];
+      if (!payload.finder_points) {
+        for (const entry of encoded) {
+          let text = null;
+          try {
+            const blob = await (await fetch(entry)).blob();
+            const bitmap = await createImageBitmap(blob);
+            if (bitmap.width * bitmap.height > MAX_DIRECT_PIXELS) {
+              bitmap.close();
+            } else {
+              const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+              const context = canvas.getContext("2d");
+              context.drawImage(bitmap, 0, 0);
+              bitmap.close();
+              const image = context.getImageData(0, 0, canvas.width, canvas.height);
+              text = await self.zxDecodePhoto(image.data, image.width, image.height);
+            }
+          } catch {
+            // The shared recovery still gets the original image below.
+          }
+          directTexts.push(text);
+          if (text) break;
+        }
+      }
+      while (directTexts.length < encoded.length) directTexts.push(null);
+      post({ id, type: "result", result: JSON.parse(handleJson(kind, body, directTexts)) });
     } else {
       post({ id, type: "file", file: JSON.parse(handleFile(kind, body)) });
     }

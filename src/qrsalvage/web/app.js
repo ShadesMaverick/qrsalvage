@@ -657,6 +657,9 @@ function informationGone(a) {
 }
 
 function verdictFor(a) {
+  if (a.ok && a.source === "direct") {
+    return ["ok", "decoded directly from the photograph — no reconstruction was needed"];
+  }
   if (!a.modules) {
     const n = a.finders.length;
     return ["bad", `no grid — ${n} finder candidate${n === 1 ? "" : "s"} found`];
@@ -698,7 +701,11 @@ function render(a) {
     );
 
   push("image", `${a.width} × ${a.height} px`);
-  push("finders", a.finders.length, a.finders.length >= 3 ? "" : "bad");
+  if (a.source === "direct") {
+    push("route", "direct reader");
+  } else {
+    push("finders", a.finders.length, a.finders.length >= 3 ? "" : "bad");
+  }
   if (a.modules) {
     push("version", `${a.version} · ${a.modules} modules`);
     const rate = a.wrong_known / a.known_total;

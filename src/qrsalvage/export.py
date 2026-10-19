@@ -1041,6 +1041,7 @@ def to_json(result, include_payload: bool = True, split_payload: bool = False) -
         "uncertain_cells": result.uncertain,
         "decode_attempts": result.candidates_tried,
         "finders_found": len(result.finders),
+        "source": result.source,
     }
     # A fused result rests on evidence a single-image one does not have, and someone deciding
     # whether to trust the payload needs to see it rather than infer it from the file names.
@@ -1085,6 +1086,7 @@ def to_html_report(result, photo_png: bytes, recovered_png: bytes, clean_png: by
     evidence, and they belong next to the answer rather than in a log.
     """
     rows = [
+        ("route", "direct reader" if result.source == "direct" else "recovery pipeline"),
         ("version", f"{result.version} ({result.modules} modules)" if result.modules else "-"),
         (
             "known cells wrong",
