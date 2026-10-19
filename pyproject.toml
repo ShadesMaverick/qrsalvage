@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools==84.0.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -55,7 +55,7 @@ exclude = ["^build/"]
 # and numpy 2.5 writes PEP 695 `type` statements into numpy/__init__.pyi -- syntax that does
 # not exist before 3.12. Against a 3.11 target that is a syntax error in a file nobody here
 # wrote, and mypy stops after it ("errors prevented further checking"), so the whole check is
-# lost rather than one line of it. Measured, not assumed: CI installs numpy 2.5.2 and fails,
+# lost rather than one line of it. Measured, not assumed: CI installs numpy 2.5.4 and fails,
 # the 2.4.6 in the local venv passes even with --no-incremental.
 #
 # What this gives up is that mypy no longer flags a 3.12-only API used in code that has to run

@@ -1,16 +1,19 @@
-# Python 3.11 (nicht 3.14 -- dafuer fehlen OpenCV-Wheels)
+# Das ist die getestete Entwicklungs- und CI-Umgebung. Die kompatiblen Untergrenzen fuer
+# Paketnutzer stehen weiterhin in pyproject.toml.
 #   py -3.11 -m venv .venv
 #   .venv\Scripts\python.exe -m pip install -r requirements.txt
 
-numpy>=2.1
-opencv-python>=4.10
-pillow>=10.4
+# NumPy 2.5 braucht Python 3.12; Python 3.11 bleibt deshalb auf dem dort getesteten 2.4-Zweig.
+numpy==2.4.6; python_version < "3.12"
+numpy==2.5.4; python_version >= "3.12"
+opencv-python==5.0.0.93
+pillow==12.3.0
 
 # Decodier-Versuche auf gerenderten Bildern (Stufe 0 und 1, bevor der eigene
 # Reed-Solomon-Decoder mit Erasure-Unterstuetzung steht)
-zxing-cpp>=2.2
+zxing-cpp==3.1.1
 
 # Werkzeuge
-pytest>=8.3
-ruff>=0.6
-mypy>=1.11
+pytest==9.1.1
+ruff==0.17.1
+mypy==2.4.0
