@@ -226,9 +226,12 @@ def _progress(event, data):
     js.reportProgress(json.dumps({"type": event, **data}))
 
 
-def handle_json(kind, payload_json, direct_texts=None):
+def handle_json(kind, payload_json, direct_texts_json=None):
     payload = json.loads(payload_json)
     if kind == "solve":
+        # JSON is the deliberate JS/Python boundary: a raw JavaScript null becomes Pyodide's
+        # JsNull proxy rather than None and would be rejected by the shared API contract.
+        direct_texts = json.loads(direct_texts_json) if direct_texts_json is not None else None
         return json.dumps(
             api.solve_payload(payload, progress=_progress, trusted_direct_texts=direct_texts)
         )
@@ -317,7 +320,11 @@ self.onmessage = async ({ data }) => {
         }
       }
       while (directTexts.length < encoded.length) directTexts.push(null);
-      post({ id, type: "result", result: JSON.parse(handleJson(kind, body, directTexts)) });
+      post({
+        id,
+        type: "result",
+        result: JSON.parse(handleJson(kind, body, JSON.stringify(directTexts))),
+      });
     } else {
       post({ id, type: "file", file: JSON.parse(handleFile(kind, body)) });
     }
