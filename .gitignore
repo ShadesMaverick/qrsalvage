@@ -43,3 +43,4 @@ idea.png
 # scripts/build_site.py, both far too large for the history.
 site/
 vendor-cache/
+.worktrees/
