@@ -442,11 +442,12 @@ def main() -> int:
     print("\nserve it locally to test:")
     print("  .venv\\Scripts\\python.exe -m http.server 8833 --directory site --bind 127.0.0.1")
     print("  then open http://127.0.0.1:8833/")
-    # Nothing below has to be done by hand: .github/workflows/pages.yml runs this script on
-    # every push to main and hands site/ to the Pages service as an artefact. That indirection
-    # is the point -- the twenty-nine megabytes vendored above are binaries nobody in this
-    # project compiled, and a deployment branch would write them into the history on every
-    # publish. They are reproducible from this file, so they are built, not stored.
+    # Nothing below has to be done by hand: after a successful CI run for a push to main,
+    # .github/workflows/pages.yml runs this script and hands site/ to the Pages service as an
+    # artefact. That indirection is the point -- the twenty-nine megabytes vendored above are
+    # binaries nobody in this project compiled, and a deployment branch would write them into
+    # the history on every publish. They are reproducible from this file, so they are built,
+    # not stored.
     #
     # Every reference the page makes is relative (see copy_page), so the address is a free
     # choice rather than a constraint: the default project path and a domain of one's own both
@@ -455,7 +456,7 @@ def main() -> int:
     # the local server aside, the site has to be served over https:// to be whole.
     print("\npublishing to GitHub Pages:")
     print("  the workflow does it -- Settings -> Pages -> Source: GitHub Actions, once.")
-    print("  every push to main then rebuilds this directory and deploys it.")
+    print("  a successful main CI run triggers the rebuild and deployment.")
     print("  note: on a free plan Pages needs the repository to be public.")
     print("\n  the default address is https://<user>.github.io/<repository>/ and needs no")
     print("  further work -- the page addresses its own parts by name, not from the root.")

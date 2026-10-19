@@ -15,8 +15,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self';
       script-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;
-      connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none';
-      frame-ancestors 'none'">
+      connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <title>qrsalvage — Impressum und Datenschutz</title>
 <link rel="stylesheet" href="style.css">
 <style>
@@ -56,8 +55,11 @@
     Die gesamte Rekonstruktion läuft in Ihrem Browser. Es gibt keinen Server, der Bilder
     entgegennimmt, und deshalb auch keinen, der sie speichern, auswerten oder weitergeben
     könnte. Das ist keine Zusage über unser Verhalten, sondern eine Eigenschaft des Aufbaus:
-    die Seite erlaubt sich per <em>Content-Security-Policy</em> ausschließlich Verbindungen zum
-    eigenen Server, weshalb Ihr Browser einen Upload gar nicht erst zuließe.</p>
+    Der Anwendungscode enthält keinen Uploadpfad für Fotos oder wiederhergestellte Inhalte.
+    Der Build prüft die ausgelieferten Textdateien auf unerklärte externe Adressen. Die
+    Same-Origin-<em>Content-Security-Policy</em> schränkt programmgesteuerte Verbindungen
+    zusätzlich ein. GitHub erhält die gewöhnlichen Anfragen zum Abruf der Seite, wie im
+    folgenden Abschnitt beschrieben.</p>
   <p class="plain">Warum das hier besonders zählt: Die Codes, um die es geht, enthalten häufig
     Kopplungsgeheimnisse von Geräten — Zigbee-Install-Codes, Matter-Passcodes, WLAN-Schlüssel.
     Wer sie hat und in Funkreichweite ist, kann das Gerät übernehmen. Solche Daten gehören
