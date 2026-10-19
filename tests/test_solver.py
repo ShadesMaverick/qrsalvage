@@ -9,10 +9,11 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+import cv2
 import numpy as np
 import pytest
 
-from qrsalvage.core.decoding import ordered_search, reencode
+from qrsalvage.core.decoding import ordered_search, reencode, render
 from qrsalvage.core.matrix import DARK, LIGHT, UNKNOWN, ModuleMatrix
 from qrsalvage.core.pipeline import solve
 from qrsalvage.core.sampling import estimate_levels, posterior_dark
@@ -32,6 +33,28 @@ def test_mild_damage_is_solved_directly():
     assert result.text == TEXT
     assert result.wrong_known == 0
     assert result.candidates_tried == 1, "a mild case must not need probing"
+
+
+def test_whole_photo_direct_decode_precedes_finder_geometry():
+    """A reader-successful photograph must not be lost to qrsalvage's finder search.
+
+    The motivating real photograph is strongly stretched in one direction. ZXing reads the
+    pixels directly, while our stricter geometry sees fewer than two finders and used to reject
+    the image before asking the already-installed oracle about the photograph itself.
+    """
+    text = "https://example.com/recovery?a=" + "x" * 134
+    page = render(reencode(text, ecc="Q"), scale=2, quiet=0)
+    stretched = cv2.resize(
+        page,
+        (page.shape[1], round(page.shape[0] * 1.9)),
+        interpolation=cv2.INTER_NEAREST,
+    )
+    photo = cv2.cvtColor(stretched, cv2.COLOR_GRAY2BGR)
+
+    result = solve(photo, budget=1)
+
+    assert result.text == text
+    assert result.candidates_tried == 1
 
 
 def test_success_rate_for_a_larger_code():

@@ -20,6 +20,9 @@ The interactive explainer of exactly this pipeline: `qrsalvage serve`, then `/me
 
 ```
 photograph(s)
+   │
+   ├─ whole-photo decode oracle.py      ordinary checksum-valid codes exit immediately
+   │  unreadable
    │  preprocess.py      illumination correction, binarisation
    ▼
 finder candidates       geometry.py + scanfinder.py   (two detectors, merged;

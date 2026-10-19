@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 import cv2
 import numpy as np
 
+from . import oracle
 from .decoding import SearchResult, decode_matrix, ordered_search
 from .ensemble import (
     DEFAULT_FUSION,
@@ -261,6 +262,7 @@ class SolveResult:
     inverted: bool = False
     ecc: str | None = None
     failure: str | None = None
+    source: str = "recovery"
 
     @property
     def solved(self) -> bool:
@@ -809,6 +811,24 @@ def solve(
             # the same frame every reported finder is mapped back into. The crop is an
             # internal narrowing and must not change what the numbers mean.
             finder_points = [(x - x0, y - y0) for x, y in finder_points]
+
+    # Ask the installed outside decoder about the photograph before imposing qrsalvage's
+    # stricter grid model on it. ZXing can read some valid codes with extreme non-square pixel
+    # scaling even though our finder geometry cannot construct a trustworthy square grid. The
+    # oracle returns only checksum-valid QR payloads; failed attempts still fall through to the
+    # recovery pipeline, where uncertainty and erasures do the work ordinary readers cannot.
+    if finder_points is None:
+        gray_photo = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+        direct_text = oracle.decode(gray_photo)
+        if direct_text:
+            _emit(progress, "image", width=int(bgr.shape[1]), height=int(bgr.shape[0]))
+            _emit(progress, "direct", source="whole photograph")
+            return SolveResult(
+                text=direct_text,
+                candidates_tried=1,
+                failure=None,
+                source="direct",
+            )
 
     # Events from inside the attempt carry working-image coordinates already mapped back to
     # the (cropped) input; the crop offset is the one shift the attempt cannot know about.

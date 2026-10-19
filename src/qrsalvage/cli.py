@@ -64,6 +64,13 @@ def _as_name(name: str) -> str:
 
 def _report(result, out: Path, band: float) -> None:
     print(f"finder candidates: {len(result.finders)}")
+    if result.source == "direct":
+        print("decoded directly from the photograph")
+        assert result.text is not None
+        digest = hashlib.sha256(result.text.encode()).hexdigest()
+        print(f"\nRECOVERED ({len(result.text)} characters, sha256 {digest[:16]}...)")
+        print(_as_payload(result.text), end="")
+        return
     for fit in result.per_size:
         marker = "<-" if fit.modules == result.modules else "  "
         print(
