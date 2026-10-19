@@ -86,7 +86,8 @@ In dieser Reihenfolge, jede Stufe für sich nutzbar:
   Code und beweg sie langsam": Live-Vorschau per `getUserMedia`, automatisch 3–5 Frames
   greifen, direkt in `solve_many`. Die Fusion ist der stärkste gemessene Hebel
   (36–81 % einzeln → 93–100 % fusioniert), aber niemand macht von Hand drei Fotos — aus dem
-  erklärungsbedürftigen Feature wird eine Geste. Läuft auf 127.0.0.1 und später auf HTTPS.
+  erklärungsbedürftigen Feature wird eine Geste. Läuft lokal auf 127.0.0.1 und öffentlich
+  über HTTPS auf GitHub Pages.
 - [x] **2. Konservative Payload-Intelligenz** *(Rettungsquote/Erlebnis)* — URL, Kontaktkarte,
   E-Mail, Telefon, SMS, Geo-URI, WLAN, Zigbee und Matter nur anhand ihrer eigenen Syntax
   erkennen. Alles andere bleibt Klartext; Produkt und Zweck werden nie geraten. Aufschlüsselung
@@ -143,6 +144,6 @@ Browser-Version konsumiert sie unverändert.
 ## Grundsätze, an denen jedes neue Feature gemessen wird
 
 1. Hilft es im Rettungsmoment, oder verbreitert es nur die Liste?
-2. Läuft es ohne Server — heute auf 127.0.0.1, morgen statisch im Browser?
+2. Läuft es ohne Anwendungsserver — lokal auf 127.0.0.1 und statisch auf GitHub Pages?
 3. Vertieft es die Rettung beschädigter QR-Codes, ohne unbelegte Universalversprechen?
 4. Ist sein Nutzen messbar, bevor er behauptet wird?

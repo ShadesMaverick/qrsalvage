@@ -120,7 +120,11 @@ def test_internal_status_no_longer_calls_pages_unpublished():
     assert "GitHub Pages einschalten" not in vision
     assert "GitHub Pages einschalten" not in issues
     assert "Rest bis Veröffentlichung" not in vision
+    assert "später auf HTTPS" not in vision
+    assert "morgen statisch im Browser" not in vision
     assert "Einträge, fertig zum Anlegen als GitHub-Issues, sobald" not in issues
+    assert "Muss vor der ersten Veröffentlichung fertig sein" not in issues
+    assert "## 1. Dokumentation und Code ins Englische übersetzen — ERLEDIGT" in issues
     assert "https://shadesmaverick.github.io/qrsalvage/" in vision
 
 

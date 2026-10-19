@@ -6,22 +6,23 @@ Arbeiten begleiten, ersetzen aber nicht die hier festgehaltene Begründung und M
 
 ---
 
-## 1. Dokumentation und Code ins Englische übersetzen
+## 1. Dokumentation und Code ins Englische übersetzen — ERLEDIGT
 
 **Labels:** `documentation`, `blocker`
 
-Rund 2000 Zeilen. Bezeichner sind bereits englisch, betroffen sind Docstrings und Kommentare.
+Zur Veröffentlichung wurden rund 2000 Zeilen übersetzt. Die Bezeichner waren bereits englisch;
+betroffen waren Docstrings und Kommentare.
 
-Sinngemäß übersetzen, nicht wörtlich. Der Wert dieses Codes steckt in den Begründungen — warum
-über Geometrien gemittelt wird und nicht über Vorverarbeitungen, warum eine Auslassung halb so
-teuer ist wie ein Fehler, warum „gültig" nicht „richtig" heißt. Eine maschinelle Übersetzung
-zerstört genau diesen Teil.
+Sinngemäß statt wörtlich zu übersetzen war entscheidend. Der Wert dieses Codes steckt in den
+Begründungen — warum über Geometrien gemittelt wird und nicht über Vorverarbeitungen, warum eine
+Auslassung halb so teuer ist wie ein Fehler, warum „gültig" nicht „richtig" heißt. Eine maschinelle
+Übersetzung zerstört genau diesen Teil.
 
-Muss vor der ersten Veröffentlichung fertig sein — danach ist es ein Bruch für alle, die schon
-geforkt haben.
+Die Arbeit wurde vor der ersten Veröffentlichung abgeschlossen. Ein späterer Sprachwechsel wäre
+ein Bruch für alle bereits vorhandenen Forks gewesen.
 
-**Fertig, wenn:** kein deutscher Text mehr in `src/`, `tests/`, `scripts/`; `CLAUDE.md` und die
-Skills unter `.claude/` bleiben deutsch, die sind projektintern.
+**Ergebnis:** Kein deutscher Text mehr in `src/`, `tests/`, `scripts/`; interne Anweisungen und
+Skills bleiben deutsch.
 
 ---
 
