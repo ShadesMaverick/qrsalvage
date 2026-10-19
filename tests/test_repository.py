@@ -111,3 +111,25 @@ def test_python_build_tools_are_pinned():
 
     assert project["build-system"]["requires"] == ["setuptools==84.0.0"]
     assert "pip install build==1.6.1" in ci
+
+
+def test_internal_status_no_longer_calls_pages_unpublished():
+    vision = _text("docs/VISION.md")
+    issues = _text("docs/ISSUES.md")
+
+    assert "GitHub Pages einschalten" not in vision
+    assert "GitHub Pages einschalten" not in issues
+    assert "Rest bis Veröffentlichung" not in vision
+    assert "Einträge, fertig zum Anlegen als GitHub-Issues, sobald" not in issues
+    assert "https://shadesmaverick.github.io/qrsalvage/" in vision
+
+
+def test_github_templates_warn_against_publishing_secrets():
+    bug = _text(".github/ISSUE_TEMPLATE/bug_report.yml")
+    feature = _text(".github/ISSUE_TEMPLATE/feature_request.yml")
+    pull_request = _text(".github/pull_request_template.md")
+
+    for template in (bug, feature, pull_request):
+        assert "real photographs" in template.lower()
+        assert "recovered payload" in template.lower()
+    assert "before" in pull_request.lower() and "after" in pull_request.lower()
