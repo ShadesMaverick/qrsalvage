@@ -1,15 +1,8 @@
-# Offene Aufgaben bis zur Veröffentlichung
+# Technische Befunde und Aufgaben
 
-Einträge, fertig zum Anlegen als GitHub-Issues, sobald das öffentliche Repository steht.
-Anlegen jeweils mit:
-
-```
-gh issue create --title "<Titel>" --label "<Labels>" --body "<Text>"
-```
-
-Bewusst in einer Datei statt in sechs: Solange es kein Remote gibt, wäre ein Verzeichnis mit
-Einzeldateien nur Verwaltung ohne Nutzen. Beim ersten Anlegen wandern sie nach GitHub und diese
-Datei wird gelöscht.
+Diese Datei ist das dauerhafte technische Journal des Projekts: Sie bewahrt offene Aufgaben,
+erledigte Arbeiten, Messwerte und negative Befunde an einem Ort. GitHub-Issues können einzelne
+Arbeiten begleiten, ersetzen aber nicht die hier festgehaltene Begründung und Messgeschichte.
 
 ---
 
@@ -174,8 +167,8 @@ Einzelfall durchgeht.
   `structure_mask`/Layout-Tabellen/Designmatrix/Pseudoinverse per lru_cache (eingefrorene
   Arrays, damit ein schreibender Aufrufer laut scheitert statt den Cache zu vergiften) —
   saubere Fixture 3,27 s → 2,66 s (−19 %), Probe-lastiges Echtfoto 6,92 s → 5,80 s (−16 %),
-  Decode-Rundtrip −27 %. Noch offen fürs Pages-Deployment: CDN-Versionen pinnen bzw.
-  selbst hosten (steht in der Browser-Restarbeit).
+  Decode-Rundtrip −27 %. Die damals offene Pages-Arbeit ist abgeschlossen: CDN-Versionen sind
+  festgelegt und die Assets werden selbst gehostet.
 
 - **Kalibrierung der Posterior korrigieren.** Das Messwerkzeug gibt es jetzt
   (`scripts/calibration.py`, Rand und Mitte getrennt), und es hat die Frage verschoben. Befund:
@@ -242,15 +235,15 @@ Einzelfall durchgeht.
   nichts Neueres als den Module-Worker selbst (Safari 15). In Chrome nachgeprüft: Orakel
   scharf, hartes Fixture in 11,7 s gelöst. Was der statische Blick *nicht* beantworten kann und
   nur ein Gerät klärt: ob iOS die Speichergrenze eines Tabs bei ~30 MB WASM plus NumPy/OpenCV
-  hält. Der Kamera-Modus braucht einen sicheren Kontext, ist über eine LAN-Adresse per `http://`
-  also nicht prüfbar — er wird erst mit dem HTTPS-Deployment testbar. **Stand August 2026: kein
+  hält. Der Kamera-Modus braucht einen sicheren Kontext; das live geschaltete HTTPS-Deployment
+  macht den Test inzwischen möglich. **Stand August 2026: kein
   iOS-Gerät verfügbar, der Test ist nicht gelaufen.** Das ist die einzige Aussage über das
   Produkt, die derzeit unbelegt ist; sie gehört entsprechend zurückhaltend formuliert, solange
   das so bleibt. Wege, das zu schließen: ein fremdes Gerät, ein Gerätetest-Dienst im Browser,
   oder ein früher Nutzer, der berichtet. Der Taschenlampen-Knopf
   existiert auf iOS ohnehin nicht und blendet sich dort korrekt aus.
 
-- **Statische Browser-Version — GEBAUT (August 2026).** `scripts/build_site.py` schreibt eine
+- **Statische Browser-Version — LIVE; gebaut August 2026.** `scripts/build_site.py` schreibt eine
   in sich geschlossene `site/` (29 MB): Pyodide 0.28.0 (Kern-Tarball, Teilmenge über
   `pyodide-lock.json` aufgelöst statt geraten), NumPy 2.2.5, OpenCV 4.11.0.86, zxing-wasm 2.2.4
   aus dem npm-Tarball, das eigene Wheel. Ein einziger Fremd-URL musste weichen: zxing-wasm holt
@@ -259,13 +252,16 @@ Einzelfall durchgeht.
   Kaltstart unter 9 s über localhost, `engraved-curved-hard.png` in 10,7 s gelöst (nativ ~4 s),
   225 Live-Ereignisse, SVG/PDF/Katalog-PDF im Browser erzeugt. Alle 46 Anfragen same-origin,
   im Server-Log inklusive der Worker-Ressourcen gegengeprüft. CSP liegt als `<meta>` in der
-  Seite, weil ein statischer Host keine Header setzt; `connect-src 'self'` macht die
-  Privacy-Aussage erzwungen statt versprochen, `wasm-unsafe-eval` ist ihr Preis. Zwei
+  Seite, weil ein statischer Host keine Header setzt. Der Anwendungscode hat keinen Uploadpfad,
+  der Build auditiert ausgelieferte Textressourcen auf unerklärte absolute URLs, und
+  `connect-src 'self'` beschränkt programmgesteuerte Verbindungen auf denselben Ursprung;
+  gemeinsam tragen diese Ebenen die Privacy-Aussage. `wasm-unsafe-eval` ist der Preis. Zwei
   Architekturstücke haben das getragen: `api.py` (transportneutral, Server und Worker rufen
   dieselben Funktionen) und die synchrone Encode-Richtung des Orakels — ohne die wäre die
   Browser-Version ein reiner Leser gewesen, weil jeder Erfolg re-encodiert und der ganze
-  Katalog aus Re-Encodierungen besteht. **Offen:** GitHub Pages einschalten (Source: GitHub
-  Actions, `.github/workflows/pages.yml`), echter Safari/iOS-Test.
+  Katalog aus Re-Encodierungen besteht. Assets sind selbst gehostet, die Encode-Bridge ist
+  vollständig, und GitHub Pages liefert die Seite unter
+  https://shadesmaverick.github.io/qrsalvage/ aus. **Offen:** echter Safari/iOS-Test.
 
   **Nachtrag September 2026, eine alte Behauptung hier war falsch:** An dieser Stelle stand,
   die Seite setze wurzelrelative Pfade und damit einen Domain-Root voraus. Nachgesehen: Die
@@ -276,7 +272,7 @@ Einzelfall durchgeht.
   Dateisystem. Der `fetch("/api/solve")` in `backend-server.js` bleibt absolut und muss es
   sein: den fährt nur der lokale Server, und der wohnt auf seinem eigenen Root.
 
-- **Statische Browser-Version (GitHub Pages + eigene Domain) — SPIKE ERLEDIGT.** Die Naht
+- **Statische Browser-Version auf GitHub Pages — SPIKE ERLEDIGT.** Die Naht
   ist gebaut (`core/oracle.py`: zxing-cpp lazy, per `oracle.use()` austauschbar; der Kern
   importiert nachweislich ohne die Bindung — Test in test_solver.py). Der Spike
   (`spike/pyodide/index.html`, Anleitung im Dateikopf) löst die harte Fixture im Browser:
@@ -294,9 +290,9 @@ Einzelfall durchgeht.
   (Gitter sauber über ≥3 Fotos → ehrlich „Module physisch weg" statt Falsche-Hoffnung-Schleife),
   und hart erkämpfte Erfolge (>100 Versuche) tragen die Aufforderung, den re-encodierten Code
   vor dem Eintippen mit dem eigenen Handy gegenzuscannen. Upload-Deckel auf 64 MB für
-  Kamera-Serien. **Restarbeit:** Assets selbst hosten statt CDN (Versionen pinnen),
-  Encode-Richtung bridgen (writeBarcode), GitHub Pages einschalten (Source: GitHub Actions,
-  `.github/workflows/pages.yml`). Lizenzseitig geklärt
+  Kamera-Serien. Die damalige Restarbeit ist erledigt: Assets sind selbst gehostet, die
+  Encode-Richtung (`writeBarcode`) ist gebridgt, und GitHub Pages ist live. Eine eigene Domain
+  bleibt optional; der echte Safari/iOS-Test bleibt offen. Lizenzseitig geklärt
   (`THIRD-PARTY-NOTICES.md`).
 - **Das Korpus löst unter OpenCV 5 — unbeabsichtigt gemessen (September 2026).** Der erste
   CI-Lauf auf GitHub hat wegen der `>=`-Untergrenzen in `requirements.txt` numpy 2.5.2,

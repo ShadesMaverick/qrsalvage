@@ -1,0 +1,31 @@
+name: Feature request
+description: Propose a measurable improvement to qrsalvage.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not attach real photographs or recovered payloads. Use a synthetic example when evidence needs an image. Read the [contribution guide](../../CONTRIBUTING.md) before submitting.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem and use case
+      description: Explain the concrete problem and who encounters it without including sensitive data.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Proposed measurable outcome
+      description: State how the improvement could be measured and what result would count as success.
+    validations:
+      required: true
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy confirmation
+      options:
+        - label: I confirm that this request includes no real photographs and no recovered payloads.
+          required: true

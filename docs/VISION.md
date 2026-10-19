@@ -18,10 +18,13 @@ mehrere Scanner erfolglos probiert. Smart-Home-Codes bleiben ein besonders sensi
 - **FOSS, öffentlich auf GitHub.** Apache-2.0; `LICENSE` und `THIRD-PARTY-NOTICES.md`
   liegen im Repo. Alle Abhängigkeiten sind permissiv — nichts steht einer Veröffentlichung
   oder Spendenfinanzierung im Weg. Warum nicht Codeberg: siehe unten.
-- **Statische Browser-Version, eigene Domain, kein Server.** GitHub Pages liefert Dateien,
-  die Rechnerei läuft per Pyodide + zxing-cpp-WASM im Browser des Besuchers. Das macht die
-  Privacy-Aussage wörtlich wahr: Es gibt keinen Server, der Fotos oder Klartexte sehen könnte.
-  Plan und ehrliche Kosten (~40–60 MB Erstladung, 2–5× langsamer) in `ISSUES.md`.
+- **Statische Browser-Version auf GitHub Pages, kein Anwendungsserver.** Die aktuelle Version
+  läuft unter https://shadesmaverick.github.io/qrsalvage/; eine eigene Domain ist eine
+  optionale spätere Maßnahme. Die Rechnerei läuft per Pyodide + zxing-cpp-WASM im Browser des
+  Besuchers. Der Anwendungscode hat keinen Uploadpfad, der Build auditiert ausgelieferte
+  Textressourcen auf unerklärte absolute URLs, und die CSP beschränkt programmgesteuerte
+  Verbindungen auf denselben Ursprung. Gemeinsam tragen diese drei Ebenen die Privacy-Aussage.
+  Ehrliche Kosten (~40–60 MB Erstladung, 2–5× langsamer) stehen in `ISSUES.md`.
 - **Finanziert über Spenden, nicht über Daten.** Zielgröße ist der einmalige Fünfer im
   Rettungsmoment. Ko-fi/LiberaPay für Einmalspenden; Patreon höchstens zusätzlich — Abo-Logik
   passt nicht zu einem Werkzeug, das man einmal im Jahr braucht.
@@ -54,8 +57,11 @@ ausliefern.
 
 Was das kostet, gehört mitgeschrieben: GitHub gehört Microsoft, ist nicht quelloffen, und die
 Datenschutzaussage der Seite muss ehrlich sagen, dass die Auslieferung dort stattfindet. Die
-Kernaussage bleibt davon unberührt — die Rechnerei läuft im Browser des Besuchers, das Foto
-wird nicht hochgeladen, und das erzwingt die CSP, nicht der Hoster.
+Kernaussage bleibt davon unberührt: Die Rechnerei läuft im Browser des Besuchers. Der
+Anwendungscode enthält keinen Uploadpfad, der Build auditiert ausgelieferte Textressourcen auf
+unerklärte absolute URLs, und die CSP beschränkt programmgesteuerte Verbindungen auf denselben
+Ursprung. Keine dieser Ebenen beweist die Aussage allein; gemeinsam tragen sie, dass das Foto
+nicht hochgeladen wird.
 
 **Für den Launch-Post daraus die Konsequenz:** Die Entstehung wird offen genannt, nicht
 verschwiegen. Offen vorgetragen und mit `scripts/` nachprüfbar ist sie haltbar; unerwähnt und
@@ -88,19 +94,18 @@ In dieser Reihenfolge, jede Stufe für sich nutzbar:
 - [x] **3. Die Spendenkarte** *(Moment; URLs nachtragen, siehe ISSUES)* — der Ask auf der
   Erfolgskarte, klein, unter dem Klartext, zusammen mit der Privacy-Aussage: „Lief komplett auf
   deinem Gerät. QR-Code gerettet? 5 € halten das Werkzeug am Leben." Nicht auf der Startseite.
-- [x] **4. Statische Seite — GEBAUT und im Browser verifiziert.** `scripts/build_site.py`
-  schreibt `site/` (29 MB, alles selbst gehostet: Pyodide 0.28.0, NumPy 2.2.5, OpenCV 4.11,
+- [x] **4. Statische Seite — LIVE und im Browser verifiziert.** GitHub Pages liefert sie unter
+  https://shadesmaverick.github.io/qrsalvage/ aus. `scripts/build_site.py` schreibt `site/`
+  (29 MB, alle Assets selbst gehostet: Pyodide 0.28.0, NumPy 2.2.5, OpenCV 4.11,
   zxing-wasm 2.2.4, das eigene Wheel). Gemessen: Kaltstart unter 9 s über localhost, das
   schwere Fixture in **10,7 s** gelöst, 225 Live-Ereignisse, Exporte und Katalog-PDF entstehen
   im Browser. Jede einzelne Anfrage ging an den eigenen Host — im Server-Log samt der
-  Worker-Ressourcen nachgewiesen. Die Aussage „das Foto verlässt dein Gerät nicht" ist damit
-  keine Zusage mehr, sondern durch `connect-src 'self'` erzwungen (CSP als `<meta>`, weil ein
-  statischer Host keine Header setzt). Der Weg dahin: `api.py` als transportneutrale Schicht,
-  die Server und Worker gemeinsam aufrufen, plus die Encode-Richtung des Orakels — gegen den
-  nativen Encoder matrixgleich geprüft (`tests/test_oracle_bridge.py`). **Rest bis
-  Veröffentlichung:** GitHub Pages einschalten (Source: GitHub Actions,
-  `.github/workflows/pages.yml` baut und deployt), echter Safari/iOS-Test. DNS erst, wenn
-  eine eigene Domain dazukommt — die Standardadresse braucht keins.
+  Worker-Ressourcen nachgewiesen. Anwendungscode ohne Uploadpfad, URL-Audit im Build und
+  `connect-src 'self'` tragen die Privacy-Aussage gemeinsam. Der Weg dahin: `api.py` als
+  transportneutrale Schicht, die Server und Worker gemeinsam aufrufen, plus die fertige
+  Encode-Richtung des Orakels — gegen den nativen Encoder matrixgleich geprüft
+  (`tests/test_oracle_bridge.py`). Vendoring, Encode-Bridge und Pages-Deployment sind damit
+  abgeschlossen. Offen bleibt nur der echte Safari/iOS-Test; eine eigene Domain ist optional.
   Die Vorgeschichte: **Spike gelungen**
   (`spike/pyodide/index.html`): der unveränderte Kern löst die harte Fixture im Browser in
   **12,4 s** (nativ ~4 s, Faktor ~3 — im prognostizierten Band), Ladezeit CPython+NumPy+OpenCV
@@ -109,10 +114,8 @@ In dieser Reihenfolge, jede Stufe für sich nutzbar:
   Chrome 137+). **Worker-Ausbau erledigt**: die Rechnerei
   läuft im Module-Worker (Seite bleibt beweisbar reaktiv), und das Orakel wird über den
   synchronen embind-Aufruf von zxing-wasm gerufen — **JSPI ist raus aus dem Pfad**, die
-  Safari-Blockade damit architektonisch beseitigt (Realtest auf Safari steht aus). Noch
-  offen: Assets selbst hosten statt CDN (Versionen pinnen), Encode-Richtung des Orakels,
-  GitHub Pages einschalten (Source: GitHub Actions,
-  `.github/workflows/pages.yml` baut und deployt).
+  Safari-Blockade damit architektonisch beseitigt (Realtest auf Safari steht aus). Die damals
+  offene Selbsthostung der Assets, Encode-Richtung und Pages-Veröffentlichung sind erledigt.
 - [x] **5. Veröffentlichung auf GitHub** — erledigt: Übersetzung (kein Deutsch mehr in
   `src/`, `tests/`, `scripts/`), `CONTRIBUTING`, erfundene EUI64 im Test, und
   `web/legal.html` mit Impressum und Datenschutzerklärung, verlinkt aus der Fußzeile beider
