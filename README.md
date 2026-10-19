@@ -60,13 +60,15 @@ Everything that could be guessed is measured instead, and scored on the same evi
 
 ## Install
 
-```
-pip install qrsalvage
+Install the current version directly from GitHub:
+
+```text
+pip install git+https://github.com/ShadesMaverick/qrsalvage.git
 ```
 
-From source:
+For development from source:
 
-```
+```text
 git clone https://github.com/ShadesMaverick/qrsalvage
 cd qrsalvage
 pip install -e .
