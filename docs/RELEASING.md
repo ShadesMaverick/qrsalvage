@@ -8,8 +8,10 @@ automatisch aus.
 - Der Release-Branch ist sauber und enthält ausschließlich die beabsichtigten Änderungen.
 - Die vollständige Verifikation einschließlich Tests, Lint und Typprüfung ist erfolgreich.
 - Für Änderungen am Wiederherstellungspfad liegt nachvollziehbare Benchmark-Evidenz vor.
-- GitHub ordnet die Commits der vorgesehenen Identität zu und erkennt ihre Signaturen an. Ein
-  `[verified]` im Commit-Betreff ist nur Text und keine Signatur.
+- GitHub ordnet den Release-Commit dem vorgesehenen Konto zu. Ein `[verified]` im
+  Commit-Betreff ist nur Text und keine Signatur.
+- Bestehende historische Commits bleiben unverändert; diese Checkliste verlangt weder ihr
+  Umschreiben noch eine nachträgliche Signatur.
 
 ## Reihenfolge
 
@@ -17,10 +19,13 @@ automatisch aus.
 2. Die vollständige Verifikation erneut ausführen.
 3. Einen signierten Tag im Format `vX.Y.Z` erstellen.
 4. Branch und Tag zu GitHub pushen.
-5. Einen GitHub Release erstellen und Wheel sowie Source Distribution anhängen.
-6. Exakt dieselben Artefakte auf PyPI veröffentlichen.
-7. Die Installation in einer frischen Umgebung prüfen.
-8. Erst nach erfolgreicher Installation die README auf `pip install qrsalvage` umstellen.
+5. Auf GitHub Folgendes prüfen:
+   - GitHub ordnet den Release-Commit dem vorgesehenen Konto zu.
+   - GitHub erkennt die Signatur des Release-Tags an.
+6. Einen GitHub Release erstellen und Wheel sowie Source Distribution anhängen.
+7. Exakt dieselben Artefakte auf PyPI veröffentlichen.
+8. Die Installation in einer frischen Umgebung prüfen.
+9. Erst nach erfolgreicher Installation die README auf `pip install qrsalvage` umstellen.
 
 ## GitHub-Einstellungen
 

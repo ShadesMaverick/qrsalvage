@@ -9,10 +9,11 @@
 # Pages service as an artefact instead, so the tree stays what it is: source, a synthetic corpus,
 # and documentation.
 #
-# build_site.py ends by auditing the shipped files for absolute URLs and exits non-zero if it
-# finds one it cannot account for. That is deliberately the gate here too -- the claim that the
-# photograph never leaves the visitor's machine is enforced by connect-src 'self', and a build
-# that reaches a CDN would break it silently. A red deployment is the correct outcome.
+# The application code has no upload path.
+# The build audits shipped text files for unexplained absolute URLs.
+# The same-origin CSP restricts programmatic connections. None of these safeguards proves the
+# privacy claim alone; together they support it, and a red deployment is the correct outcome if
+# the URL audit finds an unexplained connection target.
 
 name: Pages
 
