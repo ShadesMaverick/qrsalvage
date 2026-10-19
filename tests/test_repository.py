@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import tomllib
 from pathlib import Path
 
@@ -40,3 +41,31 @@ def test_package_metadata_points_back_to_the_public_project():
         "Repository": "https://github.com/ShadesMaverick/qrsalvage",
         "Issues": "https://github.com/ShadesMaverick/qrsalvage/issues",
     }
+
+
+def _meta_csp(path: str) -> str:
+    page = _text(path)
+    match = re.search(
+        r'<meta http-equiv="Content-Security-Policy" content="([^"]+)"',
+        page,
+        flags=re.DOTALL,
+    )
+    assert match is not None, f"missing meta CSP in {path}"
+    return match.group(1)
+
+
+def test_static_pages_do_not_claim_header_only_csp_directives():
+    for path in (
+        "src/qrsalvage/web/index.html",
+        "src/qrsalvage/web/method.html",
+        "src/qrsalvage/web/legal.html",
+    ):
+        assert "frame-ancestors" not in _meta_csp(path), path
+
+
+def test_privacy_explanation_credits_code_audit_and_policy_together():
+    legal = _text("src/qrsalvage/web/legal.html")
+
+    assert "Der Anwendungscode enthält keinen Uploadpfad" in legal
+    assert "Der Build prüft die ausgelieferten Textdateien" in legal
+    assert "weshalb Ihr Browser einen Upload gar nicht erst zuließe" not in legal

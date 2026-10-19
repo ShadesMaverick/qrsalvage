@@ -10,12 +10,12 @@
      'wasm-unsafe-eval' is what the browser build costs: CPython and OpenCV arrive as
      WebAssembly and have to be compiled. It permits compiling wasm and nothing else -- plain
      eval() and new Function() stay forbidden, which is the part that matters. connect-src
-     'self' is the load-bearing line here: it is what makes "your photograph does not leave
-     this device" enforced by the browser instead of promised by us. -->
+     'self' restricts programmatic connections to the same origin. It works together with the
+     audited application code and the build's URL audit to keep photographs on this device. -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self';
       script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline';
       img-src 'self' data: blob:; connect-src 'self'; worker-src 'self'; child-src 'self';
-      object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'">
+      object-src 'none'; base-uri 'none'; form-action 'self'">
 <!-- The title is the search result's first line, so it carries the broad task -- damaged QR
      code recovery -- before the project's name. Nobody searches for qrsalvage itself. -->
 <title>Damaged QR code recovery from a photo | qrsalvage</title>
