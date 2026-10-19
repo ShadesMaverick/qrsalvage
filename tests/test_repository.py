@@ -100,9 +100,40 @@ def test_workflows_pin_actions_to_reviewed_commits():
         "actions/deploy-pages": "d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e",
     }
 
-    assert not re.search(r"uses: actions/[^@\s]+@v\d", workflows)
-    for action, sha in expected.items():
-        assert f"uses: {action}@{sha}" in workflows
+    uses = re.findall(r"uses: (actions/[^@\s]+)@([^\s#]+)", workflows)
+
+    assert {action for action, _ref in uses} == expected.keys()
+    for action, ref in uses:
+        assert ref == expected[action]
+
+
+def test_wheel_install_uses_the_recorded_runtime_constraints():
+    ci = _text(".github/workflows/ci.yml")
+
+    assert (
+        '.venv/bin/pip install --constraint "$GITHUB_WORKSPACE/requirements.txt" '
+        '"$GITHUB_WORKSPACE"/dist/*.whl'
+    ) in ci
+
+
+def test_pages_privacy_comment_credits_all_three_safeguards():
+    pages = _text(".github/workflows/pages.yml")
+
+    assert "application code has no upload path" in pages
+    assert "build audits shipped text files for unexplained absolute URLs" in pages
+    assert "same-origin CSP restricts programmatic connections" in pages
+    assert "enforced by connect-src 'self'" not in pages
+
+
+def test_release_identity_checks_leave_existing_history_unchanged():
+    releasing = _text("docs/RELEASING.md")
+    prerequisites = releasing.split("## Voraussetzungen", 1)[1].split("## Reihenfolge", 1)[0]
+    sequence = releasing.split("## Reihenfolge", 1)[1].split("## GitHub-Einstellungen", 1)[0]
+
+    assert "GitHub ordnet den Release-Commit dem vorgesehenen Konto zu" in prerequisites
+    assert "Bestehende historische Commits bleiben unverändert" in prerequisites
+    assert "GitHub erkennt die Signatur des Release-Tags an" in sequence
+    assert "GitHub ordnet die Commits der vorgesehenen Identität zu" not in releasing
 
 
 def test_python_build_tools_are_pinned():

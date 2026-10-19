@@ -112,6 +112,6 @@ jobs:
         run: |
           cd "$(mktemp -d)"
           python -m venv .venv
-          .venv/bin/pip install "$GITHUB_WORKSPACE"/dist/*.whl
+          .venv/bin/pip install --constraint "$GITHUB_WORKSPACE/requirements.txt" "$GITHUB_WORKSPACE"/dist/*.whl
           .venv/bin/qrsalvage synth "WHEEL-INSTALL-CHECK" --out .
           .venv/bin/qrsalvage solve synth_0.png
