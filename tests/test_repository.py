@@ -69,3 +69,45 @@ def test_privacy_explanation_credits_code_audit_and_policy_together():
     assert "Der Anwendungscode enthält keinen Uploadpfad" in legal
     assert "Der Build prüft die ausgelieferten Textdateien" in legal
     assert "weshalb Ihr Browser einen Upload gar nicht erst zuließe" not in legal
+
+
+def test_ci_requirements_are_the_recorded_toolchain():
+    lines = {
+        line.strip()
+        for line in _text("requirements.txt").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    }
+
+    assert lines == {
+        'numpy==2.4.6; python_version < "3.12"',
+        'numpy==2.5.4; python_version >= "3.12"',
+        "opencv-python==5.0.0.93",
+        "pillow==12.3.0",
+        "zxing-cpp==3.1.1",
+        "pytest==9.1.1",
+        "ruff==0.17.1",
+        "mypy==2.4.0",
+    }
+
+
+def test_workflows_pin_actions_to_reviewed_commits():
+    workflows = _text(".github/workflows/ci.yml") + _text(".github/workflows/pages.yml")
+    expected = {
+        "actions/checkout": "11d5960a326750d5838078e36cf38b85af677262",
+        "actions/setup-python": "a26af69be951a213d495a4c3e4e4022e16d87065",
+        "actions/cache": "0057852bfaa89a56745cba8c7296529d2fc39830",
+        "actions/upload-pages-artifact": "56afc609e74202658d3ffba0e8f6dda462b719fa",
+        "actions/deploy-pages": "d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e",
+    }
+
+    assert not re.search(r"uses: actions/[^@\s]+@v\d", workflows)
+    for action, sha in expected.items():
+        assert f"uses: {action}@{sha}" in workflows
+
+
+def test_python_build_tools_are_pinned():
+    project = tomllib.loads(_text("pyproject.toml"))
+    ci = _text(".github/workflows/ci.yml")
+
+    assert project["build-system"]["requires"] == ["setuptools==84.0.0"]
+    assert "pip install build==1.6.1" in ci
