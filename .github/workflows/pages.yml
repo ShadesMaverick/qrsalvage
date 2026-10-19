@@ -5,8 +5,9 @@
 # zxing oracle -- and scripts/build_site.py fetches all of it from upstream, pinned by version
 # and checked against a SHA-256. Committing that to a branch would put binaries nobody here
 # compiled into the history and grow the repository by the same amount on every deployment.
-# Actions hands the built directory to the Pages service as an artefact instead, so the tree
-# stays what it is: source, a synthetic corpus, and documentation.
+# After CI succeeds for a push to main, Actions hands that exact commit's built directory to the
+# Pages service as an artefact instead, so the tree stays what it is: source, a synthetic corpus,
+# and documentation.
 #
 # build_site.py ends by auditing the shipped files for absolute URLs and exits non-zero if it
 # finds one it cannot account for. That is deliberately the gate here too -- the claim that the
@@ -16,9 +17,9 @@
 name: Pages
 
 on:
-  push:
-    branches: [main]
-  workflow_dispatch:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
 
 permissions:
   contents: read
@@ -34,9 +35,15 @@ concurrency:
 
 jobs:
   build:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
