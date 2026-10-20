@@ -34,6 +34,7 @@ function thanksHtml() {
     <span class="links">${links}</span></div>`;
 }
 const drop = $("drop"), fileInput = $("file"), status = $("status");
+const progress = $("progress"), statusLive = $("statusLive"), workspace = $("workspace");
 const canvas = $("photo"), ctx = canvas.getContext("2d");
 
 // Several photographs of one code, in the order they arrived. The first one is the one shown
@@ -56,8 +57,58 @@ let picked = [];
 let token = null;   // identifies the result the backend is holding for export
 let seq = 0;        // solve sequence; a late answer from a superseded run must not render
 let timerId = null;
+let statusTimer = null;
+let progressOwner = null;
+let lastAnnouncement = "";
+let pendingWarning = "";
+const bootProgressOwner = Symbol("boot");
 let mode = "one";   // "one": several photographs of one code; "many": a catalogue
 let lastSolved = false;  // a fresh drop after a success starts a fresh recovery
+
+function announce(message) {
+  if (!message || message === lastAnnouncement) return;
+  lastAnnouncement = message;
+  statusLive.textContent = message;
+}
+
+function stopElapsedTimer() {
+  clearInterval(timerId);
+  timerId = null;
+}
+
+function progressWorking(owner) {
+  clearTimeout(statusTimer);
+  stopElapsedTimer();
+  progressOwner = owner;
+  progress.classList.add("working");
+  progress.classList.remove("complete");
+  workspace.setAttribute("aria-busy", "true");
+}
+
+function progressIdle(owner) {
+  if (owner !== undefined && progressOwner !== owner) return false;
+  clearTimeout(statusTimer);
+  stopElapsedTimer();
+  progress.classList.remove("working", "complete");
+  workspace.setAttribute("aria-busy", "false");
+  progressOwner = null;
+  return true;
+}
+
+function progressComplete(message) {
+  progressIdle();
+  const owner = Symbol("complete");
+  progressOwner = owner;
+  progress.classList.add("complete");
+  status.textContent = message;
+  announce(message);
+  statusTimer = setTimeout(() => {
+    if (progressOwner === owner) {
+      status.textContent = "";
+      progressIdle(owner);
+    }
+  }, 4000);
+}
 
 /* --- the backend: where the work happens -------------------------------------------- */
 /* window.qrBackend arrives from backend.js and is the page's only route to the recovery. The
@@ -74,23 +125,33 @@ $("privacyNote").textContent = window.qrBackend.privacyNote;
    than one that says what it is doing. In server mode this never fires. */
 window.qrBackend.onBoot((event) => {
   if (event.done) {
-    if (!document.body.classList.contains("busy")) status.textContent = "";
+    if (progressOwner === bootProgressOwner && progressIdle(bootProgressOwner)) {
+      status.textContent = "";
+      announce("Recovery engine ready");
+    }
     return;
   }
+  if (progressOwner !== null && progressOwner !== bootProgressOwner) return;
+  progressWorking(bootProgressOwner);
   const seconds = event.seconds ? ` <span class="mono">${Number(event.seconds)} s</span>` : "";
   status.innerHTML =
-    `<span class="spin"></span> starting the recovery engine in ${escapeHtml(window.qrBackend.mode)}` +
+    `starting the recovery engine in ${escapeHtml(window.qrBackend.mode)}` +
     ` — ${escapeHtml(event.stage)}${seconds}` +
     `<span class="quiet"> — once only, then it stays warm</span>`;
+  announce(`Starting the recovery engine: ${event.stage}`);
 });
 
 /** Wait until recovering is possible at all. Answers false if it never will be. */
-async function backendReady() {
+async function backendReady(owner) {
   try {
     await window.qrBackend.ready;
     return true;
   } catch (err) {
-    status.textContent = window.qrBackend.failurePrefix + err;
+    if (progressIdle(owner)) {
+      document.body.classList.remove("busy");
+      status.textContent = window.qrBackend.failurePrefix + err;
+      announce("The recovery engine could not start");
+    }
     return false;
   }
 }
@@ -104,6 +165,7 @@ async function backendReady() {
 
 let cameraStream = null;
 let capturing = false;
+let captureOwner = null;
 let torchOn = false;
 
 if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
@@ -111,22 +173,36 @@ if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
 }
 
 $("cameraOpen").addEventListener("click", (e) => { e.stopPropagation(); openCamera(); });
-$("cameraClose").addEventListener("click", closeCamera);
+$("cameraClose").addEventListener("click", cancelCapture);
 $("capture").addEventListener("click", captureBurst);
 $("torch").addEventListener("click", toggleTorch);
 
 async function openCamera() {
-  if (cameraStream) return;
+  if (cameraStream || document.body.classList.contains("busy")) return;
+  const owner = Symbol("camera");
+  progressWorking(owner);
+  status.textContent = "requesting camera access…";
+  announce("Requesting camera access");
+  let stream;
   try {
-    cameraStream = await navigator.mediaDevices.getUserMedia({
+    stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: "environment", width: { ideal: 2560 }, height: { ideal: 1440 } },
       audio: false,
     });
   } catch (err) {
-    status.textContent =
-      "no camera: " + err.name + " — dropping a photograph works exactly the same";
+    if (progressIdle(owner)) {
+      status.textContent =
+        "no camera: " + err.name + " — dropping a photograph works exactly the same";
+      announce("Camera access failed; dropping a photograph still works");
+    }
     return;
   }
+  if (progressOwner !== owner) {
+    for (const track of stream.getTracks()) track.stop();
+    return;
+  }
+  cameraStream = stream;
+  if (progressIdle(owner)) status.textContent = "";
   $("cameraFeed").srcObject = cameraStream;
   $("cameraPanel").classList.remove("hidden");
   $("cameraNote").innerHTML = mode === "one"
@@ -150,6 +226,17 @@ function closeCamera() {
   $("cameraPanel").classList.add("hidden");
 }
 
+function cancelCapture() {
+  const owner = captureOwner;
+  captureOwner = null;
+  capturing = false;
+  if (owner && progressIdle(owner)) {
+    document.body.classList.remove("busy");
+    status.textContent = "";
+  }
+  closeCamera();
+}
+
 async function toggleTorch() {
   if (!cameraStream) return;
   torchOn = !torchOn;
@@ -160,31 +247,62 @@ async function toggleTorch() {
 }
 
 async function captureBurst() {
-  if (!cameraStream || capturing) return;
+  if (!cameraStream || capturing || document.body.classList.contains("busy")) return;
   const video = $("cameraFeed");
   if (!video.videoWidth) { $("cameraNote").textContent = "the camera is still starting…"; return; }
+  const owner = Symbol("capture");
+  const frames = [];
+  captureOwner = owner;
   capturing = true;
+  document.body.classList.add("busy");
+  progressWorking(owner);
+  status.textContent = "capturing photographs…";
+  announce("Capturing photographs");
   const count = mode === "one" ? 4 : 1;
-  for (let i = 0; i < count; i++) {
-    $("cameraNote").innerHTML =
-      count > 1 ? `<em>frame ${i + 1} of ${count}</em> — keep moving slowly…` : "captured.";
-    const frame = document.createElement("canvas");
-    frame.width = video.videoWidth;
-    frame.height = video.videoHeight;
-    frame.getContext("2d").drawImage(video, 0, 0);
-    loaded.push({
-      // JPEG, not PNG: a camera frame is noise-limited anyway, and a 2560-wide PNG would
-      // make every recovery haul megabytes to the backend for nothing.
-      dataUrl: frame.toDataURL("image/jpeg", 0.92),
-      bitmap: await createImageBitmap(frame),
-      name: `camera ${loaded.length + 1}`,
-    });
-    if (i < count - 1) await new Promise((resolve) => setTimeout(resolve, 700));
+  let committed = false;
+  try {
+    for (let i = 0; i < count; i++) {
+      $("cameraNote").innerHTML =
+        count > 1 ? `<em>frame ${i + 1} of ${count}</em> — keep moving slowly…` : "captured.";
+      const frame = document.createElement("canvas");
+      frame.width = video.videoWidth;
+      frame.height = video.videoHeight;
+      frame.getContext("2d").drawImage(video, 0, 0);
+      const bitmap = await createImageBitmap(frame);
+      frames.push({
+        // JPEG, not PNG: a camera frame is noise-limited anyway, and a 2560-wide PNG would
+        // make every recovery haul megabytes to the backend for nothing.
+        dataUrl: frame.toDataURL("image/jpeg", 0.92),
+        bitmap,
+        name: `camera ${loaded.length + frames.length + 1}`,
+      });
+      if (progressOwner !== owner) return;
+      if (i < count - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 700));
+        if (progressOwner !== owner) return;
+      }
+    }
+    if (progressOwner !== owner) return;
+    loaded.push(...frames);
+    committed = true;
+    closeCamera();
+    status.textContent = "preparing the captured photographs…";
+    announce("Preparing the captured photographs");
+    refresh();
+    run();
+  } catch (err) {
+    if (progressIdle(owner)) {
+      document.body.classList.remove("busy");
+      status.textContent = "camera capture failed: " + err.message;
+      announce("Camera capture failed");
+    }
+  } finally {
+    if (!committed) releaseBitmaps(frames);
+    if (captureOwner === owner) {
+      captureOwner = null;
+      capturing = false;
+    }
   }
-  capturing = false;
-  closeCamera();
-  refresh();
-  run();
 }
 
 for (const radio of document.querySelectorAll('#modeRow input')) {
@@ -199,7 +317,9 @@ function run() {
   if (mode === "many") { catalogRun(); } else { solve(); }
 }
 
-drop.addEventListener("click", () => fileInput.click());
+drop.addEventListener("click", () => {
+  if (!document.body.classList.contains("busy")) fileInput.click();
+});
 drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
 drop.addEventListener("dragleave", () => drop.classList.remove("over"));
 drop.addEventListener("drop", (e) => {
@@ -229,6 +349,63 @@ function bitmapToJpeg(bitmap) {
 async function addFiles(files) {
   const images = [...(files || [])].filter((f) => f.type && f.type.startsWith("image/"));
   if (!images.length) return;
+  if (document.body.classList.contains("busy")) return;
+  document.body.classList.add("busy");
+  const owner = Symbol("selection");
+  progressWorking(owner);
+  status.textContent = images.length === 1
+    ? "reading the selected photograph…"
+    : `reading ${images.length} selected photographs…`;
+  announce(images.length === 1
+    ? "Reading the selected photograph"
+    : `Reading ${images.length} selected photographs`);
+
+  const accepted = [];
+  const refused = [];
+  for (const file of images) {
+    let bitmap = null;
+    try {
+      bitmap = await createImageBitmap(file);
+      if (progressOwner !== owner) {
+        bitmap.close();
+        releaseBitmaps(accepted);
+        return;
+      }
+      // iPhones photograph HEIC. Where the browser can decode it (Safari), it is transcoded
+      // to JPEG here, because the recovery backend cannot read HEIC bytes. Everything else
+      // travels untouched -- recompressing a crisp PNG would only cost detail.
+      const transcode = /hei[cf]/i.test(file.type || "");
+      const dataUrl = transcode ? bitmapToJpeg(bitmap) : await readAsDataURL(file);
+      if (progressOwner !== owner) {
+        bitmap.close();
+        releaseBitmaps(accepted);
+        return;
+      }
+      accepted.push({
+        dataUrl,
+        bitmap,
+        name: file.name,
+      });
+    } catch {
+      if (bitmap) bitmap.close();
+      // The old behaviour on an undecodable file was silence -- the drop zone did not even
+      // twitch. The most common cause is an iPhone HEIC on a browser without an HEIC decoder.
+      refused.push(file.name);
+    }
+  }
+  if (progressOwner !== owner) {
+    releaseBitmaps(accepted);
+    return;
+  }
+  if (!accepted.length) {
+    if (progressIdle(owner)) {
+      document.body.classList.remove("busy");
+      status.textContent = `could not read: ${refused.join(", ")} — likely HEIC (iPhone). ` +
+        "Export or share the photo as JPEG and drop it again.";
+      announce("One or more selected photographs could not be read");
+    }
+    return;
+  }
 
   // After a success a fresh drop means a fresh code: adding to a solved one is always
   // pointless, because the already-solved member wins again before anything is fused.
@@ -236,32 +413,12 @@ async function addFiles(files) {
     releaseBitmaps(loaded);
     loaded = []; token = null; lastSolved = false;
   }
-
-  const refused = [];
-  for (const file of images) {
-    try {
-      const bitmap = await createImageBitmap(file);
-      // iPhones photograph HEIC. Where the browser can decode it (Safari), it is transcoded
-      // to JPEG here, because the recovery backend cannot read HEIC bytes. Everything else
-      // travels untouched -- recompressing a crisp PNG would only cost detail.
-      const transcode = /hei[cf]/i.test(file.type || "");
-      loaded.push({
-        dataUrl: transcode ? bitmapToJpeg(bitmap) : await readAsDataURL(file),
-        bitmap,
-        name: file.name,
-      });
-    } catch {
-      // The old behaviour on an undecodable file was silence -- the drop zone did not even
-      // twitch. The most common cause is an iPhone HEIC on a browser without an HEIC decoder.
-      refused.push(file.name);
-    }
-  }
+  loaded.push(...accepted);
   if (refused.length) {
-    status.textContent =
-      `could not read: ${refused.join(", ")} — likely HEIC (iPhone). ` +
+    const warning = `could not read: ${refused.join(", ")} — likely HEIC (iPhone). ` +
       "Export or share the photo as JPEG and drop it again.";
+    pendingWarning = warning;
   }
-  if (!loaded.length) return;
   picked = []; picking = false;
   refresh();
   run();
@@ -270,9 +427,12 @@ async function addFiles(files) {
 function resetAll() {
   seq += 1;               // orphan any solve still in flight
   busy(false);
+  captureOwner = null;
+  capturing = false;
   closeCamera();
   releaseBitmaps(loaded);
-  loaded = []; picked = []; picking = false; token = null;
+  loaded = []; picked = []; picking = false; token = null; pendingWarning = "";
+  lastSolved = false;
   $("results").classList.add("hidden");
   $("catalogPanel").classList.add("hidden");
   drop.classList.remove("compact");
@@ -364,27 +524,54 @@ canvas.addEventListener("click", (e) => {
   if (picked.length === 3) { picking = false; solve(picked); }
 });
 
-function busy(on) {
-  document.body.classList.toggle("busy", on);
-  clearInterval(timerId);
-  if (!on) { status.textContent = ""; return; }
+function busy(on, owner) {
+  if (!on) {
+    if (owner !== undefined && progressOwner !== owner) return false;
+    document.body.classList.remove("busy");
+    progressIdle(owner);
+    status.textContent = "";
+    return true;
+  }
+  document.body.classList.add("busy");
+  progressWorking(owner);
   const started = Date.now();
   const together = loaded.length > 1 ? ` · reading ${loaded.length} photographs together` : "";
+  const warning = pendingWarning
+    ? `<span class="quiet"> · ${escapeHtml(pendingWarning)}</span>`
+    : "";
   status.innerHTML =
-    `<span class="spin"></span> recovering… <span class="mono" id="elapsed">0 s</span>${together}` +
-    `<span class="quiet"> — a large photograph can take a minute</span>`;
+    `<strong>recovering…</strong> <span class="mono" id="elapsed" aria-hidden="true">0 s</span>` +
+    `<span class="quiet" id="progressStage">${together || " · reading the photograph"}` +
+    ` — a large photograph can take a minute</span>${warning}`;
+  announce(pendingWarning ? "Recovery started; some selected photographs could not be read" :
+    "Recovery started");
+  pendingWarning = "";
   timerId = setInterval(() => {
     const el = $("elapsed");
     if (el) el.textContent = Math.round((Date.now() - started) / 1000) + " s";
   }, 1000);
+  return true;
 }
 
 async function solve(points) {
   if (!loaded.length) return;
   const my = ++seq;
+  const owner = Symbol(`solve-${my}`);
   $("catalogPanel").classList.add("hidden");
-  if (!(await backendReady()) || my !== seq) return;
-  busy(true);
+  document.body.classList.add("busy");
+  progressWorking(owner);
+  status.textContent = "preparing the recovery engine…";
+  announce("Preparing the recovery engine");
+  const ready = await backendReady(owner);
+  if (!ready || my !== seq) {
+    if (progressOwner === owner) {
+      document.body.classList.remove("busy");
+      progressIdle(owner);
+      status.textContent = "";
+    }
+    return;
+  }
+  busy(true, owner);
   liveStart();
   let answer = null;
   try {
@@ -396,13 +583,20 @@ async function solve(points) {
       (event) => { if (my === seq) liveEvent(event); }
     );
   } catch (err) {
-    if (my === seq) { busy(false); liveEnd(); status.textContent = window.qrBackend.failurePrefix + err; }
+    if (my === seq && busy(false, owner)) {
+      liveEnd();
+      status.textContent = window.qrBackend.failurePrefix + err;
+      announce("Recovery failed");
+    }
     return;
   }
   if (my !== seq) return;  // superseded by a newer drop; this answer belongs to old inputs
-  busy(false);
+  if (!busy(false, owner)) return;
   liveEnd();
-  if (answer) render(answer);
+  if (answer) {
+    render(answer);
+    if (answer.ok) progressComplete("QR code recovered");
+  }
 }
 
 /* --- the live view: watch the method work ------------------------------------------- */
@@ -469,6 +663,13 @@ function liveEvent(e) {
       e.type === "member" ? ` — ${e.index + 1} of ${e.total}` : "";
     $("liveStage").innerHTML = member + (stage[1]
       ? `<a href="${stage[1]}" target="_blank">${stage[0]}</a>` : stage[0]) + escapeHtml(extra);
+    const progressStage = $("progressStage");
+    if (progressStage) {
+      progressStage.textContent = ` · ${member}${stage[0]}${extra}`;
+    }
+    // The visible diagnostics may update on every probe. Screen readers get the meaningful
+    // stage only, and announce() suppresses identical consecutive stages.
+    announce(`Recovery stage: ${member}${stage[0]}`);
   }
   if (e.type === "member") { liveGrid = null; liveSizes = {}; liveChosen = null; scheduleDraw(); }
   if (e.type === "finders" && loaded.length === 1 && e.member === undefined) {
@@ -542,10 +743,26 @@ function titleFrom(name) {
 
 async function catalogRun() {
   const my = ++seq;
+  const owner = Symbol(`catalog-${my}`);
+  const warning = pendingWarning;
+  pendingWarning = "";
   $("results").classList.add("hidden");
   $("catalogPanel").classList.remove("hidden");
-  if (!(await backendReady()) || my !== seq) return;
   document.body.classList.add("busy");
+  progressWorking(owner);
+  status.innerHTML = "preparing the recovery engine…" +
+    (warning ? `<span class="quiet"> · ${escapeHtml(warning)}</span>` : "");
+  announce(warning ? "Preparing the catalogue; some selected photographs could not be read" :
+    "Preparing the recovery engine for the catalogue");
+  const ready = await backendReady(owner);
+  if (!ready || my !== seq) {
+    if (progressOwner === owner) {
+      document.body.classList.remove("busy");
+      progressIdle(owner);
+      status.textContent = "";
+    }
+    return;
+  }
 
   // One photograph at a time, so the progress is real rather than a guess — and a photograph
   // already recovered in this session is not recovered again when one more lands in the pile.
@@ -553,8 +770,10 @@ async function catalogRun() {
   let done = 0;
   for (const item of pending) {
     status.innerHTML =
-      `<span class="spin"></span> recovering ${++done} of ${pending.length}… ` +
-      `<span class="quiet">${escapeHtml(item.name)}</span>`;
+      `<strong>recovering ${++done} of ${pending.length}…</strong> ` +
+      `<span class="quiet">${escapeHtml(item.name)}</span>` +
+      (warning ? `<span class="quiet"> · ${escapeHtml(warning)}</span>` : "");
+    announce(`Recovering catalogue photograph ${done} of ${pending.length}`);
     catalogRender();
     try {
       // A catalogue narrates its own progress card by card, so the events of the single
@@ -564,15 +783,19 @@ async function catalogRun() {
       item.result = answer;
     } catch (err) {
       if (my !== seq) return;
-      status.textContent = window.qrBackend.failurePrefix + err;
-      document.body.classList.remove("busy");
+      if (progressIdle(owner)) {
+        document.body.classList.remove("busy");
+        status.textContent = window.qrBackend.failurePrefix + err;
+        announce("Catalogue recovery failed");
+      }
       return;
     }
   }
   if (my !== seq) return;
-  status.textContent = "";
+  if (!progressIdle(owner)) return;
   document.body.classList.remove("busy");
   catalogRender();
+  progressComplete("Catalogue recovery complete");
 }
 
 function catalogRender() {
@@ -616,6 +839,7 @@ function catalogRender() {
 }
 
 $("catalogPdf").addEventListener("click", async () => {
+  if (document.body.classList.contains("busy")) return;
   const seen = new Set();
   const entries = [];
   for (const item of loaded) {
@@ -628,6 +852,11 @@ $("catalogPdf").addEventListener("click", async () => {
                    ecc: r.ecc || null, note: note.replace(/^ · /, "") });
   }
   if (!entries.length) return;
+  const owner = Symbol("catalog-export");
+  document.body.classList.add("busy");
+  progressWorking(owner);
+  status.textContent = "preparing the catalogue download…";
+  announce("Preparing the catalogue download");
   let file;
   try {
     file = await window.qrBackend.file("catalog", {
@@ -635,15 +864,22 @@ $("catalogPdf").addEventListener("click", async () => {
       size_mm: parseFloat($("catalogSizeMm").value) || 50,
     });
   } catch (err) {
-    status.textContent = "catalogue failed: " + err.message;
+    if (progressIdle(owner)) {
+      document.body.classList.remove("busy");
+      status.textContent = "catalogue failed: " + err.message;
+      announce("Catalogue export failed");
+    }
     return;
   }
+  if (progressOwner !== owner) return;
   const url = URL.createObjectURL(file.blob);
   const link = document.createElement("a");
   link.href = url;
   link.download = file.filename || "catalog.pdf";
   link.click();
   URL.revokeObjectURL(url);
+  document.body.classList.remove("busy");
+  progressComplete("Catalogue downloaded");
   $("catalogThanks").innerHTML = thanksHtml();
 });
 
@@ -817,7 +1053,12 @@ function render(a) {
 }
 
 async function download(format) {
-  if (!token) return;
+  if (!token || document.body.classList.contains("busy")) return;
+  const owner = Symbol("export");
+  document.body.classList.add("busy");
+  progressWorking(owner);
+  status.textContent = `preparing the ${format.toUpperCase()} download…`;
+  announce(`Preparing the ${format.toUpperCase()} download`);
   let file;
   try {
     file = await window.qrBackend.file("export", {
@@ -828,15 +1069,22 @@ async function download(format) {
       split: $("split").checked,
     });
   } catch (err) {
-    status.textContent = "export failed: " + err.message;
+    if (progressIdle(owner)) {
+      document.body.classList.remove("busy");
+      status.textContent = "export failed: " + err.message;
+      announce("Export failed");
+    }
     return;
   }
+  if (progressOwner !== owner) return;
   const url = URL.createObjectURL(file.blob);
   const link = document.createElement("a");
   link.href = url;
   link.download = file.filename || `qrsalvage.${format}`;
   link.click();
   URL.revokeObjectURL(url);
+  document.body.classList.remove("busy");
+  progressComplete(`${format.toUpperCase()} downloaded`);
 }
 
 for (const button of document.querySelectorAll("#exports button")) {
