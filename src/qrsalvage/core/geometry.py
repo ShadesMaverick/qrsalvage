@@ -7,7 +7,7 @@ here -- whereas on the bit level there is nothing to climb.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import cast
 
@@ -22,6 +22,7 @@ from .sampling import (
     sample_cells,
     warp,
 )
+from .structure import is_valid_size, structure_mask
 
 # The witness floor: a candidate grid is only judgeable while at least this fraction of its
 # known cells stands on readable surface. Below it the wrong-cell count is a statement about
@@ -67,6 +68,54 @@ class GridFit:
     known_total: int
     means: np.ndarray
     posterior: np.ndarray
+    bow: np.ndarray | None = None
+
+
+@dataclass(frozen=True)
+class CurvedOutline:
+    """Four clockwise QR corners and the top/right/bottom/left curve midpoints."""
+
+    corners: np.ndarray
+    edge_midpoints: np.ndarray
+
+    def __post_init__(self) -> None:
+        if self.corners.shape != (4, 2):
+            raise ValueError("corners must have shape (4, 2)")
+        if self.edge_midpoints.shape != (4, 2):
+            raise ValueError("edge_midpoints must have shape (4, 2)")
+
+
+def _flat_edge_midpoints(corners: np.ndarray) -> np.ndarray:
+    """Project the four unit-square edge midpoints through the corner homography."""
+    if corners.shape != (4, 2):
+        raise ValueError("corners must have shape (4, 2)")
+    unit_corners = np.array([[0, 0], [1, 0], [0, 1], [1, 1]], dtype=np.float32)
+    homography = cv2.getPerspectiveTransform(
+        unit_corners, np.asarray(corners, dtype=np.float32)
+    )
+    unit_midpoints = np.array(
+        [[[0.5, 0.0], [1.0, 0.5], [0.5, 1.0], [0.0, 0.5]]], dtype=np.float32
+    )
+    return cv2.perspectiveTransform(unit_midpoints, homography)[0].astype(np.float64)
+
+
+def outline_midpoints(corners: np.ndarray, bow: np.ndarray | None) -> np.ndarray:
+    """Return actual top/right/bottom/left points at the middle of each curved edge."""
+    midpoints = _flat_edge_midpoints(corners)
+    if bow is None:
+        return midpoints
+    if bow.shape != (8,):
+        raise ValueError("bow must have shape (8,)")
+    offsets = np.array([bow[0:2], bow[6:8], bow[2:4], bow[4:6]])
+    return midpoints + offsets
+
+
+def bow_from_midpoints(corners: np.ndarray, midpoints: np.ndarray) -> np.ndarray:
+    """Translate actual top/right/bottom/left midpoint positions to the eight bow scalars."""
+    if midpoints.shape != (4, 2):
+        raise ValueError("midpoints must have shape (4, 2)")
+    offsets = np.asarray(midpoints, dtype=np.float64) - _flat_edge_midpoints(corners)
+    return np.concatenate((offsets[0], offsets[2], offsets[3], offsets[1]))
 
 
 def find_finders(binary: np.ndarray, min_size: int = 20) -> list[tuple[float, float, float]]:
@@ -257,6 +306,7 @@ def _score(
     scale: int,
     known_dark: np.ndarray,
     known_light: np.ndarray,
+    bow: np.ndarray | None = None,
 ) -> GridFit:
     """Score one rectification against the cells whose value the standard fixes.
 
@@ -326,6 +376,7 @@ def _score(
         known_total=known_total,
         means=means,
         posterior=posterior,
+        bow=None if bow is None else np.asarray(bow, dtype=np.float64).copy(),
     )
 
 
@@ -340,6 +391,19 @@ def evaluate(
     """Score one corner placement against the cells whose value the standard fixes."""
     warped = warp(gray, corners, modules, scale)
     return _score(warped, corners, modules, scale, known_dark, known_light)
+
+
+def evaluate_bowed(
+    gray: np.ndarray,
+    corners: np.ndarray,
+    bow: np.ndarray,
+    modules: int,
+    scale: int,
+    known_dark: np.ndarray,
+    known_light: np.ndarray,
+) -> GridFit:
+    warped = _bowed_warp(gray, corners, bow, modules, scale)
+    return _score(warped, corners, modules, scale, known_dark, known_light, bow=bow)
 
 
 def _bowed_warp(
@@ -457,11 +521,12 @@ def refine_bow(
     the edges untied the pipeline now does the same with no hand-drawn curves at all, in
     three decode attempts.
     """
-    bow = np.zeros(8, dtype=np.float64)
+    bow = fit.bow.copy() if fit.bow is not None else np.zeros(8, dtype=np.float64)
 
     def score(candidate: np.ndarray) -> GridFit:
-        warped = _bowed_warp(gray, fit.corners, candidate, fit.modules, scale)
-        return _score(warped, fit.corners, fit.modules, scale, known_dark, known_light)
+        return evaluate_bowed(
+            gray, fit.corners, candidate, fit.modules, scale, known_dark, known_light
+        )
 
     best = score(bow)
     if best.quality < fit.quality:
@@ -599,3 +664,36 @@ def refine_corners(
         if not improved:
             delta /= 2.0
     return best
+
+
+def fit_outline(
+    gray: np.ndarray,
+    outline: CurvedOutline,
+    sizes: Sequence[int],
+    start_delta: float = 12.0,
+    on_step: Callable[[GridFit], None] | None = None,
+) -> list[GridFit]:
+    """Fit and score each candidate size inside a manually supplied curved outline."""
+    corners = outline.corners[[0, 1, 3, 2]]
+    fits: list[GridFit] = []
+    for modules in sizes:
+        if not is_valid_size(modules):
+            continue
+        known_dark, known_light = structure_mask(modules)
+        flat = refine_corners(
+            gray,
+            corners,
+            modules,
+            12,
+            known_dark,
+            known_light,
+            start_delta=start_delta,
+        )
+        bow = bow_from_midpoints(flat.corners, outline.edge_midpoints)
+        curved = evaluate_bowed(
+            gray, flat.corners, bow, modules, 12, known_dark, known_light
+        )
+        fits.append(curved)
+        if on_step:
+            on_step(curved)
+    return fits
