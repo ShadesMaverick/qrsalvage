@@ -55,6 +55,10 @@ function releaseBitmaps(entries) {
 }
 let picking = false;
 let picked = [];
+let outlineEditing = false;
+let outlineCorners = [];
+let outlineMidpoints = [];
+let outlineDrag = null;
 let token = null;   // identifies the result the backend is holding for export
 let seq = 0;        // solve sequence; a late answer from a superseded run must not render
 let timerId = null;
@@ -333,6 +337,7 @@ for (const radio of document.querySelectorAll('#modeRow input')) {
   radio.addEventListener("change", () => {
     mode = radio.value;
     picked = []; picking = false;
+    clearOutlineEditor(false);
     if (loaded.length) run();
   });
 }
@@ -444,6 +449,7 @@ async function addFiles(files) {
     pendingWarning = warning;
   }
   picked = []; picking = false;
+  clearOutlineEditor(false);
   refresh();
   run();
 }
@@ -456,6 +462,7 @@ function resetAll() {
   closeCamera();
   releaseBitmaps(loaded);
   loaded = []; picked = []; picking = false; token = null; pendingWarning = "";
+  clearOutlineEditor(false);
   lastSolved = false;
   settledGrid = null;
   resetSuccessEffect();
@@ -485,6 +492,7 @@ function refresh() {
     button.addEventListener("click", () => {
       releaseBitmaps(loaded.splice(parseInt(button.dataset.index, 10), 1));
       picked = []; picking = false;
+      clearOutlineEditor(false);
       if (!loaded.length) { resetAll(); return; }
       refresh();
       run();
@@ -507,19 +515,7 @@ function draw(detected) {
   // because a thin bright ring on a bright photograph is invisible exactly where it matters.
   for (const p of detected || []) ring(p.x * scale, p.y * scale, 11, "#8fd3b0", 2.5);
   const grid = liveGrid || settledGrid;
-  if (grid) {
-    // top-left, top-right, bottom-left, bottom-right — drawn as the quadrilateral the
-    // descent currently holds. Watching it snap into place IS the method.
-    const order = [0, 1, 3, 2];
-    ctx.beginPath();
-    order.forEach((i, k) => {
-      const [x, y] = grid[i];
-      if (k === 0) ctx.moveTo(x * scale, y * scale); else ctx.lineTo(x * scale, y * scale);
-    });
-    ctx.closePath();
-    ctx.strokeStyle = "rgba(10, 14, 18, .85)"; ctx.lineWidth = 4.5; ctx.stroke();
-    ctx.strokeStyle = "#f07ea3"; ctx.lineWidth = 2; ctx.stroke();
-  }
+  if (grid) drawCurvedOutline(grid, scale);
   picked.forEach((p, i) => {
     ring(p.x * scale, p.y * scale, 11, "#f07ea3", 2.5);
     ctx.font = "600 13px ui-monospace, monospace";
@@ -527,6 +523,71 @@ function draw(detected) {
     ctx.strokeText(String(i + 1), p.x * scale + 15, p.y * scale + 5);
     ctx.fillStyle = "#f07ea3";
     ctx.fillText(String(i + 1), p.x * scale + 15, p.y * scale + 5);
+  });
+  drawEditableOutline(scale);
+}
+
+function pointObject(point) {
+  return Array.isArray(point) ? { x: point[0], y: point[1] } : { x: point.x, y: point.y };
+}
+
+function defaultEdgeMidpoints(corners) {
+  return corners.map((start, i) => {
+    const end = corners[(i + 1) % corners.length];
+    return { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
+  });
+}
+
+function outlineGeometry(corners, edgeMidpoints) {
+  const points = corners.map(pointObject);
+  const middles = edgeMidpoints && edgeMidpoints.length === points.length
+    ? edgeMidpoints.map(pointObject)
+    : defaultEdgeMidpoints(points);
+  return { corners: points, edgeMidpoints: middles };
+}
+
+function drawCurvedOutline(outline, scale) {
+  if (!outline || outline.corners.length !== 4 || outline.edgeMidpoints.length !== 4) return;
+  ctx.beginPath();
+  ctx.moveTo(outline.corners[0].x * scale, outline.corners[0].y * scale);
+  outline.corners.forEach((start, i) => {
+    const end = outline.corners[(i + 1) % outline.corners.length];
+    const middle = outline.edgeMidpoints[i];
+    const controlX = 2 * middle.x - (start.x + end.x) / 2;
+    const controlY = 2 * middle.y - (start.y + end.y) / 2;
+    ctx.quadraticCurveTo(controlX * scale, controlY * scale, end.x * scale, end.y * scale);
+  });
+  ctx.closePath();
+  ctx.strokeStyle = "rgba(10, 14, 18, .85)"; ctx.lineWidth = 4.5; ctx.stroke();
+  ctx.strokeStyle = "#f07ea3"; ctx.lineWidth = 2; ctx.stroke();
+}
+
+function diamond(x, y, radius, colour) {
+  const path = () => {
+    ctx.beginPath();
+    ctx.moveTo(x, y - radius); ctx.lineTo(x + radius, y);
+    ctx.lineTo(x, y + radius); ctx.lineTo(x - radius, y); ctx.closePath();
+  };
+  path(); ctx.strokeStyle = "rgba(10, 14, 18, .85)"; ctx.lineWidth = 5; ctx.stroke();
+  path(); ctx.fillStyle = colour; ctx.fill();
+}
+
+function drawEditableOutline(scale) {
+  if (!outlineCorners.length) return;
+  if (outlineCorners.length === 4 && outlineMidpoints.length === 4) {
+    drawCurvedOutline(
+      { corners: outlineCorners, edgeMidpoints: outlineMidpoints },
+      scale
+    );
+    outlineMidpoints.forEach((p) => diamond(p.x * scale, p.y * scale, 6, "#f7b3c8"));
+  }
+  outlineCorners.forEach((p, i) => {
+    ring(p.x * scale, p.y * scale, 12, "#f07ea3", 3);
+    ctx.font = "600 13px ui-monospace, monospace";
+    ctx.strokeStyle = "rgba(10, 14, 18, .85)"; ctx.lineWidth = 3;
+    ctx.strokeText(String(i + 1), p.x * scale + 16, p.y * scale + 5);
+    ctx.fillStyle = "#f7b3c8";
+    ctx.fillText(String(i + 1), p.x * scale + 16, p.y * scale + 5);
   });
 }
 
@@ -537,19 +598,121 @@ function ring(x, y, r, colour, width) {
   ctx.strokeStyle = colour; ctx.lineWidth = width; ctx.stroke();
 }
 
-canvas.addEventListener("click", (e) => {
-  if (!picking) return;
+function canvasPoint(e) {
   const rect = canvas.getBoundingClientRect();
   const scale = parseFloat(canvas.dataset.scale);
-  const x = ((e.clientX - rect.left) * (canvas.width / rect.width)) / scale;
-  const y = ((e.clientY - rect.top) * (canvas.height / rect.height)) / scale;
-  picked.push({ x, y });
+  return {
+    x: ((e.clientX - rect.left) * (canvas.width / rect.width)) / scale,
+    y: ((e.clientY - rect.top) * (canvas.height / rect.height)) / scale,
+  };
+}
+
+canvas.addEventListener("click", (e) => {
+  if (!picking) return;
+  picked.push(canvasPoint(e));
   draw();
   $("canvasNote").innerHTML = picked.length < 3
     ? `<em>${picked.length} of 3</em> marked — click the centre of the next corner square.`
     : "Three marked, recovering…";
   if (picked.length === 3) { picking = false; solve(picked); }
 });
+
+const OUTLINE_CORNER_NAMES = ["top left", "top right", "bottom right", "bottom left"];
+
+function updateOutlineInstructions() {
+  if (outlineCorners.length < 4) {
+    const next = OUTLINE_CORNER_NAMES[outlineCorners.length];
+    $("canvasNote").innerHTML =
+      "Tap the four QR corners in order: <em>top left, top right, bottom right, bottom left</em>. " +
+      `<em>${outlineCorners.length} of 4</em> marked — next: ${next}.`;
+    return;
+  }
+  $("canvasNote").textContent =
+    "Drag the numbered corners and the smaller diamond edge handles until the curve follows the QR code.";
+}
+
+function freezeOutlineEditor() {
+  if (outlineDrag && canvas.hasPointerCapture(outlineDrag.pointerId)) {
+    canvas.releasePointerCapture(outlineDrag.pointerId);
+  }
+  outlineEditing = false;
+  outlineDrag = null;
+  canvas.classList.remove("outline-editing", "outline-ready", "outline-dragging");
+}
+
+function clearOutlineEditor(redraw = true) {
+  freezeOutlineEditor();
+  outlineCorners = [];
+  outlineMidpoints = [];
+  $("outlineSolve").classList.add("hidden");
+  if (redraw && loaded.length) draw();
+}
+
+function outlineHandleAt(point) {
+  const rect = canvas.getBoundingClientRect();
+  const scale = parseFloat(canvas.dataset.scale);
+  const imagePixelsPerCssPixel = (canvas.width / rect.width) / scale;
+  const hitRadius = 18 * imagePixelsPerCssPixel;
+  const within = (candidate) => Math.hypot(candidate.x - point.x, candidate.y - point.y) <= hitRadius;
+  const corner = outlineCorners.findIndex(within);
+  if (corner >= 0) return { kind: "corner", index: corner };
+  const midpoint = outlineMidpoints.findIndex(within);
+  return midpoint >= 0 ? { kind: "midpoint", index: midpoint } : null;
+}
+
+canvas.addEventListener("pointerdown", (e) => {
+  if (!outlineEditing || (e.button !== undefined && e.button !== 0)) return;
+  e.preventDefault();
+  const point = canvasPoint(e);
+  if (outlineCorners.length < 4) {
+    outlineCorners.push(point);
+    if (outlineCorners.length === 4) {
+      outlineMidpoints = defaultEdgeMidpoints(outlineCorners);
+      canvas.classList.add("outline-ready");
+      $("outlineSolve").classList.remove("hidden");
+    }
+    updateOutlineInstructions();
+    draw();
+    return;
+  }
+
+  const handle = outlineHandleAt(point);
+  if (!handle) return;
+  outlineDrag = { ...handle, pointerId: e.pointerId, last: point };
+  canvas.setPointerCapture(e.pointerId);
+  canvas.classList.add("outline-dragging");
+});
+
+canvas.addEventListener("pointermove", (e) => {
+  if (!outlineEditing || !outlineDrag || outlineDrag.pointerId !== e.pointerId) return;
+  e.preventDefault();
+  const point = canvasPoint(e);
+  const dx = point.x - outlineDrag.last.x;
+  const dy = point.y - outlineDrag.last.y;
+  if (outlineDrag.kind === "corner") {
+    const index = outlineDrag.index;
+    outlineCorners[index].x += dx;
+    outlineCorners[index].y += dy;
+    for (const edge of [(index + 3) % 4, index]) {
+      outlineMidpoints[edge].x += dx / 2;
+      outlineMidpoints[edge].y += dy / 2;
+    }
+  } else {
+    outlineMidpoints[outlineDrag.index] = point;
+  }
+  outlineDrag.last = point;
+  draw();
+});
+
+function finishOutlineDrag(e) {
+  if (!outlineDrag || outlineDrag.pointerId !== e.pointerId) return;
+  if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
+  outlineDrag = null;
+  canvas.classList.remove("outline-dragging");
+}
+
+canvas.addEventListener("pointerup", finishOutlineDrag);
+canvas.addEventListener("pointercancel", finishOutlineDrag);
 
 function busy(on, owner) {
   if (!on) {
@@ -580,9 +743,12 @@ function busy(on, owner) {
   return true;
 }
 
-async function solve(points) {
+async function solve(points, outlineHint) {
   if (!loaded.length) return;
   prepareRecoveryVisuals();
+  for (const id of ["retry", "outlineRetry", "outlineSolve", "cancel"]) {
+    $(id).classList.add("hidden");
+  }
   const my = ++seq;
   const owner = Symbol(`solve-${my}`);
   $("catalogPanel").classList.add("hidden");
@@ -592,6 +758,7 @@ async function solve(points) {
   announce("Preparing the recovery engine");
   const ready = await backendReady(owner);
   if (!ready || my !== seq) {
+    if (my === seq) clearOutlineEditor();
     if (progressOwner === owner) {
       document.body.classList.remove("busy");
       progressIdle(owner);
@@ -607,11 +774,19 @@ async function solve(points) {
     // place, the versions competing, the probe counting. The last one is the result, and it
     // is what solve() answers with.
     answer = await window.qrBackend.solve(
-      { images: loaded.map((l) => l.dataUrl), finder_points: points || null },
+      {
+        images: loaded.map((l) => l.dataUrl),
+        finder_points: points || null,
+        outline: outlineHint ? {
+          corners: outlineHint.corners,
+          edge_midpoints: outlineHint.edgeMidpoints,
+        } : null,
+      },
       (event) => { if (my === seq) liveEvent(event); }
     );
   } catch (err) {
     if (my === seq && busy(false, owner)) {
+      clearOutlineEditor(false);
       liveEnd(false);
       status.textContent = window.qrBackend.failurePrefix + err;
       announce("Recovery failed");
@@ -620,6 +795,7 @@ async function solve(points) {
   }
   if (my !== seq) return;  // superseded by a newer drop; this answer belongs to old inputs
   if (!busy(false, owner)) return;
+  clearOutlineEditor(false);
   liveEnd(!!answer.ok);
   if (answer) {
     render(answer);
@@ -635,9 +811,9 @@ async function solve(points) {
    played over a black box. The grid drawn on the photograph is the grid the descent is
    holding right now; the numbers are the numbers it is scoring. */
 
-let liveGrid = null;      // last accepted grid, drawn onto the photograph
+let liveGrid = null;      // {corners, edgeMidpoints} for the last accepted grid
 let settledGrid = null;   // successful final grid, kept visible after the live view closes
-let liveGrids = {};       // modules -> corners, so the chosen version keeps the matching grid
+let liveGrids = {};       // modules -> geometry, so the chosen version keeps its matching grid
 let liveSizes = {};       // modules -> {wrong, total, quality}
 let liveFrame = false;    // requestAnimationFrame throttle
 let liveChosen = null;
@@ -716,8 +892,8 @@ function liveEvent(e) {
     renderRace();
     // Only the primary photograph's grid is drawn — the canvas shows that one.
     if (loaded.length === 1 || e.member === 0 || e.member === undefined) {
-      liveGrid = e.corners;
-      liveGrids[e.modules] = e.corners;
+      liveGrid = outlineGeometry(e.corners, e.edge_midpoints);
+      liveGrids[e.modules] = liveGrid;
       scheduleDraw();
     }
   }
@@ -1074,8 +1250,10 @@ function render(a) {
     $("addMore").addEventListener("click", () => fileInput.click());
   }
 
-  const offerManual = single && (!a.ok || a.finders.length < 3);
+  const offerManual = single && !a.ok;
   $("retry").classList.toggle("hidden", !offerManual || picking);
+  $("outlineRetry").classList.toggle("hidden", !offerManual || outlineEditing);
+  $("outlineSolve").classList.add("hidden");
   $("cancel").classList.add("hidden");
 
   const images = $("images");
@@ -1145,17 +1323,53 @@ function panel(title, dataUrl, filename, note) {
 }
 
 $("retry").addEventListener("click", () => {
+  clearOutlineEditor(false);
   picked = []; picking = true; draw();
   $("retry").classList.add("hidden");
+  $("outlineRetry").classList.add("hidden");
   $("cancel").classList.remove("hidden");
   $("canvasNote").innerHTML =
     "Click the centre of each of the three large corner squares, <em>in any order</em>. " +
     "Roughly is enough — the click only picks the candidate, the position comes from the image.";
 });
+
+$("outlineRetry").addEventListener("click", () => {
+  picked = []; picking = false;
+  outlineEditing = true;
+  outlineCorners = [];
+  outlineMidpoints = [];
+  outlineDrag = null;
+  canvas.classList.add("outline-editing");
+  canvas.classList.remove("outline-ready", "outline-dragging");
+  $("retry").classList.add("hidden");
+  $("outlineRetry").classList.add("hidden");
+  $("outlineSolve").classList.add("hidden");
+  $("cancel").classList.remove("hidden");
+  updateOutlineInstructions();
+  draw();
+});
+
+$("outlineSolve").addEventListener("click", () => {
+  if (!outlineEditing || outlineCorners.length !== 4 || outlineMidpoints.length !== 4) return;
+  const outlineHint = {
+    corners: outlineCorners.map((point) => ({ ...point })),
+    edgeMidpoints: outlineMidpoints.map((point) => ({ ...point })),
+  };
+  freezeOutlineEditor();
+  $("outlineSolve").classList.add("hidden");
+  $("cancel").classList.add("hidden");
+  $("canvasNote").textContent = "Outline marked, recovering…";
+  draw();
+  solve(null, outlineHint);
+});
+
 $("cancel").addEventListener("click", () => {
-  picked = []; picking = false; draw();
+  picked = []; picking = false;
+  clearOutlineEditor(false);
+  draw();
   $("cancel").classList.add("hidden");
   $("retry").classList.remove("hidden");
+  $("outlineRetry").classList.remove("hidden");
   $("canvasNote").textContent = "";
 });
 

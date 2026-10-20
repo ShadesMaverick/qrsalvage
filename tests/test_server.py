@@ -428,6 +428,42 @@ def test_it_serves_the_page_and_nothing_else(running_server):
     connection.close()
 
 
+def test_outline_editor_is_served_with_touch_and_curved_geometry(running_server):
+    """The manual escape hatch must survive unchanged in every static deployment."""
+    host, port = running_server
+    connection = http.client.HTTPConnection(host, port, timeout=10)
+
+    assets = {}
+    for path in ("/", "/style.css", "/app.js"):
+        connection.request("GET", path)
+        response = connection.getresponse()
+        assert response.status == 200, path
+        assets[path] = response.read().decode("utf-8")
+    connection.close()
+
+    page = assets["/"]
+    style = assets["/style.css"]
+    script = assets["/app.js"]
+    assert 'id="outlineRetry"' in page
+    assert 'id="outlineSolve"' in page
+    assert re.search(r"\.outline-editing\s*\{[^}]*touch-action:\s*none", style, re.DOTALL)
+    for fragment in (
+        "pointerdown",
+        "setPointerCapture",
+        "edge_midpoints",
+        "quadraticCurveTo",
+    ):
+        assert fragment in script
+    assert re.search(
+        r"outline:\s*outlineHint\s*\?\s*\{[^}]*corners:[^}]*edge_midpoints:",
+        script,
+        re.DOTALL,
+    )
+    instructions = "top left", "top right", "bottom right", "bottom left"
+    positions = [script.index(name) for name in instructions]
+    assert positions == sorted(positions)
+
+
 def test_the_legal_page_is_reachable_and_still_has_blanks_to_fill(running_server):
     """A page nobody links to does not satisfy an obligation to be reachable.
 
