@@ -168,14 +168,8 @@ Add an API test that synthesizes a readable curved QR, supplies this exact shape
 
 ```python
 outline = {
-    "corners": [
-        {"x": float(x), "y": float(y)}
-        for x, y in clockwise_corners
-    ],
-    "edge_midpoints": [
-        {"x": float(x), "y": float(y)}
-        for x, y in edge_midpoints
-    ],
+    "corners": [{"x": float(x), "y": float(y)} for x, y in clockwise_corners],
+    "edge_midpoints": [{"x": float(x), "y": float(y)} for x, y in edge_midpoints],
 }
 answer = solve_payload({"image": _data_url(photo), "outline": outline})
 assert answer["ok"] is True
