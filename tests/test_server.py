@@ -15,17 +15,150 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 
 import cv2
+import numpy as np
 import pytest
 
+from qrsalvage.core import pipeline
 from qrsalvage.core.decoding import reencode, render
 from qrsalvage.server import Handler, catalog_payload, export_payload, solve_payload
+from qrsalvage.synth import Damage, render_photo
 
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "engraved-curved-hard.png"
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def _data_url(path: Path) -> str:
-    return "data:image/png;base64," + base64.b64encode(path.read_bytes()).decode("ascii")
+def _data_url(image: Path | np.ndarray) -> str:
+    if isinstance(image, Path):
+        raw = image.read_bytes()
+    else:
+        ok, buffer = cv2.imencode(".png", image)
+        assert ok
+        raw = buffer.tobytes()
+    return "data:image/png;base64," + base64.b64encode(raw).decode("ascii")
+
+
+def _curved_outline_case() -> tuple[np.ndarray, dict]:
+    text = "QRSALVAGE-OUTLINE-0815"
+    matrix = reencode(text)
+    modules = matrix.shape[0]
+    module_px = 9.0
+    quiet = 5
+    dome = 0.12
+    photo = render_photo(
+        matrix,
+        Damage(module_px=module_px, curvature=0.0, contrast=0.25, dome=dome),
+        seed=2,
+    )
+    centre = (photo.shape[0] - 1) / 2.0
+
+    def rendered_point(x: float, y: float) -> np.ndarray:
+        source = (np.array([x, y]) - centre) / centre
+        source_radius = float(np.linalg.norm(source))
+        target_radius = source_radius
+        for _ in range(8):
+            target_radius -= (target_radius + dome * target_radius**3 - source_radius) / (
+                1.0 + 3.0 * dome * target_radius**2
+            )
+        target = source * (target_radius / source_radius)
+        return centre + target * centre
+
+    low = quiet * module_px
+    high = (quiet + modules) * module_px
+    middle = (low + high) / 2.0
+    clockwise_corners = np.array(
+        [
+            rendered_point(low, low),
+            rendered_point(high, low),
+            rendered_point(high, high),
+            rendered_point(low, high),
+        ]
+    )
+    edge_midpoints = np.array(
+        [
+            rendered_point(middle, low),
+            rendered_point(high, middle),
+            rendered_point(middle, high),
+            rendered_point(low, middle),
+        ]
+    )
+    outline = {
+        "corners": [{"x": float(x), "y": float(y)} for x, y in clockwise_corners],
+        "edge_midpoints": [{"x": float(x), "y": float(y)} for x, y in edge_midpoints],
+    }
+    return photo, outline
+
+
+def test_a_curved_outline_drives_recovery_and_progress(monkeypatch):
+    photo, outline = _curved_outline_case()
+    events = []
+    # The manual path must not quietly fall back to finder detection. Removing the outline
+    # forwarding makes this real recovery fail before a grid can be fitted.
+    monkeypatch.setattr(pipeline, "detect_finders", lambda _binary: [])
+
+    answer = solve_payload(
+        {"image": _data_url(photo), "outline": outline},
+        progress=lambda event, data: events.append({"type": event, **data}),
+    )
+
+    assert answer["ok"] is True
+    assert answer["text"] == "QRSALVAGE-OUTLINE-0815"
+    grids = [event for event in events if event["type"] == "grid"]
+    assert grids
+    assert all(len(event["corners"]) == 4 for event in grids)
+    assert all(len(event["edge_midpoints"]) == 4 for event in grids)
+
+
+@pytest.mark.parametrize(
+    ("outline", "extra", "failure"),
+    [
+        ({}, {}, "outline needs corners and edge_midpoints"),
+        ({"corners": [], "edge_midpoints": []}, {}, "outline arrays need exactly four points"),
+        (
+            {"corners": ["point"] * 4, "edge_midpoints": [{"x": 1, "y": 2}] * 4},
+            {},
+            "outline points need a numeric x and y",
+        ),
+        (
+            {
+                "corners": [{"x": float("nan"), "y": 2}] * 4,
+                "edge_midpoints": [{"x": 1, "y": 2}] * 4,
+            },
+            {},
+            "outline points must be finite coordinates",
+        ),
+        (
+            {
+                "corners": [{"x": 1, "y": 2}] * 4,
+                "edge_midpoints": [{"x": float("inf"), "y": 2}] * 4,
+            },
+            {},
+            "outline points must be finite coordinates",
+        ),
+        (
+            {
+                "corners": [{"x": 1, "y": 2}] * 4,
+                "edge_midpoints": [{"x": 1, "y": 2}] * 4,
+            },
+            {"finder_points": [{"x": 1, "y": 2}] * 3},
+            "use either finder points or a manual outline, not both",
+        ),
+    ],
+)
+def test_invalid_outlines_are_refused(outline, extra, failure):
+    answer = solve_payload({"image": _data_url(FIXTURE), "outline": outline, **extra})
+
+    assert answer["ok"] is False
+    assert answer["failure"] == failure
+
+
+def test_an_outline_applies_to_one_photograph_only():
+    _photo, outline = _curved_outline_case()
+    image = _data_url(FIXTURE)
+
+    answer = solve_payload({"images": [image, image], "outline": outline})
+
+    assert answer["ok"] is False
+    assert answer["failure"] == "a manual outline applies to one photograph only"
 
 
 def test_payload_carries_everything_the_page_shows():

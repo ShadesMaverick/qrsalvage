@@ -25,6 +25,7 @@ import cv2
 import numpy as np
 
 from .core.decoding import reencode, render
+from .core.geometry import CurvedOutline
 from .core.pipeline import ENSEMBLE_MODES, SolveResult, solve, solve_many
 from .export import (
     PAYLOAD_HINTS,
@@ -126,6 +127,45 @@ def solve_payload(
             }
         images.append(image)
 
+    raw_outline = payload.get("outline")
+    outline: CurvedOutline | None = None
+    if raw_outline is not None:
+        if len(images) != 1:
+            return {"ok": False, "failure": "a manual outline applies to one photograph only"}
+        if payload.get("finder_points"):
+            return {
+                "ok": False,
+                "failure": "use either finder points or a manual outline, not both",
+            }
+        if not isinstance(raw_outline, dict):
+            return {"ok": False, "failure": "outline must be an object"}
+        if "corners" not in raw_outline or "edge_midpoints" not in raw_outline:
+            return {"ok": False, "failure": "outline needs corners and edge_midpoints"}
+        corners = raw_outline["corners"]
+        edge_midpoints = raw_outline["edge_midpoints"]
+        if (
+            not isinstance(corners, list)
+            or not isinstance(edge_midpoints, list)
+            or len(corners) != 4
+            or len(edge_midpoints) != 4
+        ):
+            return {"ok": False, "failure": "outline arrays need exactly four points"}
+        if not all(isinstance(point, dict) for point in [*corners, *edge_midpoints]):
+            return {"ok": False, "failure": "outline points need a numeric x and y"}
+        try:
+            corner_values = [(float(point["x"]), float(point["y"])) for point in corners]
+            midpoint_values = [(float(point["x"]), float(point["y"])) for point in edge_midpoints]
+        except (KeyError, TypeError, ValueError):
+            return {"ok": False, "failure": "outline points need a numeric x and y"}
+        if not all(
+            math.isfinite(value) for point in [*corner_values, *midpoint_values] for value in point
+        ):
+            return {"ok": False, "failure": "outline points must be finite coordinates"}
+        outline = CurvedOutline(
+            corners=np.asarray(corner_values, dtype=np.float64),
+            edge_midpoints=np.asarray(midpoint_values, dtype=np.float64),
+        )
+
     points = payload.get("finder_points") or None
     if points and len(images) == 1:
         # Three clicks describe one framing. Fewer leaves the grid without a corner to sit on
@@ -165,7 +205,7 @@ def solve_payload(
     # use should get the most it can use, not an error about a number that hurt nobody.
     budget = max(1, min(budget, _MAX_BUDGET))
     direct_text = next((text for text in trusted_direct_texts if text is not None), None)
-    if direct_text is not None and points is None:
+    if direct_text is not None and points is None and outline is None:
         result = SolveResult(text=direct_text, candidates_tried=1, source="direct")
     elif len(images) == 1:
         ensemble = payload.get("ensemble", "off")
@@ -179,6 +219,7 @@ def solve_payload(
             budget=budget,
             ensemble=ensemble,
             finder_points=points,
+            outline=outline,
             progress=progress,
         )
     else:

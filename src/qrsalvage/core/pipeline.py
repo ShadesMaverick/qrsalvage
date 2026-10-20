@@ -25,11 +25,14 @@ from .ensemble import (
     geometry_consensus,
 )
 from .geometry import (
+    CurvedOutline,
     GridFit,
     find_finders,
     finder_triple_score,
+    fit_outline,
     initial_corners,
     order_finders,
+    outline_midpoints,
     refine_bow,
     refine_corners,
     restart_coarse,
@@ -449,15 +452,74 @@ def _prepare_with_hints(
     return work, gray, binary, snap_to_finders(binary, shifted), (float(x0), float(y0), factor)
 
 
+def _prepare_with_outline(
+    bgr: np.ndarray, outline: CurvedOutline, invert: bool
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, CurvedOutline, tuple[float, float, float]]:
+    """Crop and scale the eight manual handles into preprocessing's working range."""
+    sides = [
+        float(np.linalg.norm(outline.corners[(index + 1) % 4] - outline.corners[index]))
+        for index in range(4)
+    ]
+    side = float(np.mean(sides))
+    middle_size = DEFAULT_SIZES[(len(DEFAULT_SIZES) - 1) // 2]
+    module_px = side / middle_size
+    handles = np.vstack((outline.corners, outline.edge_midpoints))
+    if side < 1.0:
+        gray, binary = prepare(bgr, invert=invert)
+        return bgr, gray, binary, outline, (0.0, 0.0, 1.0)
+    margin = 0.15 * side
+    x0 = max(0, int(np.floor(handles[:, 0].min() - margin)))
+    y0 = max(0, int(np.floor(handles[:, 1].min() - margin)))
+    x1 = min(bgr.shape[1], int(np.ceil(handles[:, 0].max() + margin)))
+    y1 = min(bgr.shape[0], int(np.ceil(handles[:, 1].max() + margin)))
+    if x1 <= x0 or y1 <= y0:
+        gray, binary = prepare(bgr, invert=invert)
+        return bgr, gray, binary, outline, (0.0, 0.0, 1.0)
+    region = bgr[y0:y1, x0:x1]
+
+    factor = 1.0
+    if module_px > 0.0 and not GOOD_MODULE_PX[0] <= module_px <= GOOD_MODULE_PX[1]:
+        factor = TARGET_MODULE_PX / module_px
+    if max(region.shape[:2]) * factor > MAX_DIMENSION:
+        factor = MAX_DIMENSION / max(region.shape[:2])
+    if factor == 1.0:
+        work = region
+    else:
+        work = cv2.resize(
+            region,
+            None,
+            fx=factor,
+            fy=factor,
+            interpolation=cv2.INTER_AREA if factor < 1.0 else cv2.INTER_CUBIC,
+        )
+    gray, binary = prepare(work, invert=invert)
+
+    def transform(points: np.ndarray) -> np.ndarray:
+        return (np.asarray(points, dtype=np.float64) - np.array([x0, y0])) * factor
+
+    prepared = CurvedOutline(
+        corners=transform(outline.corners),
+        edge_midpoints=transform(outline.edge_midpoints),
+    )
+    return work, gray, binary, prepared, (float(x0), float(y0), factor)
+
+
 def _attempt(
     bgr: np.ndarray,
     sizes: Sequence[int],
     invert: bool,
     finder_points: list[tuple[float, float]] | None,
+    outline: CurvedOutline | None = None,
     progress: ProgressFn | None = None,
 ) -> _Attempt:
     """One complete pass at one polarity: find the code, then fit every candidate grid."""
-    if finder_points is not None:
+    prepared_outline: CurvedOutline | None = None
+    if outline is not None:
+        used, gray, binary, prepared_outline, transform = _prepare_with_outline(
+            bgr, outline, invert
+        )
+        finders: list[tuple[float, float, float]] = []
+    elif finder_points is not None:
         used, gray, binary, finders, transform = _prepare_with_hints(bgr, finder_points, invert)
     else:
         used, gray, binary, finders, transform = _search_scales(bgr, invert=invert)
@@ -474,6 +536,8 @@ def _attempt(
     )
 
     def on_fit(fit: GridFit) -> None:
+        corners = fit.corners[[0, 1, 3, 2]]
+        midpoints = outline_midpoints(fit.corners, fit.bow)
         _emit(
             progress,
             "grid",
@@ -481,7 +545,10 @@ def _attempt(
             wrong=int(fit.wrong_known),
             total=int(fit.known_total),
             quality=round(float(fit.quality), 4),
-            corners=[[c[0] / factor + ox, c[1] / factor + oy] for c in fit.corners.tolist()],
+            corners=[[c[0] / factor + ox, c[1] / factor + oy] for c in corners.tolist()],
+            edge_midpoints=[
+                [point[0] / factor + ox, point[1] / factor + oy] for point in midpoints.tolist()
+            ],
         )
 
     # Hand-placed centres are only ever approximate -- nobody clicks a module centre to the
@@ -511,7 +578,9 @@ def _attempt(
 
     fits: list[GridFit] = []
     anchor_pair: list[tuple[float, float, float]] | None = None
-    if len(finders) >= 3:
+    if prepared_outline is not None:
+        fits = fit_outline(gray, prepared_outline, sizes, start_delta=12.0, on_step=on_fit)
+    elif len(finders) >= 3:
         triple = select_finder_triple(finders)
         fits = fit_grid(gray, triple, sizes, start_delta=delta, on_step=on_fit)
         if finder_triple_score(triple) > TRIPLE_DOUBT:
@@ -779,6 +848,7 @@ def solve(
     band: float = 0.15,
     ensemble: str = "off",
     finder_points: list[tuple[float, float]] | None = None,
+    outline: CurvedOutline | None = None,
     invert: bool | None = None,
     progress: ProgressFn | None = None,
 ) -> SolveResult:
@@ -798,6 +868,9 @@ def solve(
     derives the module size from their spacing and refines from there, so clicking them
     roughly is enough. Two points mean the third finder cannot be marked at all -- destroyed,
     or outside the frame -- and every geometric reading of the pair is fitted instead.
+
+    `outline` supplies four clockwise corners and the top, right, bottom and left edge
+    midpoints. It bypasses finder detection and seeds the existing per-edge bow model.
     """
     if ensemble not in ENSEMBLE_MODES:
         raise ValueError(f"unknown ensemble mode: {ensemble!r}")
@@ -811,13 +884,19 @@ def solve(
             # the same frame every reported finder is mapped back into. The crop is an
             # internal narrowing and must not change what the numbers mean.
             finder_points = [(x - x0, y - y0) for x, y in finder_points]
+        if outline is not None:
+            offset = np.array([x0, y0], dtype=np.float64)
+            outline = CurvedOutline(
+                corners=outline.corners - offset,
+                edge_midpoints=outline.edge_midpoints - offset,
+            )
 
     # Ask the installed outside decoder about the photograph before imposing qrsalvage's
     # stricter grid model on it. ZXing can read some valid codes with extreme non-square pixel
     # scaling even though our finder geometry cannot construct a trustworthy square grid. The
     # oracle returns only checksum-valid QR payloads; failed attempts still fall through to the
     # recovery pipeline, where uncertainty and erasures do the work ordinary readers cannot.
-    if finder_points is None:
+    if finder_points is None and outline is None:
         gray_photo = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
         direct_text = oracle.decode(gray_photo)
         if direct_text:
@@ -840,10 +919,13 @@ def solve(
             for corner in data.get("corners", []):
                 corner[0] += crop_offset[0]
                 corner[1] += crop_offset[1]
+            for midpoint in data.get("edge_midpoints", []):
+                midpoint[0] += crop_offset[0]
+                midpoint[1] += crop_offset[1]
         _emit(progress, event, **data)
 
     _emit(progress, "image", width=int(bgr.shape[1]), height=int(bgr.shape[0]))
-    attempt = _attempt(bgr, sizes, bool(invert), finder_points, progress=shifted)
+    attempt = _attempt(bgr, sizes, bool(invert), finder_points, outline, progress=shifted)
 
     # The polarity cannot be settled at the finder stage, which is where a first version of
     # this tried to settle it. A finder pattern is nested squares, and its inverse is nested
@@ -853,7 +935,7 @@ def solve(
     # happens here, on the same evidence as the version and the scale.
     if invert is None and _error_rate(attempt) > 0.05:
         _emit(progress, "polarity", trying="inverted")
-        flipped = _attempt(bgr, sizes, True, finder_points, progress=shifted)
+        flipped = _attempt(bgr, sizes, True, finder_points, outline, progress=shifted)
         if _error_rate(flipped) < _error_rate(attempt):
             attempt = flipped
 
@@ -868,7 +950,7 @@ def solve(
         for x, y, w in finders
     ]
 
-    if len(finders) < 2:
+    if outline is None and len(finders) < 2:
         return SolveResult(
             text=None,
             finders=shown_finders,
@@ -888,6 +970,8 @@ def solve(
 
     def grid_event(phase: str) -> Callable[[GridFit], None]:
         def report(fit: GridFit) -> None:
+            corners = fit.corners[[0, 1, 3, 2]]
+            midpoints = outline_midpoints(fit.corners, fit.bow)
             shifted(
                 "grid",
                 {
@@ -896,7 +980,10 @@ def solve(
                     "total": int(fit.known_total),
                     "quality": round(float(fit.quality), 4),
                     "phase": phase,
-                    "corners": [[c[0] / f_ + ox_, c[1] / f_ + oy_] for c in fit.corners.tolist()],
+                    "corners": [[c[0] / f_ + ox_, c[1] / f_ + oy_] for c in corners.tolist()],
+                    "edge_midpoints": [
+                        [point[0] / f_ + ox_, point[1] / f_ + oy_] for point in midpoints.tolist()
+                    ],
                 },
             )
 
@@ -904,7 +991,7 @@ def solve(
 
     # Before the bow, because a bow fitted onto a misplaced grid is a bow spent bending the
     # wrong thing -- and because the restart is what decides whether the grid is placed at all.
-    if COARSE_RESTART and should_restart(best, COARSE_RESTART_THRESHOLD):
+    if outline is None and COARSE_RESTART and should_restart(best, COARSE_RESTART_THRESHOLD):
         best = restart_coarse(gray, best, known_dark, known_light, on_step=grid_event("restart"))
     if BOW_REFINE:
         best = refine_bow(gray, best, known_dark, known_light, on_step=grid_event("bow"))
@@ -946,7 +1033,7 @@ def solve(
     )
     search, repair_result = _decode_chain(mm, budget, progress=progress)
 
-    if search.text is None and ANCHOR_SWEEP and anchor_pair is not None:
+    if search.text is None and outline is None and ANCHOR_SWEEP and anchor_pair is not None:
         # Enumerate the descent basins the constructed third could not choose between -- see
         # the note at ANCHOR_SWEEP. Only the winning direction is swept: the selection picked
         # the right reading of the pair, it is the reading's *scale* no witness could settle.

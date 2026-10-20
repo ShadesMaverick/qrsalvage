@@ -53,3 +53,38 @@ def test_direct_decode_json_becomes_plain_python_values(monkeypatch):
 
     assert received == [None, "decoded"]
     assert json.loads(answer) == {"ok": False, "failure": "test boundary"}
+
+
+def test_outline_is_forwarded_unchanged_through_the_shared_api(monkeypatch):
+    received = None
+
+    def fake_solve_payload(payload, progress=None, *, trusted_direct_texts=None):
+        nonlocal received
+        received = payload
+        return {"ok": False, "failure": "test boundary"}
+
+    monkeypatch.setattr(api, "solve_payload", fake_solve_payload)
+    monkeypatch.setattr(oracle, "use", lambda *_functions: None)
+
+    js_module = types.ModuleType("js")
+    pyodide_module: Any = types.ModuleType("pyodide")
+    ffi_module: Any = types.ModuleType("pyodide.ffi")
+    ffi_module.to_js = lambda value: value
+    pyodide_module.ffi = ffi_module
+    monkeypatch.setitem(sys.modules, "js", js_module)
+    monkeypatch.setitem(sys.modules, "pyodide", pyodide_module)
+    monkeypatch.setitem(sys.modules, "pyodide.ffi", ffi_module)
+
+    outline = {
+        "corners": [{"x": 1, "y": 2}] * 4,
+        "edge_midpoints": [{"x": 3, "y": 4}] * 4,
+    }
+    namespace: dict[str, Any] = {}
+    exec(_worker_glue(), namespace)
+    namespace["handle_json"](
+        "solve",
+        json.dumps({"image": "photo", "outline": outline}),
+        json.dumps([None]),
+    )
+
+    assert received == {"image": "photo", "outline": outline}
