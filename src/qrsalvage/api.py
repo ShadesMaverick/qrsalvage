@@ -137,6 +137,11 @@ def solve_payload(
                 "ok": False,
                 "failure": "use either finder points or a manual outline, not both",
             }
+        if payload.get("ensemble", "off") != "off":
+            return {
+                "ok": False,
+                "failure": "a manual outline cannot be combined with an ensemble",
+            }
         if not isinstance(raw_outline, dict):
             return {"ok": False, "failure": "outline must be an object"}
         if "corners" not in raw_outline or "edge_midpoints" not in raw_outline:
@@ -155,12 +160,27 @@ def solve_payload(
         try:
             corner_values = [(float(point["x"]), float(point["y"])) for point in corners]
             midpoint_values = [(float(point["x"]), float(point["y"])) for point in edge_midpoints]
+        except OverflowError:
+            return {
+                "ok": False,
+                "failure": "outline coordinates are too far outside the photograph",
+            }
         except (KeyError, TypeError, ValueError):
             return {"ok": False, "failure": "outline points need a numeric x and y"}
         if not all(
             math.isfinite(value) for point in [*corner_values, *midpoint_values] for value in point
         ):
             return {"ok": False, "failure": "outline points must be finite coordinates"}
+        coordinate_limit = 4.0 * max(images[0].shape[:2])
+        if any(
+            abs(value) > coordinate_limit
+            for point in [*corner_values, *midpoint_values]
+            for value in point
+        ):
+            return {
+                "ok": False,
+                "failure": "outline coordinates are too far outside the photograph",
+            }
         outline = CurvedOutline(
             corners=np.asarray(corner_values, dtype=np.float64),
             edge_midpoints=np.asarray(midpoint_values, dtype=np.float64),

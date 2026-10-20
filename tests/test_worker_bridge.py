@@ -88,3 +88,9 @@ def test_outline_is_forwarded_unchanged_through_the_shared_api(monkeypatch):
     )
 
     assert received == {"image": "photo", "outline": outline}
+
+
+def test_outline_skips_the_worker_direct_decoder():
+    worker = (ROOT / "src" / "qrsalvage" / "web" / "worker.js").read_text(encoding="utf-8")
+
+    assert "if (!payload.finder_points && !payload.outline)" in worker

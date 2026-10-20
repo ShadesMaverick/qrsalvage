@@ -963,8 +963,9 @@ def solve(
     known_dark, known_light = structure_mask(best.modules)
 
     # Only the winner earns the bow: on every candidate size it would multiply the search cost,
-    # and a bow cannot rescue a wrong size anyway. Descent from zero offsets, so this never
-    # returns a worse grid than the flat refinement produced. Measured in scripts/ab_bow.py.
+    # and a bow cannot rescue a wrong size anyway. Automatic geometry descends from zero bow;
+    # a manual outline descends from its supplied curves. Either seed is retained unless the
+    # objective improves, so refinement never returns a worse grid. Measured in scripts/ab_bow.py.
     _emit(progress, "chosen", modules=int(best.modules), version=version_for_modules(best.modules))
     ox_, oy_, f_ = transform
 
