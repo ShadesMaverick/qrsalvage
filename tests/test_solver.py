@@ -14,8 +14,16 @@ import numpy as np
 import pytest
 
 from qrsalvage.core.decoding import ordered_search, reencode, render
+from qrsalvage.core.geometry import (
+    CurvedOutline,
+    bow_from_midpoints,
+    fit_outline,
+    outline_midpoints,
+    refine_bow,
+)
 from qrsalvage.core.matrix import DARK, LIGHT, UNKNOWN, ModuleMatrix
 from qrsalvage.core.pipeline import solve
+from qrsalvage.core.preprocess import prepare
 from qrsalvage.core.sampling import estimate_levels, posterior_dark
 from qrsalvage.core.structure import structure_mask
 from qrsalvage.synth import REMNANT_GAP, Damage, render_photo
@@ -24,6 +32,84 @@ from qrsalvage.synth import REMNANT_GAP, Damage, render_photo
 # lower-case letter forces the encoder into byte mode, makes the code denser and silently
 # shifts the difficulty of every test using this payload.
 TEXT = "QRSALVAGE-SELFTEST-0815"
+
+
+def test_outline_midpoints_round_trip_through_existing_bow_model():
+    corners = np.array([[10.0, 20.0], [210.0, 18.0], [7.0, 225.0], [218.0, 222.0]])
+    bow = np.array([0.0, -8.0, 0.0, 7.0, -6.0, 0.0, 9.0, 0.0])
+    midpoints = outline_midpoints(corners, bow)
+    assert np.allclose(bow_from_midpoints(corners, midpoints), bow, atol=1e-6)
+    assert midpoints.shape == (4, 2)
+
+
+@pytest.mark.parametrize(
+    ("corners", "midpoints"),
+    [
+        (np.zeros((3, 2)), np.zeros((4, 2))),
+        (np.zeros((4, 2)), np.zeros((4, 3))),
+    ],
+)
+def test_curved_outline_rejects_malformed_shapes(corners, midpoints):
+    with pytest.raises(ValueError):
+        CurvedOutline(corners=corners, edge_midpoints=midpoints)
+
+
+def test_curved_outline_fits_and_refines_a_synthetic_dome():
+    matrix = reencode(TEXT)
+    modules = matrix.shape[0]
+    module_px = 9.0
+    quiet = 5
+    dome = 0.12
+    photo = render_photo(
+        matrix,
+        Damage(module_px=module_px, curvature=0.0, contrast=0.25, dome=dome),
+        seed=2,
+    )
+    gray, _ = prepare(photo)
+
+    centre = (photo.shape[0] - 1) / 2.0
+
+    def rendered_point(x: float, y: float) -> np.ndarray:
+        source = (np.array([x, y]) - centre) / centre
+        source_radius = float(np.linalg.norm(source))
+        target_radius = source_radius
+        for _ in range(8):
+            target_radius -= (
+                target_radius + dome * target_radius**3 - source_radius
+            ) / (1.0 + 3.0 * dome * target_radius**2)
+        target = source * (target_radius / source_radius)
+        return centre + target * centre
+
+    low = quiet * module_px
+    high = (quiet + modules) * module_px
+    middle = (low + high) / 2.0
+    outline = CurvedOutline(
+        corners=np.array(
+            [
+                rendered_point(low, low),
+                rendered_point(high, low),
+                rendered_point(high, high),
+                rendered_point(low, high),
+            ]
+        ),
+        edge_midpoints=np.array(
+            [
+                rendered_point(middle, low),
+                rendered_point(high, middle),
+                rendered_point(middle, high),
+                rendered_point(low, middle),
+            ]
+        ),
+    )
+
+    fit = min(fit_outline(gray, outline, [modules]), key=lambda item: item.wrong_known)
+    known_dark, known_light = structure_mask(modules)
+    refined = refine_bow(gray, fit, known_dark, known_light)
+
+    assert refined.posterior.shape == (modules, modules)
+    assert refined.bow is not None
+    assert np.isfinite(refined.bow).all()
+    assert refined.wrong_known <= fit.wrong_known
 
 
 def test_mild_damage_is_solved_directly():
