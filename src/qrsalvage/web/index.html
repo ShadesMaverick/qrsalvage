@@ -124,7 +124,16 @@
       <div class="panel">
         <h2>Input</h2>
         <div id="thumbs" class="hidden"></div>
-        <canvas id="photo"></canvas>
+        <div id="photoStage" class="photo-stage">
+          <canvas id="photo"></canvas>
+          <div id="successLock" class="success-lock" aria-hidden="true">
+            <span class="lock-corner top-left"></span>
+            <span class="lock-corner top-right"></span>
+            <span class="lock-corner bottom-left"></span>
+            <span class="lock-corner bottom-right"></span>
+            <span class="lock-sweep"></span>
+          </div>
+        </div>
         <div class="note" id="canvasNote"></div>
         <div class="actions">
           <button id="retry" class="hidden">Mark the three finders by hand</button>
