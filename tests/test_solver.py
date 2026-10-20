@@ -102,7 +102,22 @@ def test_curved_outline_fits_and_refines_a_synthetic_dome():
         ),
     )
 
-    fit = min(fit_outline(gray, outline, [modules]), key=lambda item: item.wrong_known)
+    straight_outline = CurvedOutline(
+        corners=outline.corners.copy(),
+        edge_midpoints=outline_midpoints(outline.corners[[0, 1, 3, 2]], None),
+    )
+    assert (
+        np.max(np.linalg.norm(outline.edge_midpoints - straight_outline.edge_midpoints, axis=1))
+        > 1.0
+    )
+
+    straight_fit = fit_outline(gray, straight_outline, [modules])[0]
+    fit = fit_outline(gray, outline, [modules])[0]
+    assert straight_fit.modules == fit.modules == modules
+    assert fit.bow is not None
+    assert not np.allclose(fit.bow, 0.0)
+    assert not np.allclose(straight_fit.posterior, fit.posterior)
+
     known_dark, known_light = structure_mask(modules)
     refined = refine_bow(gray, fit, known_dark, known_light)
 

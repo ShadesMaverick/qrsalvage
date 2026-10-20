@@ -485,9 +485,19 @@ def _prepare_with_outline(
     if factor == 1.0:
         work = region
     else:
+        target_size: tuple[int, int] | None = None
+        if min(region.shape[:2]) * factor < 1.0:
+            # OpenCV derives dsize from fx/fy by rounding. An extreme but contract-valid
+            # aspect ratio can therefore turn the short side into zero and raise instead of
+            # reporting an ordinary recovery failure. Such an image cannot contain a useful
+            # two-dimensional grid, but keeping one pixel lets the normal failure path judge it.
+            target_size = (
+                max(1, round(region.shape[1] * factor)),
+                max(1, round(region.shape[0] * factor)),
+            )
         work = cv2.resize(
             region,
-            None,
+            target_size,
             fx=factor,
             fy=factor,
             interpolation=cv2.INTER_AREA if factor < 1.0 else cv2.INTER_CUBIC,

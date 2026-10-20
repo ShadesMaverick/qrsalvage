@@ -46,6 +46,33 @@ def test_solve_payload_turns_empty_base64_into_a_json_failure():
     assert "image" in answer["failure"].lower()
 
 
+def test_solve_payload_returns_failure_for_a_narrow_outline_image(monkeypatch):
+    image = np.full((2, 4000, 3), 255, dtype=np.uint8)
+    ok, encoded = cv2.imencode(".png", image)
+    assert ok
+    data_url = "data:image/png;base64," + base64.b64encode(encoded.tobytes()).decode("ascii")
+    outline = {
+        "corners": [
+            {"x": 0, "y": 0},
+            {"x": 3999, "y": 0},
+            {"x": 3999, "y": 1},
+            {"x": 0, "y": 1},
+        ],
+        "edge_midpoints": [
+            {"x": 1999.5, "y": 0},
+            {"x": 3999, "y": 0.5},
+            {"x": 1999.5, "y": 1},
+            {"x": 0, "y": 0.5},
+        ],
+    }
+    monkeypatch.setattr(pipeline, "fit_outline", lambda *_args, **_kwargs: [])
+
+    answer = api.solve_payload({"image": data_url, "outline": outline})
+
+    assert answer["ok"] is False
+    assert answer["failure"] == "no grid could be fitted"
+
+
 def test_solve_payload_refuses_unknown_ensemble_without_raising():
     answer = api.solve_payload({"image": _image_data_url(), "ensemble": "invented"})
 
