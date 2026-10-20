@@ -296,7 +296,7 @@ self.onmessage = async ({ data }) => {
     if (kind === "solve") {
       const encoded = payload.images || (payload.image ? [payload.image] : []);
       const directTexts = [];
-      if (!payload.finder_points) {
+      if (!payload.finder_points && !payload.outline) {
         for (const entry of encoded) {
           let text = null;
           try {

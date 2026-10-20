@@ -161,6 +161,35 @@ def test_an_outline_applies_to_one_photograph_only():
     assert answer["failure"] == "a manual outline applies to one photograph only"
 
 
+@pytest.mark.parametrize("ensemble", ["sampling", "geometry"])
+def test_an_outline_refuses_flat_ensemble_measurements(ensemble):
+    _photo, outline = _curved_outline_case()
+
+    answer = solve_payload({"image": _data_url(FIXTURE), "outline": outline, "ensemble": ensemble})
+
+    assert answer["ok"] is False
+    assert answer["failure"] == "a manual outline cannot be combined with an ensemble"
+
+
+@pytest.mark.parametrize(
+    "coordinate",
+    [
+        pytest.param(10**10000, id="huge-integer"),
+        pytest.param(1e300, id="huge-finite-float"),
+    ],
+)
+def test_outline_coordinates_must_stay_near_the_photograph(coordinate):
+    outline = {
+        "corners": [{"x": coordinate, "y": 2}] * 4,
+        "edge_midpoints": [{"x": 1, "y": 2}] * 4,
+    }
+
+    answer = solve_payload({"image": _data_url(FIXTURE), "outline": outline})
+
+    assert answer["ok"] is False
+    assert answer["failure"] == "outline coordinates are too far outside the photograph"
+
+
 def test_payload_carries_everything_the_page_shows():
     answer = solve_payload({"image": _data_url(FIXTURE)})
 
