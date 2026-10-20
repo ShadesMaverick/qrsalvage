@@ -68,6 +68,21 @@
     Ticket, Dokument, Schild, Produktetikett oder Gerät. Alles bleibt auf Ihrem Gerät.
     <a href="#faq-de">Häufige Fragen auf Deutsch</a>.</p>
 
+  <div id="progress" class="progress">
+    <div class="progress-mark" aria-hidden="true">
+      <span class="progress-finder top-left"></span>
+      <span class="progress-finder top-right"></span>
+      <span class="progress-finder bottom-left"></span>
+      <span class="progress-scan"></span>
+    </div>
+    <div id="status" class="note"></div>
+  </div>
+  <!-- This live region never leaves the accessibility tree. The visible timer and rapidly
+       changing diagnostics above stay out of it; only meaningful, deduplicated stages enter. -->
+  <div id="statusLive" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+
+  <div id="workspace" aria-busy="false">
+
   <div id="drop">
     <p><strong id="dropTitle">Drop a photograph here</strong>
        <span id="dropMore">&nbsp;or click to choose one</span>
@@ -103,8 +118,6 @@
     <label><input type="radio" name="mode" value="many">
       different codes — build a printable catalogue</label>
   </div>
-
-  <div id="status" class="note"></div>
 
   <div id="results" class="hidden">
     <div class="row">
@@ -191,6 +204,7 @@
       <button id="catalogPdf">Download A4 catalogue (PDF)</button>
     </div>
     <div id="catalogThanks"></div>
+  </div>
   </div>
 
   <!-- The questions people actually type into a search engine, as headings, answered honestly.

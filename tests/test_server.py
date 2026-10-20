@@ -341,6 +341,86 @@ def test_search_discovery_files_are_part_of_the_static_build():
     assert {"robots.txt", "sitemap.xml"} <= set(PAGE_FILES)
 
 
+def test_wait_feedback_is_graphical_accessible_and_motion_safe(running_server):
+    """A long browser recovery must look alive without excluding motion-sensitive users."""
+    host, port = running_server
+    connection = http.client.HTTPConnection(host, port, timeout=10)
+
+    connection.request("GET", "/")
+    page = connection.getresponse().read().decode("utf-8")
+    connection.request("GET", "/style.css")
+    style = connection.getresponse().read().decode("utf-8")
+    connection.request("GET", "/app.js")
+    script = connection.getresponse().read().decode("utf-8")
+
+    progress = re.search(r'<div id="progress"[^>]*>', page)
+    assert progress is not None
+    assert 'class="progress-mark" aria-hidden="true"' in page
+    assert '<div id="status" class="note"></div>' in page
+    live_status = re.search(r'<div id="statusLive"[^>]*>', page)
+    assert live_status is not None
+    assert 'class="sr-only"' in live_status.group(0)
+    assert 'role="status"' in live_status.group(0)
+    assert 'aria-live="polite"' in live_status.group(0)
+    assert 'aria-atomic="true"' in live_status.group(0)
+    assert "<main aria-busy=" not in page
+    assert '<div id="workspace" aria-busy="false">' in page
+    assert page.index('id="progress"') < page.index('id="workspace"')
+    assert page.index('id="statusLive"') < page.index('id="workspace"')
+
+    reduced_motion = re.search(
+        r"@media \(prefers-reduced-motion: reduce\)\s*\{(?P<body>.*?)\n\s*\}",
+        style,
+        re.DOTALL,
+    )
+    assert reduced_motion is not None
+    assert ".progress-scan { animation: none;" in reduced_motion.group("body")
+    assert ".sr-only" in style
+    assert ".busy #drop { pointer-events: none; }" not in style
+    assert 'workspace.setAttribute("aria-busy", "true")' in script
+    assert 'workspace.setAttribute("aria-busy", "false")' in script
+    assert "progressOwner === bootProgressOwner" in script
+    assert 'id="elapsed" aria-hidden="true"' in script
+    assert "statusLive.textContent" in script
+    assert "}, 4000);" in script
+
+
+def test_async_input_work_cannot_outlive_its_progress_owner():
+    """Resetting while a browser promise resolves must not resurrect stale photographs."""
+    script = (ROOT / "src" / "qrsalvage" / "web" / "app.js").read_text(encoding="utf-8")
+
+    camera = script[
+        script.index("async function openCamera") : script.index("function closeCamera")
+    ]
+    capture = script[script.index("async function captureBurst") : script.index("for (const radio")]
+    selection = script[script.index("async function addFiles") : script.index("function resetAll")]
+    reset = script[script.index("function resetAll") : script.index("function refresh")]
+
+    assert "stream = await navigator.mediaDevices.getUserMedia" in camera
+    assert "if (progressOwner !== owner)" in camera
+    assert "for (const track of stream.getTracks()) track.stop()" in camera
+
+    assert capture.index('const owner = Symbol("capture")') < capture.index(
+        "await createImageBitmap"
+    )
+    assert "releaseBitmaps(frames)" in capture
+    assert capture.count("progressOwner !== owner") >= 2
+    assert 'document.body.classList.contains("busy")' in capture
+    assert 'document.body.classList.add("busy")' in capture
+    assert "catch (err)" in capture
+    assert "finally" in capture
+    assert "$(" + '"cameraClose"' + ').addEventListener("click", cancelCapture)' in script
+
+    assert "const accepted = []" in selection
+    assert 'if (document.body.classList.contains("busy")) return' in selection
+    assert 'document.body.classList.add("busy")' in selection
+    assert 'document.body.classList.remove("busy")' in selection
+    assert "loaded.push(...accepted)" in selection
+    assert "releaseBitmaps(accepted)" in selection
+    assert selection.count("progressOwner !== owner") >= 2
+    assert "lastSolved = false" in reset
+
+
 def test_browser_direct_reader_is_bounded_and_checks_each_photograph():
     worker = (ROOT / "src" / "qrsalvage" / "web" / "worker.js").read_text(encoding="utf-8")
 
