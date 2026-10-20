@@ -160,6 +160,7 @@ class Handler(BaseHTTPRequestHandler):
         "/sitemap.xml": ("sitemap.xml", "application/xml; charset=utf-8"),
         "/axolotl.png": ("axolotl.png", "image/png"),
         "/style.css": ("style.css", "text/css; charset=utf-8"),
+        "/outline-editor.js": ("outline-editor.js", "text/javascript; charset=utf-8"),
         "/app.js": ("app.js", "text/javascript; charset=utf-8"),
         # The half of the page that knows where the work happens. This server serves the HTTP
         # one; the static build puts backend-worker.js in the same slot, and worker.js with it.
