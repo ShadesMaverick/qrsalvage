@@ -21,12 +21,17 @@ The interactive explainer of exactly this pipeline: `qrsalvage serve`, then `/me
 ```
 photograph(s)
    │
+   ├─ api.py validates an optional manual outline: four clockwise corners plus
+   │  top/right/bottom/left edge midpoints, for one photograph only
+   │
    ├─ whole-photo decode oracle.py      ordinary checksum-valid codes exit immediately
    │  unreadable
    │  preprocess.py      illumination correction, binarisation
    ▼
 finder candidates       geometry.py + scanfinder.py   (two detectors, merged;
    │                     an implausible triple additionally tries its best pair)
+   │  or manual outline  geometry.fit_outline converts the four edge midpoints
+   │                     to the existing eight-parameter per-edge bow model
    ▼
 grid per candidate size  geometry.py    coordinate descent on the known cells,
    │                                    then a per-edge bow (8 parameters, Coons-style)
@@ -88,7 +93,7 @@ Break any of these and the project stops being itself:
 | Seam | Where | What it decouples |
 |---|---|---|
 | **Oracle** | `core/oracle.py`, swap with `oracle.use()` | the single native dependency (zxing-cpp); the browser build hands in the same oracle compiled to WASM, both directions synchronous |
-| **Request layer** | `api.py` | what a shell asks for from how the request travelled; the local server and the browser worker call these same functions, so their answers cannot diverge |
+| **Request layer** | `api.py` | what a shell asks for from how the request travelled; validates the single-image manual clockwise outline before it reaches the core; the local server and the browser worker call these same functions, so their answers cannot diverge |
 | **Backend** | `web/backend-server.js` / `web/backend-worker.js`, one of them installed as `backend.js` | the page from where the work happens — loopback HTTP or Pyodide in a worker |
 | **Progress** | `progress=` callback on `solve()`/`solve_many()` | live reporting from the core without the core knowing who listens; feeds the CLI, the NDJSON stream and the worker unchanged |
 | **Fusion** | `ensemble.fuse_images`, rules in `FUSION_RULES` | how several photographs of one code are combined |
@@ -100,7 +105,7 @@ Break any of these and the project stops being itself:
 | I want to … | Look at |
 |---|---|
 | improve detection of damaged finders | `geometry.find_finders`, `scanfinder.py`, merged in `pipeline.detect_finders`; a triple past `TRIPLE_DOUBT` additionally tries its best pair (`pipeline._attempt`) |
-| improve the grid on curved surfaces | `geometry.refine_corners` / `refine_bow` (read the measured results in its docstring first; the per-edge bow is measured by `scripts/ab_dome.py`) |
+| improve the grid on curved surfaces | `geometry.fit_outline` converts a manual clockwise outline to the same per-edge bow used by `geometry.refine_corners` / `refine_bow` (read the measured results in its docstring first; the per-edge bow is measured by `scripts/ab_dome.py`) |
 | rescue a grid that seated on the wrong thing | `geometry.restart_coarse`, triggered in `pipeline.solve` past `COARSE_RESTART_THRESHOLD`; measured by `scripts/ab_restart.py` |
 | improve the per-cell probabilities | `sampling.estimate_levels` / `posterior_dark`; calibration measured by `scripts/calibration.py`, robustness against lying known cells by `scripts/ab_robust.py` |
 | handle areas where the print is gone | `sampling.featureless_depth` / `buried_cells` (the counting argument), damped into the posterior in `pipeline.solve`; measured by `scripts/ab_worn.py`. The depth also strikes buried witnesses from `wrong_known` in `geometry._score` — deliberately never from the descent's quality; the docstring records the failure that rule comes from |
