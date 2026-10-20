@@ -106,6 +106,7 @@ PAGE_FILES = (
     "legal.html",
     "robots.txt",
     "sitemap.xml",
+    "outline-editor.js",
     "app.js",
     "worker.js",
     "style.css",

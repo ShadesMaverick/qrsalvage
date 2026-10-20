@@ -10,6 +10,7 @@ import base64
 import http.client
 import json
 import re
+import subprocess
 import threading
 from http.server import ThreadingHTTPServer
 from pathlib import Path
@@ -25,6 +26,24 @@ from qrsalvage.synth import Damage, render_photo
 
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "engraved-curved-hard.png"
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _call_outline_editor(function: str, *args):
+    helper = ROOT / "src" / "qrsalvage" / "web" / "outline-editor.js"
+    script = """
+const editor = require(process.argv[1]);
+const args = JSON.parse(process.argv[3]);
+process.stdout.write(JSON.stringify(editor[process.argv[2]](...args)));
+"""
+    completed = subprocess.run(
+        ["node", "-e", script, str(helper), function, json.dumps(args)],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert completed.returncode == 0, completed.stderr
+    return json.loads(completed.stdout)
 
 
 def _data_url(image: Path | np.ndarray) -> str:
@@ -434,7 +453,7 @@ def test_outline_editor_is_served_with_touch_and_curved_geometry(running_server)
     connection = http.client.HTTPConnection(host, port, timeout=10)
 
     assets = {}
-    for path in ("/", "/style.css", "/app.js"):
+    for path in ("/", "/style.css", "/outline-editor.js", "/app.js"):
         connection.request("GET", path)
         response = connection.getresponse()
         assert response.status == 200, path
@@ -443,6 +462,7 @@ def test_outline_editor_is_served_with_touch_and_curved_geometry(running_server)
 
     page = assets["/"]
     style = assets["/style.css"]
+    editor = assets["/outline-editor.js"]
     script = assets["/app.js"]
     assert 'id="outlineRetry"' in page
     assert 'id="outlineSolve"' in page
@@ -459,9 +479,111 @@ def test_outline_editor_is_served_with_touch_and_curved_geometry(running_server)
         script,
         re.DOTALL,
     )
+    assert '<script src="outline-editor.js"></script>' in page
+    assert page.index('src="outline-editor.js"') < page.index('src="app.js"')
+    assert "selectNearestHandle" in editor
+    assert "qrOutlineEditor.selectNearestHandle" in script
+    assert "moveHandle" in editor
+    assert "qrOutlineEditor.moveHandle" in script
+    from scripts.build_site import PAGE_FILES
+
+    assert "outline-editor.js" in PAGE_FILES
     instructions = "top left", "top right", "bottom right", "bottom left"
     positions = [script.index(name) for name in instructions]
     assert positions == sorted(positions)
+
+
+def test_outline_editor_selects_the_nearest_overlapping_handle():
+    """A short edge's midpoint must not lose merely because corners were checked first."""
+    corners = [
+        {"x": 0, "y": 0},
+        {"x": 30, "y": 0},
+        {"x": 30, "y": 30},
+        {"x": 0, "y": 30},
+    ]
+    edge_midpoints = [
+        {"x": 15, "y": 0},
+        {"x": 30, "y": 15},
+        {"x": 15, "y": 30},
+        {"x": 0, "y": 15},
+    ]
+
+    selected = _call_outline_editor(
+        "selectNearestHandle", {"x": 15, "y": 0}, corners, edge_midpoints, 18
+    )
+
+    assert selected == {"kind": "midpoint", "index": 0}
+
+
+def test_outline_editor_corner_drag_moves_adjacent_midpoints_by_half():
+    corners = [
+        {"x": 0, "y": 0},
+        {"x": 100, "y": 0},
+        {"x": 100, "y": 100},
+        {"x": 0, "y": 100},
+    ]
+    edge_midpoints = [
+        {"x": 50, "y": 0},
+        {"x": 100, "y": 50},
+        {"x": 50, "y": 100},
+        {"x": 0, "y": 50},
+    ]
+
+    moved = _call_outline_editor(
+        "moveHandle",
+        corners,
+        edge_midpoints,
+        {"kind": "corner", "index": 0},
+        {"x": 10, "y": 6},
+    )
+
+    assert moved == {
+        "corners": [
+            {"x": 10, "y": 6},
+            {"x": 100, "y": 0},
+            {"x": 100, "y": 100},
+            {"x": 0, "y": 100},
+        ],
+        "edgeMidpoints": [
+            {"x": 55, "y": 3},
+            {"x": 100, "y": 50},
+            {"x": 50, "y": 100},
+            {"x": 5, "y": 53},
+        ],
+    }
+
+
+def test_outline_editor_midpoint_drag_moves_only_that_midpoint():
+    corners = [
+        {"x": 0, "y": 0},
+        {"x": 100, "y": 0},
+        {"x": 100, "y": 100},
+        {"x": 0, "y": 100},
+    ]
+    edge_midpoints = [
+        {"x": 50, "y": 0},
+        {"x": 100, "y": 50},
+        {"x": 50, "y": 100},
+        {"x": 0, "y": 50},
+    ]
+
+    moved = _call_outline_editor(
+        "moveHandle",
+        corners,
+        edge_midpoints,
+        {"kind": "midpoint", "index": 1},
+        {"x": -4, "y": 7},
+    )
+
+    assert moved == {
+        "corners": corners,
+        "edgeMidpoints": [
+            {"x": 50, "y": 0},
+            {"x": 96, "y": 57},
+            {"x": 50, "y": 100},
+            {"x": 0, "y": 50},
+        ],
+    }
 
 
 def test_the_legal_page_is_reachable_and_still_has_blanks_to_fill(running_server):

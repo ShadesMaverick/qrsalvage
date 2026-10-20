@@ -653,11 +653,9 @@ function outlineHandleAt(point) {
   const scale = parseFloat(canvas.dataset.scale);
   const imagePixelsPerCssPixel = (canvas.width / rect.width) / scale;
   const hitRadius = 18 * imagePixelsPerCssPixel;
-  const within = (candidate) => Math.hypot(candidate.x - point.x, candidate.y - point.y) <= hitRadius;
-  const corner = outlineCorners.findIndex(within);
-  if (corner >= 0) return { kind: "corner", index: corner };
-  const midpoint = outlineMidpoints.findIndex(within);
-  return midpoint >= 0 ? { kind: "midpoint", index: midpoint } : null;
+  return window.qrOutlineEditor.selectNearestHandle(
+    point, outlineCorners, outlineMidpoints, hitRadius
+  );
 }
 
 canvas.addEventListener("pointerdown", (e) => {
@@ -689,17 +687,11 @@ canvas.addEventListener("pointermove", (e) => {
   const point = canvasPoint(e);
   const dx = point.x - outlineDrag.last.x;
   const dy = point.y - outlineDrag.last.y;
-  if (outlineDrag.kind === "corner") {
-    const index = outlineDrag.index;
-    outlineCorners[index].x += dx;
-    outlineCorners[index].y += dy;
-    for (const edge of [(index + 3) % 4, index]) {
-      outlineMidpoints[edge].x += dx / 2;
-      outlineMidpoints[edge].y += dy / 2;
-    }
-  } else {
-    outlineMidpoints[outlineDrag.index] = point;
-  }
+  const moved = window.qrOutlineEditor.moveHandle(
+    outlineCorners, outlineMidpoints, outlineDrag, { x: dx, y: dy }
+  );
+  outlineCorners = moved.corners;
+  outlineMidpoints = moved.edgeMidpoints;
   outlineDrag.last = point;
   draw();
 });
