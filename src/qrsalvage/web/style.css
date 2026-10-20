@@ -109,10 +109,6 @@
     content: ""; position: absolute; left: 17px; top: 10px; width: 14px; height: 25px;
     border: solid var(--ok); border-width: 0 4px 4px 0; transform: rotate(45deg);
   }
-  @media (prefers-reduced-motion: reduce) {
-    #results { transition: none; }
-    .progress-scan { animation: none; transform: translateY(21px); box-shadow: none; }
-  }
   .quiet { color: var(--muted); }
   .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 
@@ -138,6 +134,65 @@
     max-width: 100%; display: block; border-radius: 8px; background: var(--panel-in);
   }
   canvas { cursor: crosshair; }
+  .photo-stage {
+    position: relative; display: inline-block; max-width: 100%; overflow: hidden;
+    vertical-align: top; border-radius: 8px;
+  }
+  .success-lock {
+    position: absolute; inset: 0; overflow: hidden; opacity: 0; pointer-events: none;
+    background: radial-gradient(circle at center, rgba(143, 211, 176, .08), transparent 56%);
+  }
+  .lock-corner {
+    position: absolute; width: clamp(2.4rem, 22%, 5rem); height: clamp(2.4rem, 22%, 5rem);
+    opacity: 0; filter: drop-shadow(0 0 5px rgba(143, 211, 176, .65));
+  }
+  .lock-corner.top-left { top: 8px; left: 8px; border-top: 3px solid var(--ok); border-left: 3px solid var(--ok); }
+  .lock-corner.top-right { top: 8px; right: 8px; border-top: 3px solid var(--ok); border-right: 3px solid var(--ok); }
+  .lock-corner.bottom-left { bottom: 8px; left: 8px; border-bottom: 3px solid var(--ok); border-left: 3px solid var(--ok); }
+  .lock-corner.bottom-right { right: 8px; bottom: 8px; border-right: 3px solid var(--ok); border-bottom: 3px solid var(--ok); }
+  .lock-sweep {
+    position: absolute; z-index: 2; left: 8px; right: 8px; top: 0; height: 2px; opacity: 0;
+    background: linear-gradient(90deg, transparent, var(--ok) 20% 80%, transparent);
+    box-shadow: 0 0 10px rgba(143, 211, 176, .8);
+  }
+  .photo-stage.locked .success-lock { animation: success-lock 1.55s ease-out both; }
+  .photo-stage.locked .lock-corner { animation: lock-corner-in .42s cubic-bezier(.2,.8,.2,1) .08s both; }
+  .photo-stage.locked .lock-sweep { animation: lock-sweep .62s ease-out .18s both; }
+  #results.success-reveal #verdict,
+  #results.success-reveal #payload,
+  #results.success-reveal #images,
+  #results.success-reveal #exports { animation: result-reveal .42s cubic-bezier(.2,.8,.2,1) both; }
+  #results.success-reveal #payload { animation-delay: .07s; }
+  #results.success-reveal #images { animation-delay: .13s; }
+  #results.success-reveal #exports { animation-delay: .19s; }
+  @keyframes success-lock {
+    0% { opacity: 0; }
+    12%, 76% { opacity: 1; }
+    100% { opacity: 0; }
+  }
+  @keyframes lock-corner-in {
+    from { opacity: 0; transform: scale(1.22); }
+    to { opacity: 1; transform: scale(1); }
+  }
+  @keyframes lock-sweep {
+    0% { top: 0; opacity: 0; }
+    18% { opacity: 1; }
+    100% { top: calc(100% - 2px); opacity: 0; }
+  }
+  @keyframes result-reveal {
+    from { opacity: .2; transform: translateY(7px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #results { transition: none; }
+    .progress-scan { animation: none; transform: translateY(21px); box-shadow: none; }
+    .photo-stage.locked .success-lock { animation: none; opacity: 1; }
+    .photo-stage.locked .lock-corner, .photo-stage.locked .lock-sweep,
+    #results.success-reveal #verdict, #results.success-reveal #payload,
+    #results.success-reveal #images, #results.success-reveal #exports { animation: none; }
+    .photo-stage.locked .lock-corner { opacity: 1; }
+    .photo-stage.locked .lock-sweep { opacity: 0; }
+  }
   #images img { width: 100%; image-rendering: pixelated; }
 
   #thumbs { display: flex; gap: .55rem; flex-wrap: wrap; margin-bottom: .8rem; }

@@ -36,6 +36,7 @@ function thanksHtml() {
 const drop = $("drop"), fileInput = $("file"), status = $("status");
 const progress = $("progress"), statusLive = $("statusLive"), workspace = $("workspace");
 const canvas = $("photo"), ctx = canvas.getContext("2d");
+const photoStage = $("photoStage");
 
 // Several photographs of one code, in the order they arrived. The first one is the one shown
 // on the canvas; hand-marking finders only makes sense against a single framing, so the
@@ -58,6 +59,7 @@ let token = null;   // identifies the result the backend is holding for export
 let seq = 0;        // solve sequence; a late answer from a superseded run must not render
 let timerId = null;
 let statusTimer = null;
+let successTimer = null;
 let progressOwner = null;
 let lastAnnouncement = "";
 let pendingWarning = "";
@@ -108,6 +110,28 @@ function progressComplete(message) {
       progressIdle(owner);
     }
   }, 4000);
+}
+
+function resetSuccessEffect() {
+  clearTimeout(successTimer);
+  photoStage.classList.remove("locked");
+  $("results").classList.remove("success-reveal");
+}
+
+function prepareRecoveryVisuals() {
+  resetSuccessEffect();
+  liveGrid = null;
+  settledGrid = null;
+  scheduleDraw();
+}
+
+function celebrateRecovery() {
+  resetSuccessEffect();
+  // Flush the removed state so a second recovered photograph replays the entrance cleanly.
+  void photoStage.offsetWidth;
+  photoStage.classList.add("locked");
+  $("results").classList.add("success-reveal");
+  successTimer = setTimeout(resetSuccessEffect, 1800);
 }
 
 /* --- the backend: where the work happens -------------------------------------------- */
@@ -433,6 +457,8 @@ function resetAll() {
   releaseBitmaps(loaded);
   loaded = []; picked = []; picking = false; token = null; pendingWarning = "";
   lastSolved = false;
+  settledGrid = null;
+  resetSuccessEffect();
   $("results").classList.add("hidden");
   $("catalogPanel").classList.add("hidden");
   drop.classList.remove("compact");
@@ -480,13 +506,14 @@ function draw(detected) {
   // What the detector found, quietly; what the user clicked, loudly. Both over a dark halo,
   // because a thin bright ring on a bright photograph is invisible exactly where it matters.
   for (const p of detected || []) ring(p.x * scale, p.y * scale, 11, "#8fd3b0", 2.5);
-  if (liveGrid) {
+  const grid = liveGrid || settledGrid;
+  if (grid) {
     // top-left, top-right, bottom-left, bottom-right — drawn as the quadrilateral the
     // descent currently holds. Watching it snap into place IS the method.
     const order = [0, 1, 3, 2];
     ctx.beginPath();
     order.forEach((i, k) => {
-      const [x, y] = liveGrid[i];
+      const [x, y] = grid[i];
       if (k === 0) ctx.moveTo(x * scale, y * scale); else ctx.lineTo(x * scale, y * scale);
     });
     ctx.closePath();
@@ -555,6 +582,7 @@ function busy(on, owner) {
 
 async function solve(points) {
   if (!loaded.length) return;
+  prepareRecoveryVisuals();
   const my = ++seq;
   const owner = Symbol(`solve-${my}`);
   $("catalogPanel").classList.add("hidden");
@@ -584,7 +612,7 @@ async function solve(points) {
     );
   } catch (err) {
     if (my === seq && busy(false, owner)) {
-      liveEnd();
+      liveEnd(false);
       status.textContent = window.qrBackend.failurePrefix + err;
       announce("Recovery failed");
     }
@@ -592,10 +620,13 @@ async function solve(points) {
   }
   if (my !== seq) return;  // superseded by a newer drop; this answer belongs to old inputs
   if (!busy(false, owner)) return;
-  liveEnd();
+  liveEnd(!!answer.ok);
   if (answer) {
     render(answer);
-    if (answer.ok) progressComplete("QR code recovered");
+    if (answer.ok) {
+      progressComplete("QR code recovered");
+      celebrateRecovery();
+    }
   }
 }
 
@@ -605,6 +636,8 @@ async function solve(points) {
    holding right now; the numbers are the numbers it is scoring. */
 
 let liveGrid = null;      // last accepted grid, drawn onto the photograph
+let settledGrid = null;   // successful final grid, kept visible after the live view closes
+let liveGrids = {};       // modules -> corners, so the chosen version keeps the matching grid
 let liveSizes = {};       // modules -> {wrong, total, quality}
 let liveFrame = false;    // requestAnimationFrame throttle
 let liveChosen = null;
@@ -628,7 +661,7 @@ const STAGES = {
 };
 
 function liveStart() {
-  liveGrid = null; liveSizes = {}; liveChosen = null;
+  liveGrid = null; settledGrid = null; liveGrids = {}; liveSizes = {}; liveChosen = null;
   document.body.classList.add("watching");
   $("live").classList.remove("hidden");
   $("verdict").classList.add("hidden");
@@ -643,10 +676,11 @@ function liveStart() {
   $("results").classList.remove("hidden");
 }
 
-function liveEnd() {
+function liveEnd(persistGrid) {
   document.body.classList.remove("watching");
   $("live").classList.add("hidden");
   $("payload").classList.remove("hidden");
+  settledGrid = persistGrid ? liveGrid : null;
   liveGrid = null;
   scheduleDraw();
 }
@@ -671,7 +705,9 @@ function liveEvent(e) {
     // stage only, and announce() suppresses identical consecutive stages.
     announce(`Recovery stage: ${member}${stage[0]}`);
   }
-  if (e.type === "member") { liveGrid = null; liveSizes = {}; liveChosen = null; scheduleDraw(); }
+  if (e.type === "member") {
+    liveGrid = null; liveGrids = {}; liveSizes = {}; liveChosen = null; scheduleDraw();
+  }
   if (e.type === "finders" && loaded.length === 1 && e.member === undefined) {
     draw(e.points);
   }
@@ -681,10 +717,16 @@ function liveEvent(e) {
     // Only the primary photograph's grid is drawn — the canvas shows that one.
     if (loaded.length === 1 || e.member === 0 || e.member === undefined) {
       liveGrid = e.corners;
+      liveGrids[e.modules] = e.corners;
       scheduleDraw();
     }
   }
-  if (e.type === "chosen") { liveChosen = e.modules; renderRace(); }
+  if (e.type === "chosen") {
+    liveChosen = e.modules;
+    liveGrid = liveGrids[e.modules] || liveGrid;
+    renderRace();
+    scheduleDraw();
+  }
   if (e.type === "sampled" && e.posterior) { renderHeat(e); }
 }
 
@@ -742,6 +784,7 @@ function titleFrom(name) {
 }
 
 async function catalogRun() {
+  prepareRecoveryVisuals();
   const my = ++seq;
   const owner = Symbol(`catalog-${my}`);
   const warning = pendingWarning;
@@ -920,6 +963,7 @@ function render(a) {
   $("results").classList.remove("hidden");
   $("payload").classList.remove("hidden");
   liveGrid = null;
+  if (!a.ok) settledGrid = null;
   const single = loaded.length === 1;
   draw(single && !picked.length ? a.finders : null);
   $("canvasNote").textContent = single

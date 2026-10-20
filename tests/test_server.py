@@ -385,6 +385,46 @@ def test_wait_feedback_is_graphical_accessible_and_motion_safe(running_server):
     assert "}, 4000);" in script
 
 
+def test_success_reveal_locks_on_without_forcing_motion(running_server):
+    """A recovered code gets a visible finish while reduced-motion users get a static state."""
+    host, port = running_server
+    connection = http.client.HTTPConnection(host, port, timeout=10)
+
+    connection.request("GET", "/")
+    page = connection.getresponse().read().decode("utf-8")
+    connection.request("GET", "/style.css")
+    style = connection.getresponse().read().decode("utf-8")
+    connection.request("GET", "/app.js")
+    script = connection.getresponse().read().decode("utf-8")
+
+    assert '<div id="photoStage" class="photo-stage">' in page
+    assert '<div id="successLock" class="success-lock" aria-hidden="true">' in page
+    assert style.count(".lock-corner") >= 4
+    assert "@keyframes success-lock" in style
+    assert ".success-reveal #verdict" in style
+
+    reduced_motion = re.search(
+        r"@media \(prefers-reduced-motion: reduce\)\s*\{(?P<body>.*?)\n\s*\}",
+        style,
+        re.DOTALL,
+    )
+    assert reduced_motion is not None
+    assert ".photo-stage.locked .success-lock { animation: none; opacity: 1; }" in (
+        reduced_motion.group("body")
+    )
+    assert ".photo-stage.locked .lock-corner { opacity: 1; }" in reduced_motion.group("body")
+    assert "celebrateRecovery();" in script
+    assert "const grid = liveGrid || settledGrid;" in script
+    solve = script[script.index("async function solve") : script.index("/* --- the live view")]
+    catalog = script[
+        script.index("async function catalogRun") : script.index("function catalogRender")
+    ]
+    assert "prepareRecoveryVisuals();" in solve
+    assert "prepareRecoveryVisuals();" in catalog
+    assert "liveEnd(false);" in solve
+    assert "liveEnd(!!answer.ok);" in solve
+
+
 def test_async_input_work_cannot_outlive_its_progress_owner():
     """Resetting while a browser promise resolves must not resurrect stale photographs."""
     script = (ROOT / "src" / "qrsalvage" / "web" / "app.js").read_text(encoding="utf-8")
