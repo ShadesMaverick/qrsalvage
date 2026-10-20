@@ -121,13 +121,13 @@ Implement:
 def fit_outline(
     gray: np.ndarray,
     outline: CurvedOutline,
-    sizes: Sequence[int] = DEFAULT_SIZES,
+    sizes: Sequence[int],
     start_delta: float = 12.0,
     on_step: Callable[[GridFit], None] | None = None,
 ) -> list[GridFit]:
 ```
 
-Convert clockwise corners to internal order with `outline.corners[[0, 1, 3, 2]]`. For every valid module size, call existing `refine_corners`, derive a bow from the supplied edge midpoints and the refined corners, score with `evaluate_bowed`, append the curved score, and report it through `on_step`. Do not run the expensive bow descent for every version; `solve` refines only the chosen winner.
+Import `Sequence` from `collections.abc`. Convert clockwise corners to internal order with `outline.corners[[0, 1, 3, 2]]`. For every valid module size supplied by the pipeline, call existing `refine_corners`, derive a bow from the supplied edge midpoints and the refined corners, score with `evaluate_bowed`, append the curved score, and report it through `on_step`. Do not import the pipeline's `DEFAULT_SIZES` into the pure geometry module and do not run the expensive bow descent for every version; `solve` supplies the sizes and refines only the chosen winner.
 
 - [ ] **Step 6: Run focused tests and commit**
 
