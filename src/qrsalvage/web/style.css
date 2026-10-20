@@ -134,6 +134,9 @@
     max-width: 100%; display: block; border-radius: 8px; background: var(--panel-in);
   }
   canvas { cursor: crosshair; }
+  .outline-editing { touch-action: none; cursor: crosshair; }
+  canvas.outline-editing.outline-ready { cursor: grab; }
+  canvas.outline-editing.outline-dragging { cursor: grabbing; }
   .photo-stage {
     position: relative; display: inline-block; max-width: 100%; overflow: hidden;
     vertical-align: top; border-radius: 8px;
