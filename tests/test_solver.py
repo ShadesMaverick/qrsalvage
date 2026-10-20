@@ -74,9 +74,9 @@ def test_curved_outline_fits_and_refines_a_synthetic_dome():
         source_radius = float(np.linalg.norm(source))
         target_radius = source_radius
         for _ in range(8):
-            target_radius -= (
-                target_radius + dome * target_radius**3 - source_radius
-            ) / (1.0 + 3.0 * dome * target_radius**2)
+            target_radius -= (target_radius + dome * target_radius**3 - source_radius) / (
+                1.0 + 3.0 * dome * target_radius**2
+            )
         target = source * (target_radius / source_radius)
         return centre + target * centre
 

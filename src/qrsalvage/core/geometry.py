@@ -90,12 +90,8 @@ def _flat_edge_midpoints(corners: np.ndarray) -> np.ndarray:
     if corners.shape != (4, 2):
         raise ValueError("corners must have shape (4, 2)")
     unit_corners = np.array([[0, 0], [1, 0], [0, 1], [1, 1]], dtype=np.float32)
-    homography = cv2.getPerspectiveTransform(
-        unit_corners, np.asarray(corners, dtype=np.float32)
-    )
-    unit_midpoints = np.array(
-        [[[0.5, 0.0], [1.0, 0.5], [0.5, 1.0], [0.0, 0.5]]], dtype=np.float32
-    )
+    homography = cv2.getPerspectiveTransform(unit_corners, np.asarray(corners, dtype=np.float32))
+    unit_midpoints = np.array([[[0.5, 0.0], [1.0, 0.5], [0.5, 1.0], [0.0, 0.5]]], dtype=np.float32)
     return cv2.perspectiveTransform(unit_midpoints, homography)[0].astype(np.float64)
 
 
@@ -690,9 +686,7 @@ def fit_outline(
             start_delta=start_delta,
         )
         bow = bow_from_midpoints(flat.corners, outline.edge_midpoints)
-        curved = evaluate_bowed(
-            gray, flat.corners, bow, modules, 12, known_dark, known_light
-        )
+        curved = evaluate_bowed(gray, flat.corners, bow, modules, 12, known_dark, known_light)
         fits.append(curved)
         if on_step:
             on_step(curved)
