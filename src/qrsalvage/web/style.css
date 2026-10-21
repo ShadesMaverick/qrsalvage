@@ -433,6 +433,80 @@ footer a:hover { color: var(--fg); }
 #faq a, #faq-de a { color: var(--pink-soft); }
 
 /* --- editorial sections, method and legal pages ---------------------------------- */
+.manual-page, .legal-shell { overflow-x: hidden; }
+.manual-layout {
+  max-width: 76rem; margin: 0 auto; display: grid; grid-template-columns: 13rem minmax(0, 46rem);
+  gap: clamp(2rem, 6vw, 6rem); align-items: start; padding: clamp(3rem, 7vw, 6rem) 0;
+}
+.manual-rail {
+  position: sticky; top: 1rem; display: flex; flex-direction: column; gap: 4px;
+  padding: 12px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+}
+.manual-rail a { padding: 8px 0; color: var(--muted); font-size: .82rem; }
+.manual-rail a:hover { color: var(--pink-soft); }
+.manual-content { min-width: 0; }
+.manual-intro { margin: 0 0 3rem; color: var(--muted); font-size: 1.05rem; }
+.manual-content section { scroll-margin-top: 1rem; }
+.manual-content h1, .manual-content h2 {
+  margin: 0; font: 600 clamp(1.8rem, 4vw, 3rem)/1.05 var(--mono); letter-spacing: -.04em;
+}
+.manual-content h2 {
+  margin-top: 4rem; padding-top: 1rem; border-top: 1px solid var(--line);
+  font-size: clamp(1.4rem, 3vw, 2.15rem);
+}
+.manual-content h2 .num {
+  display: block; margin-bottom: 12px; color: var(--pink); font: 600 .72rem/1 var(--mono);
+  letter-spacing: .12em;
+}
+.manual-content h3 { margin: 2rem 0 .25rem; color: var(--pink-soft); font-size: 1rem; }
+.manual-content p { margin: .75rem 0; }
+.manual-content em { color: var(--pink-soft); font-style: normal; font-weight: 600; }
+.manual-content code, .legal-page code {
+  padding: .1em .35em; border-radius: 4px; background: var(--panel-in); font: .92em var(--mono);
+}
+.manual-content .formula {
+  margin: 1.25rem 0; padding: 1rem 1.25rem; overflow-x: auto; border: 1px solid var(--line);
+  border-left: 3px solid var(--pink); border-radius: 8px; background: var(--panel);
+  font: 15px/1.9 var(--mono);
+}
+.manual-content .where {
+  display: block; margin-top: .5rem; color: var(--muted); font: .85em/1.6 var(--mono);
+}
+.manual-content .aside {
+  margin: 1.5rem 0; padding: 1rem; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--panel); color: var(--muted); font-size: .93rem;
+}
+.manual-content .aside b, .manual-content figcaption b { color: var(--fg); }
+.manual-content figure {
+  margin: 1.5rem 0; padding: 1rem 1rem .75rem; border: 1px solid var(--line);
+  border-radius: 10px; background: var(--panel);
+}
+.manual-content .plot { max-width: 100%; overflow-x: auto; }
+.manual-content figure img { display: block; width: 100%; min-width: 520px; height: auto; }
+.manual-content figcaption {
+  margin-top: .75rem; padding-top: .75rem; border-top: 1px solid var(--line);
+  color: var(--muted); font-size: .87rem; line-height: 1.6;
+}
+.manual-content ul { padding-left: 1.25rem; }
+.manual-content li { margin: .25rem 0; }
+.manual-content table { width: 100%; margin: 1.25rem 0; border-collapse: collapse; font-size: .93rem; }
+.manual-content th, .manual-content td {
+  padding: .5rem 1rem .5rem 0; border-bottom: 1px solid var(--line); text-align: left;
+}
+.manual-content th { color: var(--muted); font-size: .85rem; font-weight: 500; }
+.manual-content td { font-variant-numeric: tabular-nums; }
+.manual-content td.num { font-family: var(--mono); }
+.manual-footer { margin-top: 3rem; color: var(--muted); font-size: .9rem; }
+.manual-footer a:hover, .legal-page a:hover { color: var(--pink-soft); }
+.legal-page { max-width: 44rem; margin: 0 auto; padding: clamp(3rem, 7vw, 6rem) 0; }
+.legal-page h1 { font: 600 clamp(1.8rem, 5vw, 2.8rem)/1.05 var(--mono); letter-spacing: -.04em; }
+.legal-page h2 { margin-top: 2.5rem; }
+.legal-page h3 { margin-top: 1.75rem; color: var(--pink-soft); }
+.legal-page dt { margin-top: .75rem; font-weight: 600; }
+.legal-page dd { margin: 0 0 0 1rem; }
+.legal-page .plain, .legal-authority { color: var(--muted); font-size: .92em; }
+.legal-authority { padding-left: 12px; border-left: 2px solid var(--pink); }
+.legal-back { margin-top: 3rem; }
 #methodSummary, #situations, #privacyOpenSource {
   max-width: 76rem; margin: clamp(4rem, 9vw, 7rem) auto 0;
 }
@@ -498,6 +572,11 @@ footer { max-width: 76rem; margin-right: auto; margin-left: auto; }
   #methodSummary ol { grid-template-columns: 1fr; }
   #methodSummary li { min-height: 0; }
   #methodSummary li::before { margin-bottom: 12px; }
+  .manual-layout { display: block; padding-top: 2rem; }
+  .manual-rail {
+    position: static; flex-direction: row; flex-wrap: wrap; gap: 4px 16px; margin-bottom: 3rem;
+  }
+  .manual-rail a { padding: 8px 0; }
 }
 
 @media (max-width: 20rem) {
@@ -510,6 +589,7 @@ footer { max-width: 76rem; margin-right: auto; margin-left: auto; }
   input, select, button { max-width: 100%; }
   pre.grid { max-width: 100%; }
   .cards { grid-template-columns: minmax(0, 1fr); }
+  .manual-content figure { padding-right: 12px; padding-left: 12px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

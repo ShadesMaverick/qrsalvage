@@ -1207,9 +1207,20 @@ const groups = {
   "[data-lang]": [german, english],
   "[data-locale]": [deButton, enButton],
 };
+const description = { content: "", setAttribute(name, value) { this[name] = value; } };
 const document = {
+  title: "",
+  body: {
+    dataset: {
+      titleEn: "English title",
+      titleDe: "German title",
+      descriptionEn: "English description",
+      descriptionDe: "German description",
+    },
+  },
   documentElement: { lang: "" },
   querySelectorAll(selector) { return groups[selector]; },
+  querySelector(selector) { return selector === 'meta[name="description"]' ? description : null; },
 };
 const storage = { setItem() { throw new Error("denied"); } };
 const controller = createLocaleController({ locale: "en", document, storage });
@@ -1223,6 +1234,8 @@ process.stdout.write(JSON.stringify({
   englishHidden: english.hidden,
   dePressed: deButton["aria-pressed"],
   enPressed: enButton["aria-pressed"],
+  title: document.title,
+  description: description.content,
 }));
 """
     completed = subprocess.run(
@@ -1242,6 +1255,8 @@ process.stdout.write(JSON.stringify({
         "englishHidden": True,
         "dePressed": "true",
         "enPressed": "false",
+        "title": "German title",
+        "description": "German description",
     }
 
 
