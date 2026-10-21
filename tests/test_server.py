@@ -966,6 +966,14 @@ def test_companion_has_one_anchored_nonblocking_layer_and_motion_safe_sprite():
     assert "animation: none" in reduced
 
 
+def test_companion_walk_animation_holds_both_discrete_sprite_frames():
+    style = (ROOT / "src" / "qrsalvage" / "web" / "style.css").read_text(encoding="utf-8")
+
+    walk = re.search(r"animation:\s*companion-walk[^;]+;", style)
+    assert walk is not None
+    assert "steps(2, jump-none)" in walk.group(0)
+
+
 def test_companion_assets_are_served_built_and_loaded_between_locale_and_app(running_server):
     host, port = running_server
     connection = http.client.HTTPConnection(host, port, timeout=10)

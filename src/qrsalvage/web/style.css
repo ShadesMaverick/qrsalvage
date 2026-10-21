@@ -385,7 +385,7 @@
   image-rendering: pixelated;
 }
 #companion[data-pose="walk"][data-motion="active"] #companionSprite {
-  animation: companion-walk .56s steps(1, end) infinite;
+  animation: companion-walk .56s steps(2, jump-none) infinite;
 }
 @keyframes companion-walk {
   from { background-position: 20% 0; }
