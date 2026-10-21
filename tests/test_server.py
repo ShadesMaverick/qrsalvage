@@ -975,6 +975,71 @@ def test_search_discovery_files_are_part_of_the_static_build():
     assert {"robots.txt", "sitemap.xml", "locale.js", "studio-state.js"} <= set(PAGE_FILES)
 
 
+def test_signal_studio_buttons_keep_a_44_pixel_target():
+    style = (ROOT / "src" / "qrsalvage" / "web" / "style.css").read_text(encoding="utf-8")
+
+    buttons = re.search(r"^\s*button\s*\{(?P<body>.*?)\}", style, re.MULTILINE | re.DOTALL)
+    thumbnails = re.search(r"\.thumb button\s*\{(?P<body>.*?)\}", style, re.DOTALL)
+    assert buttons is not None
+    assert thumbnails is not None
+    assert "min-width: 44px" in buttons.group("body")
+    assert "min-height: 44px" in buttons.group("body")
+    assert "width: 44px" in thumbnails.group("body")
+    assert "height: 44px" in thumbnails.group("body")
+
+
+def test_catalogue_cards_fit_a_320_pixel_viewport():
+    style = (ROOT / "src" / "qrsalvage" / "web" / "style.css").read_text(encoding="utf-8")
+
+    small_screen = style[
+        style.index("@media (max-width: 20rem)") : style.index(
+            "@media (prefers-reduced-motion: reduce)"
+        )
+    ]
+    assert ".cards { grid-template-columns: minmax(0, 1fr); }" in small_screen
+    body = re.search(r"^\s*body\s*\{(?P<body>.*?)\}", style, re.MULTILINE | re.DOTALL)
+    assert body is not None
+    assert "overflow-x: hidden" not in body.group("body")
+
+
+def test_reduced_motion_statically_disables_every_shell_movement():
+    style = (ROOT / "src" / "qrsalvage" / "web" / "style.css").read_text(encoding="utf-8")
+
+    reduced_motion = style[style.rindex("@media (prefers-reduced-motion: reduce)") :]
+    assert "#drop, #drop::before, button { transition: none; }" in reduced_motion
+    assert "#drop.over { transform: none; }" in reduced_motion
+    assert ".progress-scan { animation: none;" in reduced_motion
+    assert style.rstrip().endswith(reduced_motion.rstrip())
+
+
+def test_new_shell_spacing_stays_on_the_four_pixel_grid():
+    style = (ROOT / "src" / "qrsalvage" / "web" / "style.css").read_text(encoding="utf-8")
+    sections = (
+        style[
+            style.index("/* --- shared navigation") : style.index("/* --- identity")
+        ],
+        style[
+            style.index("/* --- Studio toolbar") : style.index("/* --- drop zone")
+        ],
+        style[
+            style.index("/* --- editorial sections") : style.index(
+                "@media (prefers-reduced-motion: reduce)"
+            )
+        ],
+    )
+
+    spacing = re.compile(
+        r"\b(?:gap|margin(?:-(?:top|right|bottom|left))?|"
+        r"padding(?:-(?:top|right|bottom|left))?)\s*:\s*([^;]+);"
+    )
+    dimensions = re.compile(r"(-?\d+(?:\.\d+)?)(px|rem)")
+    for section in sections:
+        for declaration in spacing.findall(section):
+            for value, unit in dimensions.findall(declaration):
+                pixels = abs(float(value)) * (16 if unit == "rem" else 1)
+                assert abs(pixels % 4) < 1e-9, declaration
+
+
 def test_wait_feedback_is_graphical_accessible_and_motion_safe(running_server):
     """A long browser recovery must look alive without excluding motion-sensitive users."""
     host, port = running_server
