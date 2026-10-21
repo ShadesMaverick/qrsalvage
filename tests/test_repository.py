@@ -81,6 +81,74 @@ def test_privacy_explanation_credits_code_audit_and_policy_together():
     assert "weshalb Ihr Browser einen Upload gar nicht erst zuließe" not in legal
 
 
+def test_method_and_legal_share_navigation_and_locale_without_loading_the_backend():
+    for name in ("method.html", "legal.html"):
+        page = _text(f"src/qrsalvage/web/{name}")
+        assert 'class="site-nav"' in page
+        assert 'src="locale.js"' in page
+        assert 'data-locale="de"' in page and 'data-locale="en"' in page
+        assert 'src="backend.js"' not in page
+        assert 'src="app.js"' not in page
+        assert 'src="companion.js"' not in page
+        assert 'src="worker.js"' not in page
+
+
+def test_signal_manual_preserves_all_method_sections_and_figures():
+    page = _text("src/qrsalvage/web/method.html")
+    for section in ("known", "levels", "posterior", "grid", "search", "probe", "rs", "limits"):
+        assert f'id="{section}"' in page
+    for figure in (
+        "fig-known.svg",
+        "fig-levels.svg",
+        "fig-posterior.svg",
+        "fig-objective.svg",
+        "fig-probe.svg",
+        "fig-rs.svg",
+    ):
+        assert page.count(figure) == 1
+
+
+def test_secondary_pages_use_the_exact_local_only_policy_and_metadata_hooks():
+    expected = (
+        "default-src 'self'; img-src 'self' data: blob:; style-src 'self'; "
+        "script-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; "
+        "form-action 'none'"
+    )
+    for name in ("method.html", "legal.html"):
+        path = f"src/qrsalvage/web/{name}"
+        page = _text(path)
+        assert " ".join(_meta_csp(path).split()) == expected
+        for hook in (
+            "data-title-en=",
+            "data-title-de=",
+            "data-description-en=",
+            "data-description-de=",
+        ):
+            assert hook in page
+
+
+def test_bilingual_legal_page_preserves_authoritative_facts_in_both_languages():
+    legal = _text("src/qrsalvage/web/legal.html")
+    assert '<section data-lang="de">' in legal
+    assert '<section data-lang="en" hidden>' in legal
+    assert "The German version is authoritative." in legal
+    german, english = legal.split('<section data-lang="en" hidden>')
+    for block in (german, english):
+        for fact in (
+            "Fabian Marius Freitag",
+            "Wilhelmstraße 9/1",
+            "73779 Deizisau",
+            "f.freitag@ik.me",
+            "https://docs.github.com/de/site-policy/privacy-policies/github-privacy-statement",
+            "https://github.com/ShadesMaverick/qrsalvage",
+        ):
+            assert fact in block
+        for article in ("§ 5 DDG", "Art. 6", "Art. 46 DSGVO", "Art. 15 bis 21 DSGVO"):
+            assert article in block
+    assert "verlassen Ihr Gerät nicht" in legal
+    assert "TODO" not in legal
+
+
 def test_ci_requirements_are_the_recorded_toolchain():
     lines = {
         line.strip()

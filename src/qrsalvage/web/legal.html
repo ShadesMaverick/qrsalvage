@@ -1,34 +1,29 @@
 <!doctype html>
-<!-- Imprint and privacy notice for the published site.
-
-     The operator's details below are real and were entered by the operator in September 2026.
-     German law (§ 5 DDG) requires them for a publicly available digital service, and a
-     donation button removes any doubt about whether the obligation applies. A test in
-     test_server.py forbids placeholder text from ever reappearing on this page.
-
-     This is a page written from the architecture of the site, not legal advice. The one
-     thing it has going for it is that the privacy section is unusually easy to write
-     truthfully: there is no server of ours, so there is almost nothing to declare. -->
 <html lang="de">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self';
-      script-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;
-      connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
-<title>qrsalvage — Impressum und Datenschutz</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob:; style-src 'self'; script-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Impressum &amp; Datenschutz · qrsalvage</title>
+<meta name="description" content="Impressum und Datenschutzerklärung für qrsalvage.">
 <link rel="stylesheet" href="style.css">
-<style>
-  main { max-width: 44rem; }
-  h2 { margin-top: 2.4rem; }
-  dt { font-weight: 600; margin-top: .8rem; }
-  dd { margin: 0 0 0 1rem; }
-  .plain { color: #93a3b0; font-size: .92em; }
-</style>
 </head>
-<body>
-<main>
-  <h1>Impressum und Datenschutz</h1>
+<body class="legal-shell"
+      data-title-en="Legal notice &amp; privacy · qrsalvage"
+      data-title-de="Impressum &amp; Datenschutz · qrsalvage"
+      data-description-en="Legal notice and privacy information for qrsalvage."
+      data-description-de="Impressum und Datenschutzerklärung für qrsalvage.">
+<nav class="site-nav" aria-label="Primary navigation">
+  <a class="site-brand" href="index.html">qrsalvage</a>
+  <a href="index.html#studio"><span data-lang="en">Studio</span><span data-lang="de" hidden>Studio</span></a>
+  <a href="method.html"><span data-lang="en">Method</span><span data-lang="de" hidden>Methode</span></a>
+  <a href="https://github.com/ShadesMaverick/qrsalvage">GitHub</a>
+  <a href="legal.html" aria-current="page"><span data-lang="en">Privacy</span><span data-lang="de" hidden>Datenschutz</span></a>
+  <div class="locale-switch" aria-label="Language"><button type="button" data-locale="de">DE</button><button type="button" data-locale="en">EN</button></div>
+</nav>
+<main class="legal-page">
+<section data-lang="de">
+  <h1>Impressum &amp; Datenschutz</h1>
   <p class="plain"><a class="back" href="index.html">&larr; zurück zum Werkzeug</a></p>
 
   <h2>Impressum</h2>
@@ -73,8 +68,7 @@
     Abs. 1 lit. f DSGVO (berechtigtes Interesse an der technischen Auslieferung). Auf Umfang
     und Dauer dieser Protokollierung haben wir keinen Einfluss; es gilt die
     Datenschutzerklärung des Hosters:
-    <a href="https://docs.github.com/de/site-policy/privacy-policies/github-privacy-statement"
-      >GitHub Privacy Statement</a>.</p>
+    <a href="https://docs.github.com/de/site-policy/privacy-policies/github-privacy-statement">GitHub Privacy Statement</a>.</p>
   <p>Der Abruf bedeutet eine Übermittlung in die USA. GitHub ist unter dem EU-US Data Privacy
     Framework zertifiziert und verwendet ergänzend die Standardvertragsklauseln der
     EU-Kommission (Art. 46 DSGVO).</p>
@@ -114,8 +108,96 @@
     verwendeten Fremdbestandteile und die Begründungen des Verfahrens sind öffentlich
     einsehbar: <a href="https://github.com/ShadesMaverick/qrsalvage">github.com/ShadesMaverick/qrsalvage</a>.</p>
 
-  <p class="plain" style="margin-top:3rem"><a class="back" href="index.html">&larr; zurück zum
+  <p class="plain legal-back"><a class="back" href="index.html">&larr; zurück zum
     Werkzeug</a></p>
+</section>
+
+<section data-lang="en" hidden>
+  <h1>Legal notice &amp; privacy</h1>
+  <p class="legal-authority">English translation. The German version is authoritative.</p>
+  <p class="plain"><a class="back" href="index.html">&larr; back to the tool</a></p>
+
+  <h2>Legal notice</h2>
+  <p>Information pursuant to § 5 DDG:</p>
+  <dl>
+    <dt>Operator</dt>
+    <dd>Fabian Marius Freitag</dd>
+    <dt>Address</dt>
+    <dd>Wilhelmstraße 9/1<br>
+        73779 Deizisau<br>
+        Germany</dd>
+    <dt>Contact</dt>
+    <dd>Email: <a href="mailto:f.freitag@ik.me">f.freitag@ik.me</a></dd>
+  </dl>
+  <p>Responsible for the content: the person named above.</p>
+  <p class="plain">This service is a private, non-commercial free-software project. Donations
+    are voluntary contributions without consideration; nothing is sold, and there is no claim
+    to any particular function or availability.</p>
+
+  <h2>Privacy statement</h2>
+
+  <h3>The most important point first</h3>
+  <p><strong>Your photographs and the content recovered from them do not leave your device.</strong>
+    The entire reconstruction runs in your browser. There is no server that receives images and
+    therefore none that could store, analyse or pass them on. This is not a promise about our
+    conduct but a property of the architecture: the application code contains no upload path for
+    photographs or recovered content. The build checks the shipped text files for unexplained
+    external addresses. The same-origin <em>Content Security Policy</em> additionally restricts
+    programmatic connections. GitHub receives the ordinary requests needed to retrieve the page,
+    as described in the next section.</p>
+  <p class="plain">Why this matters especially here: the codes concerned often contain device
+    pairing secrets — Zigbee install codes, Matter passcodes and Wi-Fi keys. Anyone who has them
+    and is within radio range can take control of the device. Such data belongs nowhere except on
+    your own device.</p>
+
+  <h3>Technical data generated when the page is opened</h3>
+  <p>The page is delivered through GitHub Pages by GitHub, Inc., 88 Colin P. Kelly Jr. Street,
+    San Francisco, CA 94107, USA. As with every visit to a website, your browser transmits data
+    technically required for delivery to the hosting provider, in particular your IP address,
+    date and time, and the requested file. The legal basis is Art. 6 Abs. 1 lit. f DSGVO
+    (legitimate interest in technical delivery). We have no influence over the extent or duration
+    of this logging; the hosting provider's privacy statement applies:
+    <a href="https://docs.github.com/de/site-policy/privacy-policies/github-privacy-statement">GitHub Privacy Statement</a>.</p>
+  <p>Retrieving the page entails a transfer to the USA. GitHub is certified under the EU-US Data
+    Privacy Framework and additionally uses the European Commission's standard contractual
+    clauses (Art. 46 DSGVO).</p>
+  <p>We ourselves use <strong>no analytics, no tracking and no cookies</strong>, and embed no
+    content from third-party servers. Every part of the page — including the computing environment
+    loaded by your browser for reconstruction — comes from the same server as the page itself.
+    No user account is created, and there is no contact form.</p>
+
+  <h3>Storage in your browser</h3>
+  <p>So that a second visit does not require downloading several dozen megabytes again, your
+    browser stores the loaded program components in its normal cache. This is ordinary browser
+    behaviour and can be cleared at any time in its settings. Your photographs and recovered
+    content are not stored permanently; they exist only while the page is open and disappear when
+    the tab is closed.</p>
+
+  <h3>Donation links</h3>
+  <p>After a successful recovery, an option to donate is offered. These are ordinary links. Only
+    when you click one do you leave this page and reach the respective provider, whose own privacy
+    terms then apply. Without a click, no connection to these providers is made and nobody learns
+    that you were here.</p>
+
+  <h3>Your rights</h3>
+  <p>You have the rights under Art. 15 bis 21 DSGVO (access, rectification, erasure, restriction,
+    data portability and objection), as well as the right to lodge a complaint with a data
+    protection supervisory authority. Because we do not ourselves collect or store personal data,
+    requests for information about server logs should be directed to the hosting provider named
+    above; for everything else you can reach us at the address stated in the legal notice.</p>
+
+  <h2>Liability and licence</h2>
+  <p>The tool reconstructs damaged codes to the best of its ability, but by its nature cannot
+    guarantee that recovered content is the original content. Check a result before relying on it
+    — the page explicitly warns about marginal cases. Liability for damage arising from use is
+    excluded to the extent permitted by law.</p>
+  <p>qrsalvage is free software under the Apache License 2.0. The source code, licences of the
+    third-party components used, and the reasoning behind the method are publicly available at:
+    <a href="https://github.com/ShadesMaverick/qrsalvage">github.com/ShadesMaverick/qrsalvage</a>.</p>
+
+  <p class="plain legal-back"><a class="back" href="index.html">&larr; back to the tool</a></p>
+</section>
 </main>
+<script src="locale.js"></script>
 </body>
 </html>

@@ -459,6 +459,14 @@
     function apply() {
       if (!document) return;
       document.documentElement.lang = locale;
+      const body = document.body;
+      if (body) {
+        const title = body.dataset[locale === "de" ? "titleDe" : "titleEn"];
+        const description = body.dataset[locale === "de" ? "descriptionDe" : "descriptionEn"];
+        if (title) document.title = title;
+        const descriptionMeta = document.querySelector('meta[name="description"]');
+        if (description && descriptionMeta) descriptionMeta.setAttribute("content", description);
+      }
       for (const element of document.querySelectorAll("[data-lang]")) {
         element.hidden = element.dataset.lang !== locale;
       }

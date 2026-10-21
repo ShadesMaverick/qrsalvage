@@ -3,471 +3,140 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<!-- The page carries no script of its own and never wants one, so it says so. It was the one
-     published page without a policy at all: on the local server the headers cover it, but the
-     static build is served by a host that sends none, and a page with no policy there has no
-     boundary. Note what a meta-delivered policy cannot do -- frame-ancestors is ignored in
-     this position by every browser, so the anti-framing on the static build has to come from
-     the host's headers, not from here. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self';
-      script-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;
-      connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
-<!-- Like the front page's title, this one leads with the searcher's problem before the
-     project's name -- "how to recover a damaged QR code" is a search, "how it works" is not.
-     The description and card matter here too: this is the page a Show-HN post and the
-     troubleshooting links point at, and every one of those renders a preview. -->
-<title>How a damaged QR code is recovered, step by step — qrsalvage</title>
-<meta name="description" content="The method behind qrsalvage: the cells every QR code must
-      contain as a calibration target, two brightness fields, a probability per module, and
-      Reed-Solomon erasures. With real figures.">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob:; style-src 'self'; script-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Signal Manual · qrsalvage</title>
+<meta name="description" content="How qrsalvage reconstructs damaged QR codes.">
 <meta property="og:title" content="How a damaged QR code is recovered, step by step">
-<meta property="og:description" content="Calibration against the cells the standard fixes,
-      two brightness fields, a probability per module, Reed-Solomon erasures — the measured
-      method behind qrsalvage.">
+<meta property="og:description" content="Calibration against the cells the standard fixes, two brightness fields, a probability per module, Reed-Solomon erasures — the measured method behind qrsalvage.">
 <meta property="og:image" content="qrsalvage-social.png">
 <meta property="og:type" content="article">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23232f3a'/%3E%3Crect x='8' y='3' width='7' height='7' fill='none' stroke='%23f2f4f5' stroke-width='1'/%3E%3Crect x='10' y='5' width='3' height='3' fill='%23f2f4f5'/%3E%3Crect x='5' y='4' width='2' height='2' fill='%23f07ea3'/%3E%3Crect x='2' y='7' width='2' height='2' fill='%23f07ea3'/%3E%3Crect x='5' y='10' width='2' height='2' fill='%23f2f4f5'/%3E%3C/svg%3E">
-<style>
-  :root {
-    --bg: #1b252e; --bg-lift: #232f3a; --panel: #26333f; --panel-in: #1f2a34;
-    --line: #37485a; --fg: #f2f4f5; --muted: #93a3b0; --pink: #f07ea3;
-    --pink-soft: #f7b3c8; --ok: #8fd3b0;
-    --mono: ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace;
-  }
-  * { box-sizing: border-box; }
-  html { color-scheme: dark; scroll-behavior: smooth; }
-  body {
-    margin: 0; padding: 2.5rem 1.25rem 6rem; color: var(--fg);
-    background: radial-gradient(120% 60% at 50% 0%, var(--bg-lift) 0%, var(--bg) 60%) fixed;
-    font: 16px/1.7 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  }
-  main { max-width: 46rem; margin: 0 auto; }
-  header { display: flex; align-items: center; gap: 1rem; margin-bottom: 2.5rem; }
-  header img { height: 58px; image-rendering: pixelated; }
-  h1 { font: 600 1.5rem/1 var(--mono); letter-spacing: .04em; margin: 0; }
-  .back { color: var(--muted); font-size: .9rem; text-decoration: none; }
-  .back:hover { color: var(--pink-soft); }
-
-  h2 {
-    font: 600 1.15rem/1.3 inherit; margin: 3rem 0 .3rem; letter-spacing: -.01em;
-    padding-top: .6rem; border-top: 1px solid var(--line);
-  }
-  h2 .num { color: var(--pink); font: 600 .8rem/1 var(--mono); display: block;
-            margin-bottom: .5rem; letter-spacing: .12em; }
-  h3 { font: 600 .95rem/1.4 inherit; margin: 1.8rem 0 .2rem; color: var(--pink-soft); }
-  p { margin: .8rem 0; }
-  em { color: var(--pink-soft); font-style: normal; font-weight: 500; }
-  code { font: .92em var(--mono); background: var(--panel-in); padding: .1em .35em;
-         border-radius: 4px; }
-  .formula {
-    background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--pink);
-    border-radius: 8px; padding: 1rem 1.2rem; margin: 1.2rem 0; overflow-x: auto;
-    font: 15px/1.9 var(--mono);
-  }
-  .formula .where { color: var(--muted); font-size: .85em; display: block; margin-top: .6rem;
-                    line-height: 1.6; }
-  table { border-collapse: collapse; margin: 1.2rem 0; font-size: .93rem; width: 100%; }
-  th, td { text-align: left; padding: .4rem .9rem .4rem 0; border-bottom: 1px solid var(--line); }
-  th { color: var(--muted); font-weight: 500; font-size: .85rem; }
-  td { font-variant-numeric: tabular-nums; }
-  td.num { font-family: var(--mono); }
-  .aside {
-    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
-    padding: .9rem 1.1rem; margin: 1.4rem 0; font-size: .93rem; color: var(--muted);
-  }
-  .aside b { color: var(--fg); font-weight: 600; }
-  figure {
-    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
-    margin: 1.4rem 0; padding: 1rem 1rem .85rem;
-  }
-  /* Below roughly 520 px the labels inside a figure stop being readable, so the figure
-     scrolls inside its own box rather than shrinking the page or the type. */
-  figure .plot { overflow-x: auto; }
-  figure img { display: block; width: 100%; min-width: 520px; height: auto; }
-  figcaption {
-    color: var(--muted); font-size: .87rem; line-height: 1.6; margin-top: .85rem;
-    padding-top: .7rem; border-top: 1px solid var(--line);
-  }
-  figcaption b { color: var(--fg); font-weight: 600; }
-  ul { padding-left: 1.2rem; } li { margin: .35rem 0; }
-  .toc { columns: 2; column-gap: 2rem; font-size: .93rem; margin: 0 0 1rem; padding-left: 1.1rem; }
-  .toc a { color: var(--muted); text-decoration: none; }
-  .toc a:hover { color: var(--pink-soft); }
-  @media (max-width: 34rem) { .toc { columns: 1; } }
-</style>
+<link rel="stylesheet" href="style.css">
 </head>
-<body>
-<main>
-  <header>
-    <img src="axolotl.png" alt="">
-    <div>
-      <h1>how it works</h1>
-      <a class="back" href="index.html">&larr; back to the tool</a>
-    </div>
-  </header>
+<body class="manual-page"
+      data-title-en="Signal Manual · qrsalvage"
+      data-title-de="Signal-Handbuch · qrsalvage"
+      data-description-en="How qrsalvage reconstructs damaged QR codes."
+      data-description-de="Wie qrsalvage beschädigte QR-Codes rekonstruiert.">
+<nav class="site-nav" aria-label="Primary navigation">
+  <a class="site-brand" href="index.html">qrsalvage</a>
+  <a href="index.html#studio"><span data-lang="en">Studio</span><span data-lang="de" hidden>Studio</span></a>
+  <a href="method.html" aria-current="page"><span data-lang="en">Method</span><span data-lang="de" hidden>Methode</span></a>
+  <a href="https://github.com/ShadesMaverick/qrsalvage">GitHub</a>
+  <a href="legal.html"><span data-lang="en">Privacy</span><span data-lang="de" hidden>Datenschutz</span></a>
+  <div class="locale-switch" aria-label="Language"><button type="button" data-locale="de">DE</button><button type="button" data-locale="en">EN</button></div>
+</nav>
+<main class="manual-layout">
+<aside class="manual-rail" aria-label="Manual sections">
+  <a href="#known"><span data-lang="en">Known structure</span><span data-lang="de" hidden>Bekannte Struktur</span></a>
+  <a href="#levels"><span data-lang="en">Brightness fields</span><span data-lang="de" hidden>Helligkeitsfelder</span></a>
+  <a href="#posterior"><span data-lang="en">Module probability</span><span data-lang="de" hidden>Modulwahrscheinlichkeit</span></a>
+  <a href="#grid"><span data-lang="en">Grid fitting</span><span data-lang="de" hidden>Gitteranpassung</span></a>
+  <a href="#search"><span data-lang="en">Search space</span><span data-lang="de" hidden>Suchraum</span></a>
+  <a href="#probe"><span data-lang="en">Ordered probing</span><span data-lang="de" hidden>Geordnetes Nachtasten</span></a>
+  <a href="#rs"><span data-lang="en">Reed–Solomon</span><span data-lang="de" hidden>Reed–Solomon</span></a>
+  <a href="#limits"><span data-lang="en">Limits</span><span data-lang="de" hidden>Grenzen</span></a>
+</aside>
+<article class="manual-content">
+<div class="manual-intro" data-lang="en"><p>An ordinary decoder binarises the image, samples a grid and either returns a string or nothing. qrsalvage takes the same problem apart into steps that can each be <em>measured</em> — because a QR code carries, inside itself, a few hundred cells whose correct value is fixed by the specification. Everything below is scored against those.</p></div>
+<div class="manual-intro" data-lang="de" hidden><p>Ein gewöhnlicher Decoder binarisiert das Bild, tastet ein Gitter ab und liefert entweder eine Zeichenfolge oder nichts. qrsalvage zerlegt dasselbe Problem in einzeln <em>messbare</em> Schritte — denn ein QR-Code trägt einige hundert Zellen in sich, deren korrekter Wert von der Spezifikation festgelegt ist. Alles Folgende wird an ihnen bewertet.</p></div>
 
-  <p>
-    An ordinary decoder binarises the image, samples a grid and either returns a string or
-    nothing. qrsalvage takes the same problem apart into steps that can each be
-    <em>measured</em> — because a QR code carries, inside itself, a few hundred cells whose
-    correct value is fixed by the specification. Everything below is scored against those.
-  </p>
+<section id="known">
+<h1><span class="num">01</span><span data-lang="en">The known cells</span><span data-lang="de" hidden>Die bekannten Zellen</span></h1>
+<div data-lang="en"><p>Finder patterns, separators, timing rows, alignment patterns and one always-dark module are not data. The standard fixes them, so their true values are known before anything is read. In a version 3 code that is <em>244 of 841 cells</em> — about 29 %.</p></div>
+<div data-lang="de" hidden><p>Suchmuster, Trennbereiche, Taktreihen, Ausrichtungsmuster und ein stets dunkles Modul sind keine Daten. Der Standard legt sie fest; ihre tatsächlichen Werte sind daher bekannt, bevor etwas gelesen wird. Bei einem Code der Version 3 sind das <em>244 von 841 Zellen</em> — etwa 29 %.</p></div>
+<figure><div class="plot"><img src="fig-known.svg" alt="Three QR code outlines, versions 1, 3 and 6, with the cells the standard fixes drawn at their true black or white value and the remaining cells in slate. The fixed cells sit around the border and shrink as a share of the code as the version grows."></div><figcaption>
+<span data-lang="en"><b>The reference the whole method is calibrated against.</b> Drawn straight from the same <code>structure_mask</code> the solver scores itself with. The fixed cells cluster around the border — which is why the uncertainty model cannot be estimated from them alone, and why <a href="#posterior">§03</a> has to add a second term for the middle.</span>
+<span data-lang="de" hidden><b>Die Referenz, an der das gesamte Verfahren kalibriert wird.</b> Direkt aus derselben <code>structure_mask</code> gezeichnet, an der der Solver sich bewertet. Die festgelegten Zellen liegen gehäuft am Rand — deshalb kann das Unsicherheitsmodell nicht allein aus ihnen geschätzt werden und <a href="#posterior">§03</a> muss einen zweiten Term für die Mitte ergänzen.</span>
+</figcaption></figure>
+<div data-lang="en"><p>That is the whole idea. Every later step — the brightness model, the grid, the version, the polarity — produces a number that can be checked against cells whose answer is already settled. Nothing has to be believed.</p><div class="aside"><b>Deliberately excluded:</b> the format and version information. They are protected by their own BCH code, but they carry content, so treating them as known would be circular.</div></div>
+<div data-lang="de" hidden><p>Das ist die ganze Idee. Jeder spätere Schritt — Helligkeitsmodell, Gitter, Version und Polarität — erzeugt eine Zahl, die sich an Zellen mit bereits feststehender Antwort prüfen lässt. Nichts muss einfach geglaubt werden.</p><div class="aside"><b>Bewusst ausgeschlossen:</b> Format- und Versionsinformation. Sie sind durch einen eigenen BCH-Code geschützt, enthalten aber Inhalt; sie als bekannt zu behandeln wäre ein Zirkelschluss.</div></div>
+</section>
 
-  <ol class="toc">
-    <li><a href="#known">The known cells</a></li>
-    <li><a href="#levels">Two brightness fields</a></li>
-    <li><a href="#posterior">A probability per module</a></li>
-    <li><a href="#grid">Fitting the grid</a></li>
-    <li><a href="#search">What is searched, not guessed</a></li>
-    <li><a href="#probe">Ordered probing</a></li>
-    <li><a href="#rs">Reed-Solomon and erasures</a></li>
-    <li><a href="#limits">Where it stops</a></li>
-  </ol>
+<section id="levels">
+<h2><span class="num">02</span><span data-lang="en">Two brightness fields</span><span data-lang="de" hidden>Zwei Helligkeitsfelder</span></h2>
+<div data-lang="en"><p>On a curved, unevenly lit surface there is no single threshold that separates dark from light. Worse, the dark level and the light level drift by <em>different</em> amounts: a glare highlight lifts white paper far more than it lifts black ink.</p><p>So two independent quadratic fields are fitted by ordinary least squares, one through the known-dark cells and one through the known-light ones:</p></div>
+<div data-lang="de" hidden><p>Auf einer gewölbten, ungleichmäßig beleuchteten Fläche gibt es keinen einzelnen Schwellenwert, der dunkel von hell trennt. Schlimmer noch: Dunkel- und Hellniveau driften <em>unterschiedlich</em> stark; ein Glanzlicht hebt weißes Papier weit stärker an als schwarze Tinte.</p><p>Deshalb werden mit gewöhnlicher kleinster-Quadrate-Schätzung zwei unabhängige quadratische Felder angepasst, eines durch die bekanntermaßen dunklen und eines durch die bekanntermaßen hellen Zellen:</p></div>
+<div class="formula">D(r,c) = a₀ + a₁r + a₂c + a₃r² + a₄c² + a₅rc<br>L(r,c) = b₀ + b₁r + b₂c + b₃r² + b₄c² + b₅rc<br><br>a = argmin Σ<sub>known dark</sub> ( D(r,c) − mean(r,c) )²
+<span class="where" data-lang="en">r, c — module row and column · mean(r,c) — measured grey value of that cell<br>six coefficients each, solved from roughly 120 known cells, so heavily overdetermined</span>
+<span class="where" data-lang="de" hidden>r, c — Modulzeile und -spalte · mean(r,c) — gemessener Grauwert dieser Zelle<br>je sechs Koeffizienten, aus ungefähr 120 bekannten Zellen gelöst und damit stark überbestimmt</span></div>
+<div data-lang="en"><p>The threshold is their midpoint and the contrast their difference, both varying across the code:</p></div><div data-lang="de" hidden><p>Der Schwellenwert ist ihr Mittelpunkt und der Kontrast ihre Differenz; beide verändern sich über den Code:</p></div>
+<div class="formula">T(r,c) = ( D + L ) / 2 &nbsp;&nbsp;&nbsp; C(r,c) = max( L − D , ε )</div>
+<figure><div class="plot"><img src="fig-levels.svg" alt="A cross-section along module row 6. Two curves, the fitted dark level D and light level L, run across the width of the code with the measured known cells scattered on them. The gap between the curves is only about sixteen grey values and both curves drift together across the code."></div><figcaption>
+<span data-lang="en"><b>Both levels, measured across one row.</b> Row 6 is the only row with a known cell at every column — finder, separator, then the alternating timing pattern — so both fields can be shown against real samples rather than extrapolated. Taken from <code>fixtures/engraved-curved-hard.png</code>: the two levels are separated by roughly sixteen grey values out of 255, and they drift across the code together. A single global threshold has to be right to within a few grey values everywhere at once; the midpoint of two fitted fields does not.</span>
+<span data-lang="de" hidden><b>Beide Niveaus, über eine Zeile gemessen.</b> Zeile 6 ist die einzige Zeile mit einer bekannten Zelle in jeder Spalte — Suchmuster, Trennbereich, dann das wechselnde Taktmuster. So lassen sich beide Felder an echten Messwerten statt an Extrapolationen zeigen. Aus <code>fixtures/engraved-curved-hard.png</code>: Die Niveaus liegen nur ungefähr sechzehn von 255 Grauwerten auseinander und driften gemeinsam über den Code. Ein einzelner globaler Schwellenwert müsste überall zugleich auf wenige Grauwerte genau stimmen; der Mittelpunkt zweier angepasster Felder muss das nicht.</span>
+</figcaption></figure>
+</section>
 
-  <h2 id="known"><span class="num">01</span>The known cells</h2>
-  <p>
-    Finder patterns, separators, timing rows, alignment patterns and one always-dark module are
-    not data. The standard fixes them, so their true values are known before anything is read.
-    In a version 3 code that is <em>244 of 841 cells</em> — about 29 %.
-  </p>
-  <figure>
-    <div class="plot">
-      <img src="fig-known.svg" alt="Three QR code outlines, versions 1, 3 and 6, with the cells
-      the standard fixes drawn at their true black or white value and the remaining cells in
-      slate. The fixed cells sit around the border and shrink as a share of the code as the
-      version grows.">
-    </div>
-    <figcaption>
-      <b>The reference the whole method is calibrated against.</b> Drawn straight from the same
-      <code>structure_mask</code> the solver scores itself with. The fixed cells cluster around
-      the border — which is why the uncertainty model cannot be estimated from them alone, and
-      why <a href="#posterior">§03</a> has to add a second term for the middle.
-    </figcaption>
-  </figure>
-  <p>
-    That is the whole idea. Every later step — the brightness model, the grid, the version, the
-    polarity — produces a number that can be checked against cells whose answer is already
-    settled. Nothing has to be believed.
-  </p>
-  <div class="aside">
-    <b>Deliberately excluded:</b> the format and version information. They are protected by
-    their own BCH code, but they carry content, so treating them as known would be circular.
-  </div>
+<section id="posterior">
+<h2><span class="num">03</span><span data-lang="en">A probability per module</span><span data-lang="de" hidden>Eine Wahrscheinlichkeit je Modul</span></h2>
+<div data-lang="en"><p>A cell is not classified, it is scored. Two Gaussians of equal width, one centred on the dark level and one on the light, give a log-odds that is linear in the measurement:</p></div><div data-lang="de" hidden><p>Eine Zelle wird nicht klassifiziert, sondern bewertet. Zwei gleich breite Gaußverteilungen, eine um das Dunkelniveau und eine um das Hellniveau zentriert, ergeben logarithmische Chancen, die linear vom Messwert abhängen:</p></div>
+<div class="formula">ℓ(r,c) = [ (x − L̂)² − (x − D̂)² ] / ( 2σ(r,c)² )<br><br>P(dark) = 1 / ( 1 + e<sup>−ℓ</sup> )
+<span class="where" data-lang="en">x = mean / C, D̂ = D / C, L̂ = L / C — all normalised by the local contrast<br>so a faint code and a crisp one are measured on the same scale</span><span class="where" data-lang="de" hidden>x = mean / C, D̂ = D / C, L̂ = L / C — alle durch den lokalen Kontrast normiert<br>so werden ein blasser und ein scharfer Code auf derselben Skala gemessen</span></div>
+<h3><span data-lang="en">Why σ is a field and not a number</span><span data-lang="de" hidden>Warum σ ein Feld und keine Zahl ist</span></h3>
+<div data-lang="en"><p>The obvious estimate of σ is the scatter of the known cells around their own fitted level. It is also not enough, and the failure is instructive: the known cells all sit around the <em>border</em> of the code. When they happen to be clean, σ comes out small and the model becomes confident about the data cells in the middle with no grounds for it.</p><p>This was observed on a synthetic case that placed the grid perfectly, reported zero wrong known cells and zero uncertain cells — and would not decode. The solver had nothing to probe because nothing looked doubtful.</p><p>So a second, independent term is added: each cell's own internal spread. A module whose interior is uniform is trustworthy; one that is half dark and half light is not, and that holds in the middle where no known cell reaches.</p></div>
+<div data-lang="de" hidden><p>Die naheliegende Schätzung für σ ist die Streuung der bekannten Zellen um ihr jeweils angepasstes Niveau. Auch das reicht nicht: Die bekannten Zellen liegen sämtlich am <em>Rand</em> des Codes. Sind sie zufällig sauber, wird σ klein und das Modell ist ohne Grundlage von den Datenzellen in der Mitte überzeugt.</p><p>Das zeigte ein synthetischer Fall, der das Gitter perfekt platzierte, null falsche bekannte und null unsichere Zellen meldete — sich aber nicht decodieren ließ. Der Solver hatte nichts nachzutasten, weil nichts zweifelhaft aussah.</p><p>Deshalb kommt ein zweiter, unabhängiger Term hinzu: die innere Streuung jeder Zelle. Ein Modul mit gleichmäßigem Inneren ist vertrauenswürdig; eines, das halb dunkel und halb hell ist, ist es nicht. Das gilt auch in der Mitte, die keine bekannte Zelle erreicht.</p></div>
+<div class="formula">σ(r,c) = √( σ₀² + ( k · max(0, s(r,c) − s̄) / C )² )
+<span class="where" data-lang="en">σ₀ — scatter of the known cells about their fitted level<br>s(r,c) — standard deviation of the pixels inside that one cell<br>s̄ — median of s over the known cells, the baseline a dot-raster engraving gives everything<br>k = 1.5 · only the <em>excess</em> over the baseline counts, or the signal is flattened</span>
+<span class="where" data-lang="de" hidden>σ₀ — Streuung der bekannten Zellen um ihr angepasstes Niveau<br>s(r,c) — Standardabweichung der Pixel innerhalb dieser Zelle<br>s̄ — Median von s über die bekannten Zellen, die Grundstreuung einer Punktraster-Gravur<br>k = 1.5 · nur der <em>Überschuss</em> über die Grundstreuung zählt, sonst wird das Signal eingeebnet</span></div>
+<figure><div class="plot"><img src="fig-posterior.svg" alt="Two panels. On the left, two Gaussian curves centred on the dark and the light level with the threshold midway between them. On the right, the resulting probability curve at two values of sigma, each with the width of its uncertain band marked as a measured horizontal span: 0.02 of the contrast for the cleanest cell in the image and 0.09 for the noisiest."></div><figcaption>
+<span data-lang="en"><b>What σ actually buys.</b> Both curves are the same formula on the same measurement; only the spread differs, taken at the cleanest and the noisiest cell of <code>fixtures/engraved-curved-hard.png</code>. By eye the two are almost the same curve, so the figure marks the quantity that matters instead: how wide a range of measurements the cell reports as undecided. It is <em>0.02 of the local contrast against 0.09</em> — a factor of nearly six in how readily a cell admits doubt, and therefore in whether the search ever looks at it. The shaded strip is the ±0.15 the solver counts as uncertain.</span>
+<span data-lang="de" hidden><b>Was σ tatsächlich bringt.</b> Beide Kurven zeigen dieselbe Formel für denselben Messwert; nur die Streuung unterscheidet sich, entnommen an der saubersten und der verrauschtesten Zelle aus <code>fixtures/engraved-curved-hard.png</code>. Mit bloßem Auge sind die Kurven fast gleich, deshalb markiert die Abbildung die entscheidende Größe: wie breit der Messwertbereich ist, den die Zelle als unentschieden meldet. Er beträgt <em>0.02 des lokalen Kontrasts gegenüber 0.09</em> — ein Faktor von fast sechs darin, wie leicht eine Zelle Zweifel zulässt und damit, ob die Suche sie betrachtet. Der schattierte Streifen zeigt die ±0.15, die der Solver als unsicher zählt.</span>
+</figcaption></figure>
+</section>
 
-  <h2 id="levels"><span class="num">02</span>Two brightness fields</h2>
-  <p>
-    On a curved, unevenly lit surface there is no single threshold that separates dark from
-    light. Worse, the dark level and the light level drift by <em>different</em> amounts: a
-    glare highlight lifts white paper far more than it lifts black ink.
-  </p>
-  <p>
-    So two independent quadratic fields are fitted by ordinary least squares, one through the
-    known-dark cells and one through the known-light ones:
-  </p>
-  <div class="formula">
-    D(r,c) = a₀ + a₁r + a₂c + a₃r² + a₄c² + a₅rc<br>
-    L(r,c) = b₀ + b₁r + b₂c + b₃r² + b₄c² + b₅rc<br><br>
-    a = argmin Σ<sub>known dark</sub> ( D(r,c) − mean(r,c) )²
-    <span class="where">
-      r, c — module row and column · mean(r,c) — measured grey value of that cell<br>
-      six coefficients each, solved from roughly 120 known cells, so heavily overdetermined
-    </span>
-  </div>
-  <p>
-    The threshold is their midpoint and the contrast their difference, both varying across the
-    code:
-  </p>
-  <div class="formula">
-    T(r,c) = ( D + L ) / 2 &nbsp;&nbsp;&nbsp; C(r,c) = max( L − D , ε )
-  </div>
-  <figure>
-    <div class="plot">
-      <img src="fig-levels.svg" alt="A cross-section along module row 6. Two curves, the fitted
-      dark level D and light level L, run across the width of the code with the measured known
-      cells scattered on them. The gap between the curves is only about sixteen grey values and
-      both curves drift together across the code.">
-    </div>
-    <figcaption>
-      <b>Both levels, measured across one row.</b> Row 6 is the only row with a known cell at
-      every column — finder, separator, then the alternating timing pattern — so both fields can
-      be shown against real samples rather than extrapolated. Taken from
-      <code>fixtures/engraved-curved-hard.png</code>: the two levels are separated by roughly
-      sixteen grey values out of 255, and they drift across the code together. A single global
-      threshold has to be right to within a few grey values everywhere at once; the midpoint of
-      two fitted fields does not.
-    </figcaption>
-  </figure>
+<section id="grid">
+<h2><span class="num">04</span><span data-lang="en">Fitting the grid</span><span data-lang="de" hidden>Das Gitter anpassen</span></h2>
+<div data-lang="en"><p>A homography maps four corners onto a square. It cannot represent a cylinder — and a QR code on a light bulb is on a cylinder. The best available approximation is not analytically available, but it is findable.</p><p>Eight parameters, the four corner coordinates. The objective is the mean contrast-normalised margin over the known cells, squashed so that one badly-placed cell cannot dominate:</p></div>
+<div data-lang="de" hidden><p>Eine Homografie bildet vier Ecken auf ein Quadrat ab. Sie kann keinen Zylinder darstellen — und ein QR-Code auf einer Glühbirne liegt auf einem Zylinder. Die bestmögliche Näherung lässt sich nicht analytisch angeben, aber finden.</p><p>Acht Parameter, die Koordinaten der vier Ecken. Die Zielfunktion ist der mittlere, kontrastnormierte Abstand über die bekannten Zellen, gestaucht, damit eine einzelne schlecht platzierte Zelle nicht dominieren kann:</p></div>
+<div class="formula">m(r,c) = ± ( T(r,c) − mean(r,c) ) / C(r,c) &nbsp;&nbsp; ( + for known dark, − for known light )<br><br>Q = mean<sub>known</sub> tanh( 4 · m )
+<span class="where" data-lang="en">maximised by coordinate descent: each coordinate is nudged by ±δ, improvements are kept,<br>and δ halves when a full sweep finds nothing. δ starts at 3 px and stops below 0.05 px</span><span class="where" data-lang="de" hidden>durch Koordinatenabstieg maximiert: Jede Koordinate wird um ±δ verschoben, Verbesserungen bleiben erhalten,<br>und δ halbiert sich, wenn ein vollständiger Durchlauf nichts findet. δ beginnt bei 3 px und endet unter 0.05 px</span></div>
+<div data-lang="en"><div class="aside"><b>Why the smooth objective.</b> The number that actually matters is how many known cells come out wrong, but that is an integer that stays flat under small movements and then jumps. There is nothing to descend. The margin is continuous and moves for every fraction of a pixel, so it is what the search follows — while the integer count is what the result is judged by.</div></div><div data-lang="de" hidden><div class="aside"><b>Warum die glatte Zielfunktion.</b> Entscheidend ist eigentlich die Zahl der falsch gelesenen bekannten Zellen. Sie ist aber ganzzahlig, bleibt bei kleinen Bewegungen konstant und springt dann. Daran kann nichts absteigen. Der Abstand ist stetig und verändert sich mit jedem Pixelbruchteil; ihm folgt die Suche, während die Ganzzahl das Ergebnis bewertet.</div></div>
+<figure><div class="plot"><img src="fig-objective.svg" alt="Two stacked panels sharing an axis of grid offset in pixels. The upper panel shows Q as a smooth curve with a single clear peak at zero offset. The lower panel shows the count of wrong known cells as a staircase that is flat at zero over a narrow plateau and then jumps in steps to over a hundred."></div><figcaption>
+<span data-lang="en"><b>The same movement, seen by both numbers.</b> The fitted grid on <code>fixtures/engraved-curved-hard.png</code> is slid sideways one pixel at a time and both quantities are recorded. Q moves for every fraction of a pixel and points back at the optimum from anywhere on the curve; the error count is flat, then jumps, and past about two pixels it is uselessly saturated. Two quantities on two scales, so two panels — never one plot with two axes.</span><span data-lang="de" hidden><b>Dieselbe Bewegung, durch beide Zahlen gesehen.</b> Das angepasste Gitter auf <code>fixtures/engraved-curved-hard.png</code> wird jeweils um einen Pixel seitlich verschoben und beide Größen werden aufgezeichnet. Q bewegt sich bei jedem Pixelbruchteil und weist von überall auf der Kurve zurück zum Optimum; die Fehlerzahl bleibt konstant, springt dann und ist jenseits von etwa zwei Pixeln nutzlos gesättigt. Zwei Größen auf zwei Skalen, also zwei Diagramme — nie ein Diagramm mit zwei Achsen.</span>
+</figcaption></figure>
+<div data-lang="en"><p>On the photograph this project started with, that descent took the sampling error from <em>18 wrong known cells to 2</em>, and only then did the code decode.</p><h3>When the plane is not enough</h3><p>A homography maps straight lines to straight lines, and four corners can only tilt the plane — they have no way to say <em>bow</em>. So the winning grid gets one more stage: two quadratic bows, one swept along each axis, four parameters in all. The parametrisation is deliberately the smallest one that can express what a curved surface does. A first attempt with a free 3×3 control lattice — eighteen parameters — overfitted the border: the objective is measured on the known cells, which ring the code, so the lattice bought border margin by bending the unmeasured middle, and images the flat grid solved stopped decoding. Four separable parameters cannot say "fix the border, bend the middle"; the constraint is the parametrisation itself, with no penalty weight to tune. On a photographed fabric label this stage is the difference between no result at any budget and decoding on the first attempt.</p></div>
+<div data-lang="de" hidden><p>Auf dem Foto, mit dem dieses Projekt begann, senkte dieser Abstieg den Abtastfehler von <em>18 falschen bekannten Zellen auf 2</em>; erst dann ließ sich der Code decodieren.</p><h3>Wenn die Ebene nicht genügt</h3><p>Eine Homografie bildet Geraden auf Geraden ab, und vier Ecken können die Ebene nur neigen — sie können keine <em>Wölbung</em> ausdrücken. Deshalb erhält das beste Gitter eine weitere Stufe: zwei quadratische Wölbungen, je eine entlang jeder Achse, insgesamt vier Parameter. Die Parametrisierung ist absichtlich die kleinste, die das Verhalten einer gekrümmten Fläche ausdrücken kann. Ein erster Versuch mit einem freien 3×3-Kontrollgitter — achtzehn Parameter — überangepasste den Rand: Die Zielfunktion wird an den bekannten Zellen gemessen, die den Code umringen. Das Gitter erkaufte Randabstand, indem es die ungemessene Mitte verbog, und Bilder, die das ebene Gitter gelöst hatte, ließen sich nicht mehr decodieren. Vier separierbare Parameter können nicht „Rand reparieren, Mitte verbiegen“ ausdrücken; die Beschränkung ist die Parametrisierung selbst, ohne einzustellendes Strafgewicht. Auf einem fotografierten Stoffetikett entscheidet diese Stufe zwischen keinem Ergebnis bei jedem Budget und Decodierung beim ersten Versuch.</p></div>
+</section>
 
-  <h2 id="posterior"><span class="num">03</span>A probability per module</h2>
-  <p>
-    A cell is not classified, it is scored. Two Gaussians of equal width, one centred on the
-    dark level and one on the light, give a log-odds that is linear in the measurement:
-  </p>
-  <div class="formula">
-    ℓ(r,c) = [ (x − L̂)² − (x − D̂)² ] / ( 2σ(r,c)² )<br><br>
-    P(dark) = 1 / ( 1 + e<sup>−ℓ</sup> )
-    <span class="where">
-      x = mean / C, D̂ = D / C, L̂ = L / C — all normalised by the local contrast<br>
-      so a faint code and a crisp one are measured on the same scale
-    </span>
-  </div>
+<section id="search">
+<h2><span class="num">05</span><span data-lang="en">What is searched, not guessed</span><span data-lang="de" hidden>Was gesucht statt geraten wird</span></h2>
+<div data-lang="en"><p>Four things could be estimated from the image and are instead enumerated, because a wrong guess is invisible while a wrong candidate is obvious in the known cells.</p><ul><li><b>The version.</b> Every candidate size gets its own grid fit. On the bulb the winner had 2 of 244 cells wrong and the runner-up 69 — the estimate from the finder width had landed between two candidates.</li><li><b>The resolution.</b> A finder is seven modules wide, so the module size follows from it. The preprocessing assumes roughly nine pixels per module; outside that band the image is rescaled — <em>in both directions</em>. A code can fail for being photographed too well.</li><li><b>The polarity.</b> Light-on-dark cannot be settled by looking at the finders: a finder is nested squares and so is its inverse. It is settled after the fit, on the error count.</li><li><b>A missing finder.</b> Two are enough. A QR code is square, which leaves six discrete possibilities for the third — perpendicular from either end on either side, or the two being the diagonal pair. All six are fitted.</li></ul></div>
+<div data-lang="de" hidden><p>Vier Dinge ließen sich aus dem Bild schätzen, werden aber stattdessen aufgezählt: Eine falsche Schätzung bleibt unsichtbar, ein falscher Kandidat ist in den bekannten Zellen offensichtlich.</p><ul><li><b>Die Version.</b> Jede Kandidatengröße erhält ihre eigene Gitteranpassung. Auf der Glühbirne hatte der Sieger 2 von 244 Zellen falsch, der Zweitplatzierte 69 — die Schätzung aus der Breite des Suchmusters war zwischen zwei Kandidaten gelandet.</li><li><b>Die Auflösung.</b> Ein Suchmuster ist sieben Module breit, daraus folgt die Modulgröße. Die Vorverarbeitung nimmt ungefähr neun Pixel je Modul an; außerhalb dieses Bereichs wird das Bild skaliert — <em>in beide Richtungen</em>. Ein Code kann daran scheitern, dass er zu gut fotografiert wurde.</li><li><b>Die Polarität.</b> Hell auf Dunkel lässt sich an den Suchmustern nicht entscheiden: Ein Suchmuster besteht aus ineinanderliegenden Quadraten, ebenso sein Negativ. Die Entscheidung fällt nach der Anpassung anhand der Fehlerzahl.</li><li><b>Ein fehlendes Suchmuster.</b> Zwei genügen. Ein QR-Code ist quadratisch; damit bleiben sechs diskrete Möglichkeiten für das dritte — senkrecht von jedem Ende auf jeder Seite oder die beiden als Diagonalpaar. Alle sechs werden angepasst.</li></ul></div>
+</section>
 
-  <h3>Why σ is a field and not a number</h3>
-  <p>
-    The obvious estimate of σ is the scatter of the known cells around their own fitted level.
-    It is also not enough, and the failure is instructive: the known cells all sit around the
-    <em>border</em> of the code. When they happen to be clean, σ comes out small and the model
-    becomes confident about the data cells in the middle with no grounds for it.
-  </p>
-  <p>
-    This was observed on a synthetic case that placed the grid perfectly, reported zero wrong
-    known cells and zero uncertain cells — and would not decode. The solver had nothing to probe
-    because nothing looked doubtful.
-  </p>
-  <p>
-    So a second, independent term is added: each cell's own internal spread. A module whose
-    interior is uniform is trustworthy; one that is half dark and half light is not, and that
-    holds in the middle where no known cell reaches.
-  </p>
-  <div class="formula">
-    σ(r,c) = √( σ₀² + ( k · max(0, s(r,c) − s̄) / C )² )
-    <span class="where">
-      σ₀ — scatter of the known cells about their fitted level<br>
-      s(r,c) — standard deviation of the pixels inside that one cell<br>
-      s̄ — median of s over the known cells, the baseline a dot-raster engraving gives everything<br>
-      k = 1.5 · only the <em>excess</em> over the baseline counts, or the signal is flattened
-    </span>
-  </div>
-  <figure>
-    <div class="plot">
-      <img src="fig-posterior.svg" alt="Two panels. On the left, two Gaussian curves centred on
-      the dark and the light level with the threshold midway between them. On the right, the
-      resulting probability curve at two values of sigma, each with the width of its uncertain
-      band marked as a measured horizontal span: 0.02 of the contrast for the cleanest cell in
-      the image and 0.09 for the noisiest.">
-    </div>
-    <figcaption>
-      <b>What σ actually buys.</b> Both curves are the same formula on the same measurement; only
-      the spread differs, taken at the cleanest and the noisiest cell of
-      <code>fixtures/engraved-curved-hard.png</code>. By eye the two are almost the same curve,
-      so the figure marks the quantity that matters instead: how wide a range of measurements the
-      cell reports as undecided. It is <em>0.02 of the local contrast against 0.09</em> — a factor
-      of nearly six in how readily a cell admits doubt, and therefore in whether the search ever
-      looks at it. The shaded strip is the ±0.15 the solver counts as uncertain.
-    </figcaption>
-  </figure>
+<section id="probe">
+<h2><span class="num">06</span><span data-lang="en">Ordered probing</span><span data-lang="de" hidden>Geordnetes Nachtasten</span></h2>
+<div data-lang="en"><p>When the matrix does not decode, the least certain cells are flipped — but in an order, and the order is the whole trick. Flipping a cell against its more likely reading costs its log-likelihood ratio:</p></div><div data-lang="de" hidden><p>Wenn sich die Matrix nicht decodieren lässt, werden die unsichersten Zellen umgedreht — aber in einer Reihenfolge, und diese Reihenfolge ist der ganze Trick. Eine Zelle gegen ihre wahrscheinlichere Lesart umzudrehen kostet ihr logarithmisches Likelihood-Verhältnis:</p></div>
+<div class="formula">cost(r,c) = log( max(p, 1−p) / min(p, 1−p) ) &nbsp;&nbsp; p = P(dark)<span class="where" data-lang="en">a cell at p = 0.5 is free to flip · an unambiguous one is expensive<br>structure cells get cost ∞ and are never touched</span><span class="where" data-lang="de" hidden>eine Zelle mit p = 0.5 lässt sich kostenlos umdrehen · eine eindeutige ist teuer<br>Strukturzellen erhalten Kosten ∞ und werden nie verändert</span></div>
+<div data-lang="en"><p>Subsets of the cheapest cells are then enumerated in ascending total cost by a best-first search over a heap. Each subset already emitted spawns exactly two successors — extend it, or advance its last element — which yields every subset exactly once, in order.</p></div><div data-lang="de" hidden><p>Teilmengen der billigsten Zellen werden dann durch eine Best-First-Suche über einen Heap nach steigenden Gesamtkosten aufgezählt. Jede bereits ausgegebene Teilmenge erzeugt genau zwei Nachfolger — sie erweitern oder ihr letztes Element vorrücken. So erscheint jede Teilmenge genau einmal und in Reihenfolge.</p></div>
+<figure><div class="plot"><img src="fig-probe.svg" alt="Two panels. On the left, a bar chart of the flip cost of the 22 least certain cells, rising from about 0.2 to about 5.6. On the right, the total cost of each subset in the order the heap emits it, rising monotonically, with the first five subsets labelled."></div><figcaption>
+<span data-lang="en"><b>The ladder, and the order it is climbed in.</b> Costs measured on <code>fixtures/engraved-curved-hard.png</code>: the cheapest doubt costs <em>0.22 against 5.6</em> for the twenty-second, a factor of twenty-five. So the order is not a detail — enumerating the same cells in any other order would spend the whole budget on combinations that were never plausible. The right panel is the property the heap guarantees: the total cost never decreases from one emission to the next.</span><span data-lang="de" hidden><b>Die Leiter und die Reihenfolge, in der sie erklommen wird.</b> Gemessene Kosten auf <code>fixtures/engraved-curved-hard.png</code>: Der billigste Zweifel kostet <em>0.22 gegenüber 5.6</em> für den zweiundzwanzigsten, ein Faktor von fünfundzwanzig. Die Reihenfolge ist also kein Detail — dieselben Zellen anders aufzuzählen würde das gesamte Budget für nie plausible Kombinationen ausgeben. Das rechte Diagramm zeigt die Garantie des Heaps: Die Gesamtkosten sinken von einer Ausgabe zur nächsten nie.</span>
+</figcaption></figure>
+<div data-lang="en"><div class="aside"><b>Why no learned scoring.</b> The decoder is an exact oracle: it does not say "warmer", it says valid or not valid. Reinforcement learning exists to approximate a reward function you cannot compute. Here it is known in closed form and evaluates in microseconds — what is needed is a good order in which to ask, not a model of the answer.</div></div><div data-lang="de" hidden><div class="aside"><b>Warum keine gelernte Bewertung.</b> Der Decoder ist ein exaktes Orakel: Er sagt nicht „wärmer“, sondern gültig oder ungültig. Bestärkendes Lernen dient dazu, eine nicht berechenbare Belohnungsfunktion anzunähern. Hier ist sie in geschlossener Form bekannt und wird in Mikrosekunden ausgewertet — benötigt wird eine gute Reihenfolge der Fragen, kein Modell der Antwort.</div></div>
+</section>
 
-  <h2 id="grid"><span class="num">04</span>Fitting the grid</h2>
-  <p>
-    A homography maps four corners onto a square. It cannot represent a cylinder — and a QR code
-    on a light bulb is on a cylinder. The best available approximation is not analytically
-    available, but it is findable.
-  </p>
-  <p>
-    Eight parameters, the four corner coordinates. The objective is the mean contrast-normalised
-    margin over the known cells, squashed so that one badly-placed cell cannot dominate:
-  </p>
-  <div class="formula">
-    m(r,c) = ± ( T(r,c) − mean(r,c) ) / C(r,c) &nbsp;&nbsp; ( + for known dark, − for known light )<br><br>
-    Q = mean<sub>known</sub> tanh( 4 · m )
-    <span class="where">
-      maximised by coordinate descent: each coordinate is nudged by ±δ, improvements are kept,<br>
-      and δ halves when a full sweep finds nothing. δ starts at 3 px and stops below 0.05 px
-    </span>
-  </div>
-  <div class="aside">
-    <b>Why the smooth objective.</b> The number that actually matters is how many known cells
-    come out wrong, but that is an integer that stays flat under small movements and then jumps.
-    There is nothing to descend. The margin is continuous and moves for every fraction of a
-    pixel, so it is what the search follows — while the integer count is what the result is
-    judged by.
-  </div>
-  <figure>
-    <div class="plot">
-      <img src="fig-objective.svg" alt="Two stacked panels sharing an axis of grid offset in
-      pixels. The upper panel shows Q as a smooth curve with a single clear peak at zero
-      offset. The lower panel shows the count of wrong known cells as a staircase that is flat
-      at zero over a narrow plateau and then jumps in steps to over a hundred.">
-    </div>
-    <figcaption>
-      <b>The same movement, seen by both numbers.</b> The fitted grid on
-      <code>fixtures/engraved-curved-hard.png</code> is slid sideways one pixel at a time and
-      both quantities are recorded. Q moves for every fraction of a pixel and points back at the
-      optimum from anywhere on the curve; the error count is flat, then jumps, and past about
-      two pixels it is uselessly saturated. Two quantities on two scales, so two panels — never
-      one plot with two axes.
-    </figcaption>
-  </figure>
-  <p>
-    On the photograph this project started with, that descent took the sampling error from
-    <em>18 wrong known cells to 2</em>, and only then did the code decode.
-  </p>
-  <h3>When the plane is not enough</h3>
-  <p>
-    A homography maps straight lines to straight lines, and four corners can only tilt the
-    plane — they have no way to say <em>bow</em>. So the winning grid gets one more stage: two
-    quadratic bows, one swept along each axis, four parameters in all. The parametrisation is
-    deliberately the smallest one that can express what a curved surface does. A first attempt
-    with a free 3×3 control lattice — eighteen parameters — overfitted the border: the
-    objective is measured on the known cells, which ring the code, so the lattice bought border
-    margin by bending the unmeasured middle, and images the flat grid solved stopped decoding.
-    Four separable parameters cannot say "fix the border, bend the middle"; the constraint is
-    the parametrisation itself, with no penalty weight to tune. On a photographed fabric label
-    this stage is the difference between no result at any budget and decoding on the first
-    attempt.
-  </p>
+<section id="rs">
+<h2><span class="num">07</span><span data-lang="en">Reed-Solomon and erasures</span><span data-lang="de" hidden>Reed–Solomon und Auslassungen</span></h2>
+<div data-lang="en"><p>Codewords are bytes in GF(2⁸) with primitive polynomial <code>0x11D</code>. A block of n codewords carries t check symbols, and the decoder can repair</p></div><div data-lang="de" hidden><p>Codewörter sind Bytes in GF(2⁸) mit dem primitiven Polynom <code>0x11D</code>. Ein Block aus n Codewörtern trägt t Prüfsymbole, und der Decoder kann Folgendes reparieren:</p></div>
+<div class="formula">2·e<sub>unknown</sub> + e<sub>located</sub> ≤ t<span class="where" data-lang="en">an error costs two check symbols — one to find it, one to fix it<br>an erasure costs one, because its position is already known</span><span class="where" data-lang="de" hidden>ein Fehler kostet zwei Prüfsymbole — eines zum Finden, eines zum Korrigieren<br>eine Auslassung kostet eines, weil ihre Position bereits bekannt ist</span></div>
+<figure><div class="plot"><img src="fig-rs.svg" alt="Three rows, each a budget of ten check symbols. The first spends it on five errors, each two symbols wide. The second on two errors and six erasures. The third on ten erasures, each one symbol wide. All three fill the same budget, but the number of cells salvaged doubles from five to ten."></div><figcaption>
+<span data-lang="en"><b>One budget, spent three ways.</b> Each row fills the same ten check symbols of a version 1-M block. Deciding every doubtful cell and getting five of them wrong exhausts the budget; abstaining on ten does too — and covers twice as many cells. That factor of two is the entire argument for the third state, and it is why an uncertain cell must never be rounded to the nearer value on the way through.</span><span data-lang="de" hidden><b>Ein Budget, auf drei Arten ausgegeben.</b> Jede Zeile füllt dieselben zehn Prüfsymbole eines Version-1-M-Blocks. Jede zweifelhafte Zelle zu entscheiden und fünfmal falschzuliegen erschöpft das Budget; sich bei zehn Zellen zu enthalten ebenso — und deckt doppelt so viele Zellen ab. Dieser Faktor zwei ist das gesamte Argument für den dritten Zustand und der Grund, warum eine unsichere Zelle unterwegs nie auf den näheren Wert gerundet werden darf.</span>
+</figcaption></figure>
+<div data-lang="en"><p>That factor of two is why the module matrix has three states rather than two. An honest "I don't know, but I know where" is worth twice a guess.</p><p>The chain: syndromes S<sub>i</sub> = r(α<sup>i</sup>) tell whether the block is intact. Forney syndromes remove the known erasures first — without that step Berlekamp-Massey goes looking for them again as unknown errors and fails. What is left is located by Berlekamp-Massey and Chien search, and the magnitudes come from Forney's formula.</p><h3>Valid is not the same as correct</h3><p>With as many erasures as check symbols, Reed-Solomon <em>always</em> finds a valid solution. If the real errors lie outside the erased positions, that solution is cleanly computed and wrong. So the erasure count is raised one step at a time and the sparsest result that an outside check accepts is taken. Without that contradiction from outside, the method returns something every time, and usually nonsense.</p><h3>Prefixes are not enough either</h3><p>Raising the count erases the k <em>least reliable</em> codewords — a prefix of the reliability order. Measured on real photographs, the damaged codewords interleave with sound ones in that order, and every sound codeword inside the prefix is a check symbol spent on nothing. Damage at reliability ranks {2,4,6,8,10,12,14,16,18} is unreachable for any prefix — covering rank 18 costs 18 of 15 symbols — while the exact set costs 9. So after the ladder fails, arbitrary erasure <em>sets</em> are enumerated in ascending total doubt, by the same heap that orders the cell probe in <a href="#probe">§06</a>. Each candidate still has to survive the outside check.</p></div>
+<div data-lang="de" hidden><p>Dieser Faktor zwei ist der Grund, warum die Modulmatrix drei Zustände statt zwei hat. Ein ehrliches „Ich weiß es nicht, aber ich weiß wo“ ist doppelt so viel wert wie eine Vermutung.</p><p>Die Kette: Syndrome S<sub>i</sub> = r(α<sup>i</sup>) zeigen, ob der Block intakt ist. Forney-Syndrome entfernen zuerst die bekannten Auslassungen — ohne diesen Schritt sucht Berlekamp–Massey sie erneut als unbekannte Fehler und scheitert. Der Rest wird durch Berlekamp–Massey und Chien-Suche lokalisiert, die Größen liefert Forneys Formel.</p><h3>Gültig ist nicht dasselbe wie korrekt</h3><p>Bei ebenso vielen Auslassungen wie Prüfsymbolen findet Reed–Solomon <em>immer</em> eine gültige Lösung. Liegen die wirklichen Fehler außerhalb der ausgelassenen Positionen, wird diese Lösung sauber berechnet und ist falsch. Deshalb wird die Zahl der Auslassungen schrittweise erhöht und das dünnste Ergebnis genommen, das eine äußere Prüfung akzeptiert. Ohne diesen Widerspruch von außen liefert das Verfahren jedes Mal etwas — und meist Unsinn.</p><h3>Präfixe genügen ebenfalls nicht</h3><p>Eine höhere Zahl löscht die k <em>unzuverlässigsten</em> Codewörter — ein Präfix der Zuverlässigkeitsreihenfolge. Auf echten Fotos gemessen wechseln beschädigte und intakte Codewörter in dieser Reihenfolge einander ab, und jedes intakte Codewort im Präfix verschwendet ein Prüfsymbol. Schäden auf den Zuverlässigkeitsrängen {2,4,6,8,10,12,14,16,18} sind für jedes Präfix unerreichbar — Rang 18 abzudecken kostet 18 von 15 Symbolen — während die exakte Menge 9 kostet. Scheitert die Leiter, werden deshalb beliebige <em>Mengen</em> von Auslassungen nach steigendem Gesamtzweifel aufgezählt, durch denselben Heap, der das Nachtasten der Zellen in <a href="#probe">§06</a> ordnet. Jeder Kandidat muss weiterhin die äußere Prüfung bestehen.</p></div>
+</section>
 
-  <h2 id="search"><span class="num">05</span>What is searched, not guessed</h2>
-  <p>
-    Four things could be estimated from the image and are instead enumerated, because a wrong
-    guess is invisible while a wrong candidate is obvious in the known cells.
-  </p>
-  <ul>
-    <li>
-      <b>The version.</b> Every candidate size gets its own grid fit. On the bulb the winner had
-      2 of 244 cells wrong and the runner-up 69 — the estimate from the finder width had landed
-      between two candidates.
-    </li>
-    <li>
-      <b>The resolution.</b> A finder is seven modules wide, so the module size follows from it.
-      The preprocessing assumes roughly nine pixels per module; outside that band the image is
-      rescaled — <em>in both directions</em>. A code can fail for being photographed too well.
-    </li>
-    <li>
-      <b>The polarity.</b> Light-on-dark cannot be settled by looking at the finders: a finder
-      is nested squares and so is its inverse. It is settled after the fit, on the error count.
-    </li>
-    <li>
-      <b>A missing finder.</b> Two are enough. A QR code is square, which leaves six discrete
-      possibilities for the third — perpendicular from either end on either side, or the two
-      being the diagonal pair. All six are fitted.
-    </li>
-  </ul>
-
-  <h2 id="probe"><span class="num">06</span>Ordered probing</h2>
-  <p>
-    When the matrix does not decode, the least certain cells are flipped — but in an order, and
-    the order is the whole trick. Flipping a cell against its more likely reading costs its
-    log-likelihood ratio:
-  </p>
-  <div class="formula">
-    cost(r,c) = log( max(p, 1−p) / min(p, 1−p) ) &nbsp;&nbsp; p = P(dark)
-    <span class="where">
-      a cell at p = 0.5 is free to flip · an unambiguous one is expensive<br>
-      structure cells get cost ∞ and are never touched
-    </span>
-  </div>
-  <p>
-    Subsets of the cheapest cells are then enumerated in ascending total cost by a best-first
-    search over a heap. Each subset already emitted spawns exactly two successors — extend it,
-    or advance its last element — which yields every subset exactly once, in order.
-  </p>
-  <figure>
-    <div class="plot">
-      <img src="fig-probe.svg" alt="Two panels. On the left, a bar chart of the flip cost of the
-      22 least certain cells, rising from about 0.2 to about 5.6. On the right, the total cost
-      of each subset in the order the heap emits it, rising monotonically, with the first five
-      subsets labelled.">
-    </div>
-    <figcaption>
-      <b>The ladder, and the order it is climbed in.</b> Costs measured on
-      <code>fixtures/engraved-curved-hard.png</code>: the cheapest doubt costs
-      <em>0.22 against 5.6</em> for the twenty-second, a factor of twenty-five. So the order is
-      not a detail — enumerating the same cells in any other order would spend the whole budget
-      on combinations that were never plausible. The right panel is the property the heap
-      guarantees: the total cost never decreases from one emission to the next.
-    </figcaption>
-  </figure>
-  <div class="aside">
-    <b>Why no learned scoring.</b> The decoder is an exact oracle: it does not say "warmer", it
-    says valid or not valid. Reinforcement learning exists to approximate a reward function you
-    cannot compute. Here it is known in closed form and evaluates in microseconds — what is
-    needed is a good order in which to ask, not a model of the answer.
-  </div>
-
-  <h2 id="rs"><span class="num">07</span>Reed-Solomon and erasures</h2>
-  <p>
-    Codewords are bytes in GF(2⁸) with primitive polynomial <code>0x11D</code>. A block of n
-    codewords carries t check symbols, and the decoder can repair
-  </p>
-  <div class="formula">
-    2·e<sub>unknown</sub> + e<sub>located</sub> ≤ t
-    <span class="where">
-      an error costs two check symbols — one to find it, one to fix it<br>
-      an erasure costs one, because its position is already known
-    </span>
-  </div>
-  <figure>
-    <div class="plot">
-      <img src="fig-rs.svg" alt="Three rows, each a budget of ten check symbols. The first
-      spends it on five errors, each two symbols wide. The second on two errors and six
-      erasures. The third on ten erasures, each one symbol wide. All three fill the same
-      budget, but the number of cells salvaged doubles from five to ten.">
-    </div>
-    <figcaption>
-      <b>One budget, spent three ways.</b> Each row fills the same ten check symbols of a
-      version 1-M block. Deciding every doubtful cell and getting five of them wrong exhausts
-      the budget; abstaining on ten does too — and covers twice as many cells. That factor of
-      two is the entire argument for the third state, and it is why an uncertain cell must never
-      be rounded to the nearer value on the way through.
-    </figcaption>
-  </figure>
-  <p>
-    That factor of two is why the module matrix has three states rather than two. An honest
-    "I don't know, but I know where" is worth twice a guess.
-  </p>
-  <p>
-    The chain: syndromes S<sub>i</sub> = r(α<sup>i</sup>) tell whether the block is intact.
-    Forney syndromes remove the known erasures first — without that step Berlekamp-Massey goes
-    looking for them again as unknown errors and fails. What is left is located by
-    Berlekamp-Massey and Chien search, and the magnitudes come from Forney's formula.
-  </p>
-  <h3>Valid is not the same as correct</h3>
-  <p>
-    With as many erasures as check symbols, Reed-Solomon <em>always</em> finds a valid solution.
-    If the real errors lie outside the erased positions, that solution is cleanly computed and
-    wrong. So the erasure count is raised one step at a time and the sparsest result that an
-    outside check accepts is taken. Without that contradiction from outside, the method returns
-    something every time, and usually nonsense.
-  </p>
-  <h3>Prefixes are not enough either</h3>
-  <p>
-    Raising the count erases the k <em>least reliable</em> codewords — a prefix of the
-    reliability order. Measured on real photographs, the damaged codewords interleave with
-    sound ones in that order, and every sound codeword inside the prefix is a check symbol
-    spent on nothing. Damage at reliability ranks {2,4,6,8,10,12,14,16,18} is unreachable for
-    any prefix — covering rank 18 costs 18 of 15 symbols — while the exact set costs 9. So
-    after the ladder fails, arbitrary erasure <em>sets</em> are enumerated in ascending total
-    doubt, by the same heap that orders the cell probe in <a href="#probe">§06</a>. Each
-    candidate still has to survive the outside check.
-  </p>
-
-  <h2 id="limits"><span class="num">08</span>Where it stops</h2>
-  <p>
-    Measured on synthetic cases with known answers, under otherwise ideal conditions, the limit
-    is resolution:
-  </p>
-  <table>
-    <tr><th>pixels per module</th><th>recovered</th></tr>
-    <tr><td class="num">6.0</td><td class="num">5 / 5</td></tr>
-    <tr><td class="num">5.0</td><td class="num">5 / 5</td></tr>
-    <tr><td class="num">4.0</td><td class="num">1 / 5</td></tr>
-    <tr><td class="num">3.0</td><td class="num">0 / 5</td></tr>
-  </table>
-  <p>
-    Below about five pixels per module the information is not in the image, and no amount of
-    modelling puts it back. Real damage moves that threshold upward, never down.
-  </p>
-  <p>
-    On thirteen genuinely damaged codes, of which a plain decoder reads one, qrsalvage recovers
-    six and places the grid cleanly on nine. The ones it does not recover mostly fail because
-    too many data modules are physically gone — the method can find and place a code well past
-    the point where it can read one.
-  </p>
-
-  <p style="margin-top:3rem"><a class="back" href="index.html">&larr; back to the tool</a>
-    &nbsp;·&nbsp; <a class="back" href="legal.html">Impressum &amp; Datenschutz</a></p>
+<section id="limits">
+<h2><span class="num">08</span><span data-lang="en">Where it stops</span><span data-lang="de" hidden>Wo es endet</span></h2>
+<div data-lang="en"><p>Measured on synthetic cases with known answers, under otherwise ideal conditions, the limit is resolution:</p></div><div data-lang="de" hidden><p>An synthetischen Fällen mit bekannten Antworten gemessen ist unter ansonsten idealen Bedingungen die Auflösung die Grenze:</p></div>
+<table><tr><th><span data-lang="en">pixels per module</span><span data-lang="de" hidden>Pixel je Modul</span></th><th><span data-lang="en">recovered</span><span data-lang="de" hidden>rekonstruiert</span></th></tr><tr><td class="num">6.0</td><td class="num">5 / 5</td></tr><tr><td class="num">5.0</td><td class="num">5 / 5</td></tr><tr><td class="num">4.0</td><td class="num">1 / 5</td></tr><tr><td class="num">3.0</td><td class="num">0 / 5</td></tr></table>
+<div data-lang="en"><p>Below about five pixels per module the information is not in the image, and no amount of modelling puts it back. Real damage moves that threshold upward, never down.</p><p>On thirteen genuinely damaged codes, of which a plain decoder reads one, qrsalvage recovers six and places the grid cleanly on nine. The ones it does not recover mostly fail because too many data modules are physically gone — the method can find and place a code well past the point where it can read one.</p></div><div data-lang="de" hidden><p>Unter ungefähr fünf Pixeln je Modul ist die Information nicht im Bild vorhanden, und kein noch so aufwendiges Modell bringt sie zurück. Reale Schäden verschieben diese Schwelle nach oben, niemals nach unten.</p><p>Von dreizehn wirklich beschädigten Codes, von denen ein gewöhnlicher Decoder einen liest, rekonstruiert qrsalvage sechs und platziert bei neun das Gitter sauber. Die nicht rekonstruierten Fälle scheitern meist, weil physisch zu viele Datenmodule fehlen — das Verfahren kann einen Code noch lange finden und platzieren, nachdem es ihn nicht mehr lesen kann.</p></div>
+</section>
+<p class="manual-footer"><a href="index.html"><span data-lang="en">← back to the tool</span><span data-lang="de" hidden>← zurück zum Werkzeug</span></a> &nbsp;·&nbsp; <a href="legal.html"><span data-lang="en">Legal notice &amp; privacy</span><span data-lang="de" hidden>Impressum &amp; Datenschutz</span></a></p>
+</article>
 </main>
+<script src="locale.js"></script>
 </body>
 </html>
