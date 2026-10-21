@@ -8,6 +8,28 @@
 const $ = (id) => document.getElementById(id);
 const t = (key, values) => window.qrLocale.t(key, values);
 
+// These two consumers select keys from runtime state rather than spelling them inside t().
+// Keep the complete finite sets here so the locale-consumer test can validate every key.
+// DYNAMIC-LOCALE-CONSUMERS: START
+const DYNAMIC_LOCALE_KEYS = Object.freeze({
+  outlineCorners: Object.freeze([
+    "manual.topLeft", "manual.topRight", "manual.bottomRight", "manual.bottomLeft",
+  ]),
+  recoveryStages: Object.freeze({
+    image: "recovery.stage.image",
+    finders: "recovery.stage.finders",
+    polarity: "recovery.stage.polarity",
+    grid: "recovery.stage.grid",
+    chosen: "recovery.stage.chosen",
+    sampled: "recovery.stage.sampled",
+    repair: "recovery.stage.repair",
+    probe: "recovery.stage.probe",
+    member: "recovery.stage.member",
+    fusion: "recovery.stage.fusion",
+  }),
+});
+// DYNAMIC-LOCALE-CONSUMERS: END
+
 function readPreference(key) {
   try { return window.localStorage.getItem(key); } catch { return null; }
 }
@@ -301,8 +323,12 @@ async function openCamera() {
   if (progressIdle(owner)) status.textContent = "";
   $("cameraFeed").srcObject = cameraStream;
   $("cameraPanel").classList.remove("hidden");
-  $("cameraNote").textContent = t(mode === "one" ? "camera.noteBurst" : "camera.noteSingle");
-  $("capture").textContent = t(mode === "one" ? "camera.captureBurst" : "camera.captureSingle");
+  $("cameraNote").textContent = mode === "one"
+    ? t("camera.noteBurst")
+    : t("camera.noteSingle");
+  $("capture").textContent = mode === "one"
+    ? t("camera.captureBurst")
+    : t("camera.captureSingle");
 
   // A torch helps on shadowed, reflective and low-contrast labels in dark corners.
   const track = cameraStream.getVideoTracks()[0];
@@ -335,7 +361,7 @@ async function toggleTorch() {
   torchOn = !torchOn;
   try {
     await cameraStream.getVideoTracks()[0].applyConstraints({ advanced: [{ torch: torchOn }] });
-    $("torch").textContent = t(torchOn ? "camera.lightOff" : "camera.lightOn");
+    $("torch").textContent = torchOn ? t("camera.lightOff") : t("camera.lightOn");
   } catch { /* not every browser lets the page at the torch; the button just stays honest */ }
 }
 
@@ -448,13 +474,12 @@ async function addFiles(files) {
   document.body.classList.add("busy");
   const owner = Symbol("selection");
   progressWorking(owner);
-  status.textContent = t(images.length === 1 ? "input.readingOne" : "input.readingMany", {
-    count: images.length,
-  });
-  announce(t(
-    images.length === 1 ? "input.readingOneAnnouncement" : "input.readingManyAnnouncement",
-    { count: images.length }
-  ));
+  status.textContent = images.length === 1
+    ? t("input.readingOne")
+    : t("input.readingMany", { count: images.length });
+  announce(images.length === 1
+    ? t("input.readingOneAnnouncement")
+    : t("input.readingManyAnnouncement", { count: images.length }));
 
   const accepted = [];
   const refused = [];
@@ -544,10 +569,9 @@ function resetAll() {
 function refresh() {
   drop.classList.add("compact");
   $("reset").classList.remove("hidden");
-  $("dropTitle").textContent = t(
-    loaded.length === 1 ? "input.loadedOne" : "input.loadedMany",
-    { count: loaded.length }
-  );
+  $("dropTitle").textContent = loaded.length === 1
+    ? t("input.loadedOne")
+    : t("input.loadedMany", { count: loaded.length });
   $("dropMore").textContent = ` — ${t("input.more")}`;
 
   const thumbs = $("thumbs");
@@ -685,13 +709,9 @@ canvas.addEventListener("click", (e) => {
   if (picked.length === 3) { picking = false; solve(picked); }
 });
 
-const OUTLINE_CORNER_KEYS = [
-  "manual.topLeft", "manual.topRight", "manual.bottomRight", "manual.bottomLeft",
-];
-
 function updateOutlineInstructions() {
   if (outlineCorners.length < 4) {
-    const next = t(OUTLINE_CORNER_KEYS[outlineCorners.length]);
+    const next = t(DYNAMIC_LOCALE_KEYS.outlineCorners[outlineCorners.length]);
     $("canvasNote").textContent = t("manual.outlineProgress", {
       count: outlineCorners.length,
       next,
@@ -894,17 +914,14 @@ let liveChosen = null;
 // <user>.github.io/qrsalvage/, or a bare filesystem -- and "/method#grid" would leave that
 // directory and land at the host root under two of those three. method.html is the file's real
 // name; the local server answers /method as well, but only the name works everywhere.
-const STAGES = {
-  image:   ["recovery.stage.image", null],
-  finders: ["recovery.stage.finders", "method.html#search"],
-  polarity:["recovery.stage.polarity", "method.html#search"],
-  grid:    ["recovery.stage.grid", "method.html#grid"],
-  chosen:  ["recovery.stage.chosen", "method.html#search"],
-  sampled: ["recovery.stage.sampled", "method.html#posterior"],
-  repair:  ["recovery.stage.repair", "method.html#rs"],
-  probe:   ["recovery.stage.probe", "method.html#probe"],
-  member:  ["recovery.stage.member", null],
-  fusion:  ["recovery.stage.fusion", null],
+const STAGE_LINKS = {
+  finders: "method.html#search",
+  polarity: "method.html#search",
+  grid: "method.html#grid",
+  chosen: "method.html#search",
+  sampled: "method.html#posterior",
+  repair: "method.html#rs",
+  probe: "method.html#probe",
 };
 
 function liveStart() {
@@ -933,26 +950,26 @@ function liveEnd(persistGrid) {
 }
 
 function liveEvent(e) {
-  const stage = STAGES[e.type];
-  if (stage) {
+  const stageKey = DYNAMIC_LOCALE_KEYS.recoveryStages[e.type];
+  if (stageKey) {
     const member = e.member !== undefined
       ? `${t("recovery.member", { count: e.member + 1 })} · `
       : "";
-    const stageText = t(stage[0]);
+    const stageText = t(DYNAMIC_LOCALE_KEYS.recoveryStages[e.type]);
     const extra =
       e.type === "grid" && e.phase === "bow" ? ` — ${t("recovery.gridBow")}` :
       e.type === "grid" && e.phase === "restart" ? ` — ${t("recovery.gridRestart")}` :
       e.type === "probe" ? ` — ${t("recovery.probeAttempts", { tried: e.tried, budget: e.budget })}` :
-      e.type === "repair" ? ` — ${t(
-        e.method === "ladder" ? "recovery.repairErasures" : "recovery.repairSets",
-        { count: e.step }
-      )}` :
+      e.type === "repair" ? ` — ${e.method === "ladder"
+        ? t("recovery.repairErasures", { count: e.step })
+        : t("recovery.repairSets", { count: e.step })}` :
       e.type === "member" ? ` — ${t("recovery.memberProgress", {
         current: e.index + 1,
         total: e.total,
       })}` : "";
-    $("liveStage").innerHTML = escapeHtml(member) + (stage[1]
-      ? `<a href="${escapeHtml(stage[1])}" target="_blank">${escapeHtml(stageText)}</a>`
+    const stageLink = STAGE_LINKS[e.type];
+    $("liveStage").innerHTML = escapeHtml(member) + (stageLink
+      ? `<a href="${escapeHtml(stageLink)}" target="_blank">${escapeHtml(stageText)}</a>`
       : escapeHtml(stageText)) + escapeHtml(extra);
     const progressStage = $("progressStage");
     if (progressStage) {
@@ -1057,7 +1074,9 @@ async function catalogRun() {
   progressWorking(owner);
   status.innerHTML = escapeHtml(t("catalogue.preparing")) +
     (warning ? `<span class="quiet"> · ${escapeHtml(warning)}</span>` : "");
-  announce(t(warning ? "catalogue.preparingWarning" : "catalogue.preparingAnnouncement"));
+  announce(warning
+    ? t("catalogue.preparingWarning")
+    : t("catalogue.preparingAnnouncement"));
   dispatchStudio({ type: "PREPARING" });
   const ready = await backendReady(owner);
   if (!ready || my !== seq) {
@@ -1215,7 +1234,9 @@ function verdictFor(a) {
   }
   if (!a.modules) {
     const n = a.finders.length;
-    return ["bad", t(n === 1 ? "verdict.noGridOne" : "verdict.noGrid", { count: n })];
+    return ["bad", n === 1
+      ? t("verdict.noGridOne")
+      : t("verdict.noGrid", { count: n })];
   }
   const rate = a.wrong_known / a.known_total;
   const seated = rate <= 0.01 && a.timing >= 100;
