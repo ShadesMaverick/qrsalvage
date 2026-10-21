@@ -487,6 +487,36 @@ def test_python_build_tools_are_pinned():
     assert "pip install build==1.6.1" in ci
 
 
+def test_production_asset_inventory_covers_every_static_delivery():
+    from qrsalvage.server import Handler
+    from scripts.build_site import PAGE_FILES
+
+    expected = {
+        "studio-state.js",
+        "locale.js",
+        "companion.js",
+        "axolotl-companion.png",
+        "outline-editor.js",
+        "app.js",
+        "style.css",
+        "axolotl.png",
+    }
+    assert expected <= set(PAGE_FILES)
+    assert {f"/{name}" for name in expected} <= set(Handler.STATIC)
+
+    package_data = tomllib.loads(_text("pyproject.toml"))["tool"]["setuptools"]["package-data"][
+        "qrsalvage"
+    ]
+    assert {
+        "web/*.html",
+        "web/*.css",
+        "web/*.js",
+        "web/*.png",
+        "web/*.svg",
+    } <= set(package_data)
+    assert all("**" not in pattern for pattern in package_data)
+
+
 def test_internal_status_no_longer_calls_pages_unpublished():
     vision = _text("docs/VISION.md")
     issues = _text("docs/ISSUES.md")

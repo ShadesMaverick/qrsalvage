@@ -759,9 +759,6 @@ def test_outline_editor_is_served_with_touch_and_curved_geometry(running_server)
     assert "qrOutlineEditor.selectNearestHandle" in script
     assert "moveHandle" in editor
     assert "qrOutlineEditor.moveHandle" in script
-    from scripts.build_site import PAGE_FILES
-
-    assert "outline-editor.js" in PAGE_FILES
     instructions = (
         "manual.topLeft",
         "manual.topRight",
@@ -942,10 +939,6 @@ def test_companion_assets_are_served_built_and_loaded_between_locale_and_app(run
     assert page.index('src="companion.js"') < page.index('src="app.js"')
     assert b"companionDecision" in assets["/companion.js"]
     assert assets["/axolotl-companion.png"].startswith(b"\x89PNG\r\n\x1a\n")
-
-    from scripts.build_site import PAGE_FILES
-
-    assert {"companion.js", "axolotl-companion.png"} <= set(PAGE_FILES)
 
 
 def test_companion_uses_the_single_dispatch_path_and_visible_payload_gate():
@@ -1428,7 +1421,7 @@ def test_the_public_page_leads_with_general_qr_recovery():
 def test_search_discovery_files_are_part_of_the_static_build():
     from scripts.build_site import PAGE_FILES
 
-    assert {"robots.txt", "sitemap.xml", "locale.js", "studio-state.js"} <= set(PAGE_FILES)
+    assert {"robots.txt", "sitemap.xml"} <= set(PAGE_FILES)
 
 
 def test_signal_studio_buttons_keep_a_44_pixel_target():
