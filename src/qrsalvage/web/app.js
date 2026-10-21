@@ -27,6 +27,59 @@ const DYNAMIC_LOCALE_KEYS = Object.freeze({
     member: "recovery.stage.member",
     fusion: "recovery.stage.fusion",
   }),
+  backend: Object.freeze([
+    "backend.mode.server", "backend.mode.browser", "privacy.server", "privacy.browser",
+  ]),
+  payloadLabels: Object.freeze({
+    zigbee: "payload.label.zigbee", matter: "payload.label.matter",
+    wifi: "payload.label.wifi", url: "payload.label.url", email: "payload.label.email",
+    phone: "payload.label.phone", sms: "payload.label.sms",
+    location: "payload.label.location", contact: "payload.label.contact",
+    text: "payload.label.text",
+  }),
+  payloadHints: Object.freeze({
+    zigbee: "payload.hint.zigbee", matter: "payload.hint.matter",
+    wifi: "payload.hint.wifi", url: "payload.hint.url", email: "payload.hint.email",
+    phone: "payload.hint.phone", sms: "payload.hint.sms",
+    location: "payload.hint.location", contact: "payload.hint.contact",
+    text: "payload.hint.text",
+  }),
+  payloadWarnings: Object.freeze({
+    zigbee: "payload.warning.zigbee", matter: "payload.warning.matter",
+    wifi: "payload.warning.wifi",
+  }),
+  payloadFields: Object.freeze({
+    eui64: "payload.field.eui64",
+    eui64_colons: "payload.field.eui64_colons",
+    install_code: "payload.field.install_code",
+    install_code_crc: "payload.field.install_code_crc",
+    model: "payload.field.model", batch: "payload.field.batch",
+    manual_pairing_code: "payload.field.manual_pairing_code",
+    setup_passcode: "payload.field.setup_passcode",
+    discriminator: "payload.field.discriminator", vendor_id: "payload.field.vendor_id",
+    product_id: "payload.field.product_id",
+    commissioning_flow: "payload.field.commissioning_flow",
+    discovery: "payload.field.discovery",
+    onboarding_payloads: "payload.field.onboarding_payloads",
+    ssid: "payload.field.ssid", security: "payload.field.security",
+    password: "payload.field.password", hidden: "payload.field.hidden",
+    phase2_method: "payload.field.phase2_method", eap_method: "payload.field.eap_method",
+    anonymous_identity: "payload.field.anonymous_identity",
+    identity: "payload.field.identity", url: "payload.field.url",
+    address: "payload.field.address", subject: "payload.field.subject",
+    body: "payload.field.body", number: "payload.field.number",
+    message: "payload.field.message", coordinates: "payload.field.coordinates",
+    crs: "payload.field.crs", uncertainty_m: "payload.field.uncertainty_m",
+    query: "payload.field.query", name: "payload.field.name",
+    organisation: "payload.field.organisation", phone: "payload.field.phone",
+    email: "payload.field.email",
+  }),
+  payloadValues: Object.freeze({
+    true: "payload.value.true", false: "payload.value.false",
+    standard: "payload.value.standard", "user intent": "payload.value.userIntent",
+    custom: "payload.value.custom", "on network": "payload.value.onNetwork",
+    "none advertised": "payload.value.noneAdvertised",
+  }),
 });
 // DYNAMIC-LOCALE-CONSUMERS: END
 
@@ -172,6 +225,7 @@ let pendingWarning = "";
 const bootProgressOwner = Symbol("boot");
 let mode = "one";   // "one": several photographs of one code; "many": a catalogue
 let lastSolved = false;  // a fresh drop after a success starts a fresh recovery
+let lastAnswer = null;   // presentation source for a locale-only rerender
 
 function syncManualTools(direct = studioState.mode === "pro") {
   const active = picking || outlineEditing;
@@ -264,7 +318,7 @@ function celebrateRecovery() {
    than assumed here: what to call this place, how to phrase the privacy fact, how to introduce
    its failures, and whether it needs a minute to start at all. */
 
-$("privacyNote").textContent = window.qrBackend.privacyNote;
+$("privacyNote").textContent = t(window.qrBackend.privacyKey);
 
 /* Booting is free on the local server and costs the better part of a minute in the browser,
    where a Python runtime, NumPy and OpenCV have to arrive before anything can be recovered.
@@ -284,7 +338,7 @@ window.qrBackend.onBoot((event) => {
     ? ` <span class="mono">${escapeHtml(Number(event.seconds))} s</span>`
     : "";
   status.innerHTML =
-    escapeHtml(t("boot.startingIn", { mode: window.qrBackend.mode })) +
+    escapeHtml(t("boot.startingIn", { mode: t(window.qrBackend.modeKey) })) +
     ` — ${escapeHtml(event.stage)}${seconds}` +
     `<span class="quiet"> — ${escapeHtml(t("boot.once"))}</span>`;
   announce(t("boot.starting", { stage: event.stage }));
@@ -588,6 +642,7 @@ function resetAll() {
   closeCamera();
   releaseBitmaps(loaded);
   loaded = []; picked = []; picking = false; token = null; pendingWarning = "";
+  lastAnswer = null;
   clearOutlineEditor(false);
   lastSolved = false;
   settledGrid = null;
@@ -773,6 +828,18 @@ function updateOutlineInstructions() {
   canvas.setAttribute("aria-label", message);
 }
 
+function setOutlineCanvasActive(active) {
+  if (active) {
+    canvas.setAttribute("role", "application");
+    canvas.setAttribute("tabindex", "0");
+    canvas.setAttribute("aria-label", t("manual.outlineCanvas"));
+    return;
+  }
+  canvas.removeAttribute("role");
+  canvas.removeAttribute("tabindex");
+  canvas.removeAttribute("aria-label");
+}
+
 function freezeOutlineEditor() {
   if (outlineDrag && canvas.hasPointerCapture(outlineDrag.pointerId)) {
     canvas.releasePointerCapture(outlineDrag.pointerId);
@@ -780,6 +847,7 @@ function freezeOutlineEditor() {
   outlineEditing = false;
   outlineDrag = null;
   canvas.classList.remove("outline-editing", "outline-ready", "outline-dragging");
+  setOutlineCanvasActive(false);
 }
 
 function clearOutlineEditor(redraw = true) {
@@ -788,7 +856,6 @@ function clearOutlineEditor(redraw = true) {
   outlineMidpoints = [];
   outlineKeyboardCursor = null;
   outlineKeyboardHandle = null;
-  canvas.setAttribute("aria-label", t("manual.outlineCanvas"));
   $("outlineSolve").hidden = true;
   if (redraw && loaded.length) draw();
 }
@@ -947,8 +1014,16 @@ function busy(on, owner) {
   return true;
 }
 
+function requireSolveAnswer(answer) {
+  if (!answer || typeof answer !== "object" || typeof answer.ok !== "boolean") {
+    throw new Error("the recovery engine returned no result");
+  }
+  return answer;
+}
+
 async function solve(points, outlineHint) {
   if (!loaded.length) return;
+  lastAnswer = null;
   prepareRecoveryVisuals();
   for (const id of ["retry", "outlineRetry", "outlineSolve", "cancel"]) {
     $(id).hidden = true;
@@ -990,6 +1065,7 @@ async function solve(points, outlineHint) {
       },
       (event) => { if (my === seq) liveEvent(event); }
     );
+    requireSolveAnswer(answer);
   } catch (err) {
     if (my === seq && busy(false, owner)) {
       clearOutlineEditor(false);
@@ -1003,16 +1079,14 @@ async function solve(points, outlineHint) {
   if (my !== seq) return;  // superseded by a newer drop; this answer belongs to old inputs
   if (!busy(false, owner)) return;
   clearOutlineEditor(false);
-  liveEnd(!!answer.ok);
-  if (answer) {
-    renderAnswer(answer);
-    if (answer.ok) {
-      progressComplete(t("result.success"));
-      celebrateRecovery();
-      dispatchStudio({ type: "RECOVERY_SUCCEEDED" });
-    } else {
-      dispatchStudio({ type: "RECOVERY_FAILED" });
-    }
+  liveEnd(answer.ok);
+  renderAnswer(answer);
+  if (answer.ok) {
+    progressComplete(t("result.success"));
+    celebrateRecovery();
+    dispatchStudio({ type: "RECOVERY_SUCCEEDED" });
+  } else {
+    dispatchStudio({ type: "RECOVERY_FAILED" });
   }
 }
 
@@ -1226,6 +1300,7 @@ async function catalogRun() {
       // A catalogue narrates its own progress card by card, so the events of the single
       // recovery running right now have nowhere to go.
       const answer = await window.qrBackend.solve({ images: [item.dataUrl] }, () => {});
+      requireSolveAnswer(answer);
       if (my !== seq) return;
       item.result = answer;
     } catch (err) {
@@ -1369,7 +1444,21 @@ function verdictFor(a) {
   return ["warn", t("verdict.outOfReach")];
 }
 
-function renderAnswer(a) {
+function payloadFieldValue(key, value) {
+  const raw = String(value);
+  const direct = DYNAMIC_LOCALE_KEYS.payloadValues[raw];
+  if (direct) return t(direct);
+  if (key === "discovery") {
+    return raw.split(", ").map((part) => {
+      const localeKey = DYNAMIC_LOCALE_KEYS.payloadValues[part];
+      return localeKey ? t(localeKey) : part;
+    }).join(", ");
+  }
+  return raw;
+}
+
+function renderAnswer(a, { focus = true } = {}) {
+  lastAnswer = a;
   lastSolved = !!a.ok;
   companionDetail.payloadReady = false;
   $("results").classList.remove("hidden");
@@ -1436,16 +1525,21 @@ function renderAnswer(a) {
     // unknown unless the payload itself says otherwise; plain text is a valid, honest answer.
     let knowledge = "";
     if (a.payload_info) {
+      const kind = a.payload_info.kind;
+      const labelKey = DYNAMIC_LOCALE_KEYS.payloadLabels[kind];
+      const hintKey = DYNAMIC_LOCALE_KEYS.payloadHints[kind];
+      const warningKey = DYNAMIC_LOCALE_KEYS.payloadWarnings[kind];
       const rows = Object.entries(a.payload_info.fields)
         .filter(([key]) => key !== "warning")
         .map(([key, value]) =>
-          `<dt>${escapeHtml(key.replace(/_/g, " "))}</dt><dd>${escapeHtml(String(value))}</dd>`)
+          `<dt>${escapeHtml(t(DYNAMIC_LOCALE_KEYS.payloadFields[key]))}</dt>` +
+          `<dd>${escapeHtml(payloadFieldValue(key, value))}</dd>`)
         .join("");
       knowledge =
-        `<div class="knowledge"><div class="payload-kind">${escapeHtml(a.payload_info.label)}</div>
-         <div class="note">${escapeHtml(a.payload_info.hint)}</div>
+        `<div class="knowledge"><div class="payload-kind">${escapeHtml(t(labelKey))}</div>
+         <div class="note">${escapeHtml(t(hintKey))}</div>
          <dl>${rows}</dl>
-         <div class="note quiet">${escapeHtml(a.payload_info.fields.warning || "")}</div></div>`;
+         <div class="note quiet">${escapeHtml(warningKey ? t(warningKey) : "")}</div></div>`;
     }
     // A result that took thousands of attempts or leaned on erasures is honest work, not a
     // lie -- but Reed-Solomon can produce valid-and-wrong answers, and a confidently wrong
@@ -1467,7 +1561,7 @@ function renderAnswer(a) {
       catch { button.textContent = t("clipboard.failure"); }
       setTimeout(() => { button.textContent = t("clipboard.copy"); }, 1600);
     });
-    $("resultHeading").focus();
+    if (focus) $("resultHeading").focus();
     companionDetail.payloadReady = true;
   } else {
     // The moment of failure is the one moment advice is worth anything. The order follows
@@ -1560,7 +1654,7 @@ function panel(title, dataUrl, filename, note) {
   div.className = "panel";
   div.innerHTML = `<h2>${escapeHtml(title)}</h2><img src="${escapeHtml(dataUrl)}" alt="${escapeHtml(title)}">
     <div class="note">${escapeHtml(note || "")}</div>
-    <div class="actions"><a download="${escapeHtml(filename)}" href="${escapeHtml(dataUrl)}"><button>${escapeHtml(t("export.downloadPng"))}</button></a></div>`;
+    <div class="actions"><a class="download-control" download="${escapeHtml(filename)}" href="${escapeHtml(dataUrl)}">${escapeHtml(t("export.downloadPng"))}</a></div>`;
   return div;
 }
 
@@ -1585,6 +1679,7 @@ $("outlineRetry").addEventListener("click", () => {
   outlineDrag = null;
   outlineKeyboardCursor = nextOutlineKeyboardCursor();
   outlineKeyboardHandle = null;
+  setOutlineCanvasActive(true);
   canvas.classList.add("outline-editing");
   canvas.classList.remove("outline-ready", "outline-dragging");
   $("retry").hidden = true;
@@ -1618,6 +1713,23 @@ $("cancel").addEventListener("click", () => {
   $("retry").hidden = false;
   $("outlineRetry").hidden = false;
   $("canvasNote").textContent = "";
+});
+
+document.addEventListener("qrsalvage:localechange", () => {
+  $("privacyNote").textContent = t(window.qrBackend.privacyKey);
+  if (loaded.length) refresh();
+  if (lastAnswer) renderAnswer(lastAnswer, { focus: false });
+  if (mode === "many" && loaded.length) catalogRender();
+  if (outlineEditing) updateOutlineInstructions();
+  if (picking) $("canvasNote").textContent = t("manual.finderInstructions");
+  if (studioState.phase === "success" && progress.classList.contains("complete")) {
+    status.textContent = t("result.success");
+    announce(t("result.success"));
+  } else if (studioState.phase === "failure") {
+    announce(t("result.failure"));
+  }
+  companion.refreshLocale();
+  syncCompanionControl(companion.update({ ...studioState, ...companionDetail }));
 });
 
 function escapeHtml(s) {

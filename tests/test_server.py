@@ -40,6 +40,59 @@ process.stdout.write(JSON.stringify(helper[process.argv[2]](...args)));
         check=False,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        timeout=10,
+    )
+    assert completed.returncode == 0, completed.stderr
+    return json.loads(completed.stdout)
+
+
+def _call_backend_server_probe(probe: str):
+    helper = ROOT / "src" / "qrsalvage" / "web" / "backend-server.js"
+    script = r"""
+const probe = process.argv[2];
+const encoder = new TextEncoder();
+const chunks = [];
+let status = 200;
+let ok = true;
+let bodyText = "";
+if (probe === "terminal") {
+  chunks.push(
+    encoder.encode('{"type":"grid","modules":21}\n'),
+    encoder.encode('{"type":"result","ok":true,"text":"PUBLIC"}')
+  );
+} else if (probe === "413") {
+  status = 413; ok = false; bodyText = '{"failure":"photograph too large"}';
+} else if (probe === "503") {
+  status = 503; ok = false;
+} else {
+  throw new Error(`unknown probe: ${probe}`);
+}
+let index = 0;
+const response = {
+  ok,
+  status,
+  body: ok ? { getReader() { return { async read() {
+    if (index >= chunks.length) return { done: true, value: undefined };
+    return { done: false, value: chunks[index++] };
+  } }; } } : null,
+  async text() { return bodyText; },
+};
+global.window = {};
+global.fetch = async () => response;
+require(process.argv[1]);
+const events = [];
+window.qrBackend.solve({ images: ["public"] }, (event) => events.push(event))
+  .then((answer) => process.stdout.write(JSON.stringify({ resolved: true, answer, events })))
+  .catch((error) => process.stdout.write(JSON.stringify({
+    resolved: false, name: error.name, message: error.message, events,
+  })));
+"""
+    completed = subprocess.run(
+        ["node", "-e", script, str(helper), probe],
+        check=False,
+        capture_output=True,
+        text=True,
         timeout=10,
     )
     assert completed.returncode == 0, completed.stderr
@@ -113,11 +166,16 @@ function createHarness() {
     observe() {}
     disconnect() { this.disconnected = true; }
   }
+  const viewportListeners = new Map();
   const viewport = {
     innerWidth: 320,
     innerHeight: 240,
     getComputedStyle() { return { transform: "none" }; },
     IntersectionObserver: FakeObserver,
+    addEventListener(name, callback) { viewportListeners.set(name, callback); },
+    removeEventListener(name, callback) {
+      if (viewportListeners.get(name) === callback) viewportListeners.delete(name);
+    },
   };
   const sprite = { style: {} };
   const controls = [];
@@ -154,7 +212,10 @@ function createHarness() {
     replaceChildren() { this.innerHTML = ""; },
   };
   function anchor(rect) {
-    return { getBoundingClientRect() { return { ...rect }; } };
+    return {
+      rect,
+      getBoundingClientRect() { return { ...this.rect }; },
+    };
   }
   const anchors = {
     hero: anchor({ right: 140, top: 20 }),
@@ -199,6 +260,7 @@ function createHarness() {
   });
   return {
     animations, cssAnimation, observer, root, bubble, localValues, controller, viewport,
+    viewportListeners, anchors,
   };
 }
 
@@ -269,6 +331,21 @@ if (probe === "same-anchor-reduction") {
     bubble: harness.bubble.style.pointerEvents ?? null,
     donationControls,
     hintControls,
+  }));
+} else if (probe === "anchor-reflow") {
+  harness.controller.update({ phase: "ready", payloadReady: false });
+  const initial = harness.root.style.transform;
+  harness.anchors.studio.rect = { right: 300, top: 130 };
+  const resize = harness.viewportListeners.get("resize");
+  if (resize) resize();
+  const resized = harness.root.style.transform;
+  harness.anchors.studio.rect = { right: 170, top: 72 };
+  harness.observer.callback([{
+    target: harness.anchors.studio, isIntersecting: true, intersectionRatio: 1,
+  }]);
+  process.stdout.write(JSON.stringify({
+    hasResizeListener: Boolean(resize), initial, resized,
+    observed: harness.root.style.transform,
   }));
 } else {
   throw new Error(`unknown probe: ${probe}`);
@@ -721,6 +798,39 @@ def test_static_assets_are_served_and_nothing_else(running_server):
     connection.close()
 
 
+def test_server_backend_processes_a_terminal_ndjson_record_without_a_newline():
+    result = _call_backend_server_probe("terminal")
+
+    assert result == {
+        "resolved": True,
+        "answer": {"type": "result", "ok": True, "text": "PUBLIC"},
+        "events": [{"type": "grid", "modules": 21}],
+    }
+
+
+@pytest.mark.parametrize(
+    ("probe", "message"),
+    [("413", "photograph too large"), ("503", "503")],
+)
+def test_server_backend_rejects_non_success_http_answers(probe, message):
+    result = _call_backend_server_probe(probe)
+
+    assert result == {
+        "resolved": False,
+        "name": "Error",
+        "message": message,
+        "events": [],
+    }
+
+
+def test_app_rejects_a_missing_or_malformed_backend_answer_before_rendering():
+    script = (ROOT / "src" / "qrsalvage" / "web" / "app.js").read_text(encoding="utf-8")
+    solve = script[script.index("async function solve") : script.index("/* --- the live view")]
+
+    assert "requireSolveAnswer" in solve
+    assert solve.index("requireSolveAnswer(answer)") < solve.index("answer.ok")
+
+
 def test_outline_editor_is_served_with_touch_and_curved_geometry(running_server):
     """The manual escape hatch must survive unchanged in every static deployment."""
     host, port = running_server
@@ -780,11 +890,21 @@ def test_photo_selection_and_outline_expose_complete_keyboard_paths(running_serv
     connection.close()
 
     assert re.search(r'<div id="drop"[^>]*role="button"[^>]*tabindex="0"', page)
-    assert re.search(r'<canvas id="photo"[^>]*role="application"[^>]*tabindex="0"', page)
+    canvas_tag = re.search(r'<canvas id="photo"[^>]*>', page)
+    assert canvas_tag is not None
+    assert 'role="application"' not in canvas_tag.group(0)
+    assert 'tabindex="0"' not in canvas_tag.group(0)
+    assert "aria-label=" not in canvas_tag.group(0)
     assert 'drop.addEventListener("keydown"' in script
     assert 'canvas.addEventListener("keydown"' in script
     assert "qrStudioState.isActivationKey" in script
     assert "qrOutlineEditor.keyboardCommand" in script
+    assert "function setOutlineCanvasActive" in script
+    assert 'canvas.setAttribute("role", "application")' in script
+    assert 'canvas.setAttribute("tabindex", "0")' in script
+    assert 'canvas.removeAttribute("role")' in script
+    assert 'canvas.removeAttribute("tabindex")' in script
+    assert 'canvas.removeAttribute("aria-label")' in script
 
 
 def test_studio_state_reducer_keeps_mode_separate_from_recovery_phase():
@@ -890,6 +1010,14 @@ def test_companion_places_the_sprite_and_visible_bubble_inside_the_viewport():
     assert result["right"] <= 312
     assert result["top"] >= 8
     assert result["bottom"] <= 232
+
+
+def test_companion_remeasures_the_same_anchor_after_resize_and_observer_updates():
+    result = _call_companion_controller_probe("anchor-reflow")
+
+    assert result["hasResizeListener"] is True
+    assert result["resized"] != result["initial"]
+    assert result["observed"] != result["resized"]
 
 
 def test_companion_storage_prefers_memory_after_browser_storage_fails():
@@ -1101,6 +1229,83 @@ def test_runtime_messages_use_locale_keys_instead_of_raw_english_assignments():
         assert f't("{key}"' in script
 
 
+def test_homepage_locale_contract_covers_metadata_controls_privacy_and_footer():
+    page = (ROOT / "src" / "qrsalvage" / "web" / "index.html").read_text(encoding="utf-8")
+
+    required_consumers = {
+        'data-i18n="meta.title"',
+        'data-i18n-content="meta.description"',
+        'data-i18n-content="meta.ogTitle"',
+        'data-i18n-content="meta.ogDescription"',
+        'data-i18n-aria="nav.primary"',
+        'data-i18n-aria="nav.home"',
+        'data-i18n-aria="mode.label"',
+        'data-i18n-aria="locale.label"',
+        'data-i18n="input.drop"',
+        'data-i18n="input.choose"',
+        'data-i18n="input.multiHint"',
+        'data-i18n="camera.title"',
+        'data-i18n="camera.captureSingle"',
+        'data-i18n="camera.close"',
+        'data-i18n="input.modeOne"',
+        'data-i18n="input.modeMany"',
+        'data-i18n="stage.input"',
+        'data-i18n="stage.export"',
+        'data-i18n="export.explanation"',
+        'data-i18n="export.edgeLength"',
+        'data-i18n="export.errorCorrection"',
+        'data-i18n="export.originalLevel"',
+        'data-i18n="export.report"',
+        'data-i18n="export.splitPayload"',
+        'data-i18n="catalogue.title"',
+        'data-i18n="catalogue.explanation"',
+        'data-i18n="catalogue.codeSize"',
+        'data-i18n="catalogue.download"',
+        'data-i18n="situations.eyebrow"',
+        'data-i18n="privacy.eyebrow"',
+        'data-i18n="privacy.explanation"',
+        'data-i18n="privacy.source"',
+        'data-i18n="footer.method"',
+        'data-i18n="footer.legal"',
+        'data-i18n="footer.license"',
+    }
+    missing = sorted(fragment for fragment in required_consumers if fragment not in page)
+    assert not missing, f"Unlocalized homepage consumers: {missing}"
+
+
+def test_payload_presentation_has_german_labels_advice_warnings_and_fields():
+    translations = {
+        "payload.label.matter": "Matter-Inbetriebnahmecode",
+        "payload.hint.matter": (
+            "Ein Matter-Inbetriebnahmecode. Füge das Gerät in Home Assistant, Apple Home "
+            "oder Google Home hinzu — und gib den manuellen Pairing-Code ein, wenn Scannen "
+            "nicht möglich ist."
+        ),
+        "payload.warning.matter": (
+            "Passcode und manueller Pairing-Code nehmen das Gerät in Betrieb. "
+            "Behandle sie wie Schlüssel."
+        ),
+        "payload.field.manual_pairing_code": "manueller Pairing-Code",
+    }
+    for key, expected in translations.items():
+        assert _call_web_module("locale.js", "translate", "de", key) == expected
+
+
+def test_locale_change_rerenders_runtime_state_without_starting_recovery():
+    script = (ROOT / "src" / "qrsalvage" / "web" / "app.js").read_text(encoding="utf-8")
+    start = script.index('document.addEventListener("qrsalvage:localechange"')
+    end = script.index("function escapeHtml", start)
+    handler = script[start:end]
+
+    assert "renderAnswer(lastAnswer" in handler
+    assert "updateOutlineInstructions" in handler
+    assert "companion.refreshLocale" in handler
+    assert "solve(" not in handler
+    assert "catalogRun(" not in handler
+    assert "window.qrBackend.solve" not in handler
+    assert "window.qrBackend.file" not in handler
+
+
 def test_studio_modes_share_controls_and_only_change_disclosure():
     web = ROOT / "src" / "qrsalvage" / "web"
     page = (web / "index.html").read_text(encoding="utf-8")
@@ -1168,8 +1373,16 @@ def test_locale_manifest_covers_every_static_app_and_html_consumer():
     }
     assert dynamic_calls == {
         "DYNAMIC_LOCALE_KEYS.outlineCorners[outlineCorners.length]",
+        "DYNAMIC_LOCALE_KEYS.payloadFields[key]",
         "DYNAMIC_LOCALE_KEYS.recoveryStages[e.type]",
         "decision.hintKey",
+        "direct",
+        "hintKey",
+        "labelKey",
+        "localeKey",
+        "warningKey",
+        "window.qrBackend.modeKey",
+        "window.qrBackend.privacyKey",
     }
 
     manifests = re.findall(
@@ -1190,7 +1403,7 @@ def test_locale_manifest_covers_every_static_app_and_html_consumer():
         html_keys.update(
             key
             for _, key in re.findall(
-                r"data-i18n(?:-aria)?=(['\"])([^'\"]+)\1",
+                r"data-i18n(?:-aria|-content)?=(['\"])([^'\"]+)\1",
                 page.read_text(encoding="utf-8"),
             )
         )
@@ -1248,6 +1461,7 @@ const enButton = {
 const groups = {
   "[data-i18n]": [text],
   "[data-i18n-aria]": [aria],
+  "[data-i18n-content]": [],
   "[data-lang]": [german, english],
   "[data-locale]": [deButton, enButton],
 };
@@ -1265,6 +1479,11 @@ const document = {
   documentElement: { lang: "" },
   querySelectorAll(selector) { return groups[selector]; },
   querySelector(selector) { return selector === 'meta[name="description"]' ? description : null; },
+  events: [],
+  dispatchEvent(event) { this.events.push({ type: event.type, detail: event.detail }); },
+  defaultView: { CustomEvent: class CustomEvent {
+    constructor(type, options) { this.type = type; this.detail = options.detail; }
+  } },
 };
 const storage = { setItem() { throw new Error("denied"); } };
 const controller = createLocaleController({ locale: "en", document, storage });
@@ -1280,6 +1499,7 @@ process.stdout.write(JSON.stringify({
   enPressed: enButton["aria-pressed"],
   title: document.title,
   description: description.content,
+  events: document.events,
 }));
 """
     completed = subprocess.run(
@@ -1301,7 +1521,43 @@ process.stdout.write(JSON.stringify({
         "enPressed": "false",
         "title": "German title",
         "description": "German description",
+        "events": [{"type": "qrsalvage:localechange", "detail": {"locale": "de"}}],
     }
+
+
+def test_every_visible_interactive_kind_has_a_forty_four_pixel_contract():
+    style = (ROOT / "src" / "qrsalvage" / "web" / "style.css").read_text(encoding="utf-8")
+    rule = re.search(
+        r"(?P<selectors>[^{}]*\.interactive-targets[^{}]*)\{(?P<body>[^}]*)\}",
+        style,
+        re.DOTALL,
+    )
+    assert rule is not None
+    for selector in (
+        ".site-brand",
+        ".site-nav > a",
+        "summary",
+        ".manual-rail a",
+        'input[type="radio"]',
+        ".text-link",
+        ".editorial-links a",
+        "footer a",
+        ".legal-page a",
+        ".manual-content a",
+        ".payload a[download]",
+    ):
+        assert selector in rule["selectors"], selector
+    assert "min-width: 44px" in rule["body"]
+    assert "min-height: 44px" in rule["body"]
+
+
+def test_generated_png_download_is_one_anchor_control_not_nested_interactives():
+    script = (ROOT / "src" / "qrsalvage" / "web" / "app.js").read_text(encoding="utf-8")
+    start = script.index("function panel(")
+    panel = script[start : script.index('\n$("retry")', start)]
+
+    assert '<a class="download-control"' in panel
+    assert "<button" not in panel
 
 
 def test_outline_editor_selects_the_nearest_overlapping_handle():
@@ -1629,7 +1885,7 @@ def test_success_reveal_locks_on_without_forcing_motion(running_server):
     assert "prepareRecoveryVisuals();" in solve
     assert "prepareRecoveryVisuals();" in catalog
     assert "liveEnd(false);" in solve
-    assert "liveEnd(!!answer.ok);" in solve
+    assert "liveEnd(answer.ok);" in solve
 
 
 def test_async_input_work_cannot_outlive_its_progress_owner():

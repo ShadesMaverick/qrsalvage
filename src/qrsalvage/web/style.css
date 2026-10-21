@@ -350,6 +350,48 @@
     cursor: pointer; transition: border-color .15s, color .15s;
   }
   button:hover { border-color: var(--pink); color: var(--pink-soft); }
+  .download-control {
+    display: inline-flex; align-items: center; justify-content: center; font: 500 .88rem/1 inherit;
+    padding: .55rem 1rem; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--panel-in); color: var(--fg);
+  }
+  .download-control:hover { border-color: var(--pink); color: var(--pink-soft); }
+
+  /* `.interactive-targets` names the shared hit-area contract for its automated audit. */
+  .interactive-targets,
+  .site-brand,
+  .site-nav > a,
+  summary,
+  .manual-rail a,
+  input[type="radio"],
+  input[type="checkbox"],
+  input[type="number"],
+  input[type="text"],
+  select,
+  .text-link,
+  .editorial-links a,
+  footer a,
+  .legal-page a,
+  .manual-content a,
+  #faq a,
+  #faq-de a,
+  .payload a[download] {
+    min-width: 44px; min-height: 44px;
+  }
+  .site-brand,
+  .site-nav > a,
+  summary,
+  .manual-rail a,
+  .text-link,
+  .editorial-links a,
+  footer a,
+  .legal-page a,
+  .manual-content a,
+  #faq a,
+  #faq-de a,
+  .payload a[download] {
+    display: inline-flex; align-items: center;
+  }
   .note { color: var(--muted); font-size: .85rem; margin-top: .65rem; min-height: 1.2em; }
   .note em { color: var(--pink-soft); font-style: normal; }
 
