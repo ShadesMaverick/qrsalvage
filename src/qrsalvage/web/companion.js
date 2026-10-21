@@ -68,8 +68,6 @@
 
     function moveTo(anchor, motion) {
       const target = anchors[anchor];
-      currentAnimation?.cancel();
-      currentAnimation = null;
       if (!target) return;
       if (target !== currentTarget) {
         currentTarget = target;
@@ -84,8 +82,16 @@
       const placement = [
         anchor, bubble.hidden, bubbleLeft, bubbleTop, bubbleWidth, bubbleHeight,
       ].join(":");
-      if (placement === currentPlacement) return;
+      if (placement === currentPlacement) {
+        if (motion === "still") {
+          currentAnimation?.cancel();
+          currentAnimation = null;
+        }
+        return;
+      }
       currentPlacement = placement;
+      currentAnimation?.cancel();
+      currentAnimation = null;
       const leftExtent = Math.min(0, bubbleLeft);
       const rightExtent = Math.max(rootWidth, bubbleLeft + bubbleWidth);
       const topExtent = Math.min(0, bubbleTop);
@@ -120,10 +126,19 @@
       );
     }
 
+    function applyPointerPolicy() {
+      root.style.pointerEvents = "none";
+      bubble.style.pointerEvents = "none";
+      for (const control of bubble.querySelectorAll("a, button")) {
+        control.style.pointerEvents = "auto";
+      }
+    }
+
     function hideBubble() {
       bubble.hidden = true;
       bubble.replaceChildren();
       activeBubble = null;
+      applyPointerPolicy();
     }
 
     function renderHint(decision) {
@@ -134,6 +149,7 @@
         dismissHint(decision.hintKey));
       bubble.hidden = false;
       activeBubble = { kind: "hint", key: decision.hintKey, anchor: decision.anchor };
+      applyPointerPolicy();
     }
 
     function renderDonation(decision) {
@@ -147,6 +163,7 @@
       bubble.querySelector("button").addEventListener("click", hideBubble);
       bubble.hidden = false;
       activeBubble = { kind: "donation", anchor: decision.anchor };
+      applyPointerPolicy();
     }
 
     function renderDecision(decision) {
@@ -175,6 +192,8 @@
       local.set(`qrsalvage.hints.${key}`, "true");
       hideBubble();
     }
+
+    applyPointerPolicy();
 
     const reverseAnchors = new Map(
       Object.entries(anchors).map(([name, element]) => [element, name]),
