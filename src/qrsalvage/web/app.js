@@ -7,6 +7,42 @@
 "use strict";
 const $ = (id) => document.getElementById(id);
 
+function readPreference(key) {
+  try { return window.localStorage.getItem(key); } catch { return null; }
+}
+
+function writePreference(key, value) {
+  try { window.localStorage.setItem(key, value); } catch { /* presentation state stays in memory */ }
+}
+
+let studioState = window.qrStudioState.createStudioState(readPreference("qrsalvage.mode"));
+
+function dispatchStudio(event) {
+  studioState = window.qrStudioState.reduceStudioState(studioState, event);
+  const view = window.qrStudioState.viewForState(studioState);
+  const shell = $("studioShell");
+  shell.className = `${view.phaseClass} ${view.modeClass}`;
+  $("modeEasy").setAttribute("aria-pressed", String(studioState.mode === "easy"));
+  $("modePro").setAttribute("aria-pressed", String(studioState.mode === "pro"));
+}
+
+window.dispatchStudio = dispatchStudio;
+dispatchStudio({ type: "SET_MODE", mode: studioState.mode });
+
+const preferredLocales = navigator.languages || [navigator.language || "en"];
+window.qrLocale.createLocaleController({
+  document,
+  locale: window.qrLocale.chooseLocale(readPreference("qrsalvage.locale"), preferredLocales),
+  storage: { setItem: writePreference },
+});
+
+for (const [id, modeName] of [["modeEasy", "easy"], ["modePro", "pro"]]) {
+  $(id).addEventListener("click", () => {
+    writePreference("qrsalvage.mode", modeName);
+    dispatchStudio({ type: "SET_MODE", mode: modeName });
+  });
+}
+
 /* Where the thanks go. A verified URL makes its button appear; an empty one keeps the page
    silent about that provider. The ask lives on the success card and nowhere
    else: a donation is reciprocity, and reciprocity has a moment. It shares its sentence with
@@ -179,6 +215,7 @@ async function backendReady(owner) {
       document.body.classList.remove("busy");
       status.textContent = window.qrBackend.failurePrefix + err;
       announce("The recovery engine could not start");
+      dispatchStudio({ type: "RECOVERY_FAILED" });
     }
     return false;
   }
@@ -443,6 +480,7 @@ async function addFiles(files) {
     loaded = []; token = null; lastSolved = false;
   }
   loaded.push(...accepted);
+  dispatchStudio({ type: "IMAGES_READY" });
   if (refused.length) {
     const warning = `could not read: ${refused.join(", ")} — likely HEIC (iPhone). ` +
       "Export or share the photo as JPEG and drop it again.";
@@ -473,6 +511,7 @@ function resetAll() {
   $("dropTitle").textContent = "Drop a photograph here";
   $("dropMore").innerHTML = "&nbsp;or click to choose one";
   status.textContent = "";
+  dispatchStudio({ type: "RESET" });
 }
 
 function refresh() {
@@ -748,6 +787,7 @@ async function solve(points, outlineHint) {
   progressWorking(owner);
   status.textContent = "preparing the recovery engine…";
   announce("Preparing the recovery engine");
+  dispatchStudio({ type: "PREPARING" });
   const ready = await backendReady(owner);
   if (!ready || my !== seq) {
     if (my === seq) clearOutlineEditor();
@@ -758,6 +798,7 @@ async function solve(points, outlineHint) {
     }
     return;
   }
+  dispatchStudio({ type: "RECOVERY_STARTED" });
   busy(true, owner);
   liveStart();
   let answer = null;
@@ -782,6 +823,7 @@ async function solve(points, outlineHint) {
       liveEnd(false);
       status.textContent = window.qrBackend.failurePrefix + err;
       announce("Recovery failed");
+      dispatchStudio({ type: "RECOVERY_FAILED" });
     }
     return;
   }
@@ -794,6 +836,9 @@ async function solve(points, outlineHint) {
     if (answer.ok) {
       progressComplete("QR code recovered");
       celebrateRecovery();
+      dispatchStudio({ type: "RECOVERY_SUCCEEDED" });
+    } else {
+      dispatchStudio({ type: "RECOVERY_FAILED" });
     }
   }
 }
@@ -965,6 +1010,7 @@ async function catalogRun() {
     (warning ? `<span class="quiet"> · ${escapeHtml(warning)}</span>` : "");
   announce(warning ? "Preparing the catalogue; some selected photographs could not be read" :
     "Preparing the recovery engine for the catalogue");
+  dispatchStudio({ type: "PREPARING" });
   const ready = await backendReady(owner);
   if (!ready || my !== seq) {
     if (progressOwner === owner) {
@@ -974,6 +1020,7 @@ async function catalogRun() {
     }
     return;
   }
+  dispatchStudio({ type: "RECOVERY_STARTED" });
 
   // One photograph at a time, so the progress is real rather than a guess — and a photograph
   // already recovered in this session is not recovered again when one more lands in the pile.
@@ -998,6 +1045,7 @@ async function catalogRun() {
         document.body.classList.remove("busy");
         status.textContent = window.qrBackend.failurePrefix + err;
         announce("Catalogue recovery failed");
+        dispatchStudio({ type: "RECOVERY_FAILED" });
       }
       return;
     }
@@ -1007,6 +1055,11 @@ async function catalogRun() {
   document.body.classList.remove("busy");
   catalogRender();
   progressComplete("Catalogue recovery complete");
+  dispatchStudio({
+    type: loaded.some((item) => item.result && item.result.ok)
+      ? "RECOVERY_SUCCEEDED"
+      : "RECOVERY_FAILED",
+  });
 }
 
 function catalogRender() {
@@ -1315,6 +1368,7 @@ function panel(title, dataUrl, filename, note) {
 }
 
 $("retry").addEventListener("click", () => {
+  dispatchStudio({ type: "ASSISTANCE_REQUIRED" });
   clearOutlineEditor(false);
   picked = []; picking = true; draw();
   $("retry").classList.add("hidden");
@@ -1326,6 +1380,7 @@ $("retry").addEventListener("click", () => {
 });
 
 $("outlineRetry").addEventListener("click", () => {
+  dispatchStudio({ type: "ASSISTANCE_REQUIRED" });
   picked = []; picking = false;
   outlineEditing = true;
   outlineCorners = [];
