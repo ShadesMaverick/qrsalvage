@@ -13,6 +13,16 @@ def _text(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
+def test_companion_sprite_has_six_square_transparent_frames():
+    from PIL import Image
+
+    path = ROOT / "src" / "qrsalvage" / "web" / "axolotl-companion.png"
+    with Image.open(path) as image:
+        assert image.mode == "RGBA"
+        assert image.width == image.height * 6
+        assert image.getchannel("A").getextrema()[0] == 0
+
+
 def test_pages_builds_only_the_exact_successful_main_ci_commit():
     workflow = _text(".github/workflows/pages.yml")
 

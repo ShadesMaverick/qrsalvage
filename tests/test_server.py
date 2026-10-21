@@ -546,6 +546,152 @@ def test_studio_state_reducer_keeps_mode_separate_from_recovery_phase():
     assert state == {"phase": "recovering", "mode": "easy"}
 
 
+def test_companion_only_offers_kofi_after_a_visible_success_once_per_session():
+    success = {"phase": "success", "payloadReady": True, "reducedMotion": False}
+    first = _call_web_module("companion.js", "companionDecision", success, {})
+    assert first["pose"] == "celebrate"
+    assert first["offerDonation"] is True
+    again = _call_web_module("companion.js", "companionDecision", success, {"donationShown": True})
+    assert again["offerDonation"] is False
+    failed = _call_web_module(
+        "companion.js",
+        "companionDecision",
+        {"phase": "failure", "payloadReady": False, "reducedMotion": False},
+        {},
+    )
+    assert failed["offerDonation"] is False
+
+
+def test_companion_reduced_motion_is_static_and_hints_are_once_only():
+    state = {
+        "phase": "assistance",
+        "assistance": "outline",
+        "payloadReady": False,
+        "reducedMotion": True,
+    }
+    first = _call_web_module("companion.js", "companionDecision", state, {})
+    assert first["motion"] == "still"
+    assert first["hintKey"] == "companion.outline"
+    seen = _call_web_module(
+        "companion.js",
+        "companionDecision",
+        state,
+        {"seenHints": ["companion.outline"]},
+    )
+    assert seen["hintKey"] is None
+
+
+def test_companion_motion_control_is_labelled_and_os_reduction_always_wins():
+    web = ROOT / "src" / "qrsalvage" / "web"
+    page = (web / "index.html").read_text(encoding="utf-8")
+    script = (web / "companion.js").read_text(encoding="utf-8")
+
+    toggle = re.search(r'<button id="motionToggle"(?P<body>[^>]*)>', page)
+    assert toggle is not None
+    assert 'type="button"' in toggle["body"]
+    assert 'data-i18n-aria="companion.motionToggle"' in toggle["body"]
+    assert 'aria-pressed="false"' in toggle["body"]
+    assert 'media.matches || local.get("qrsalvage.motionReduced") === "true"' in script
+
+
+def test_companion_has_one_anchored_nonblocking_layer_and_motion_safe_sprite():
+    web = ROOT / "src" / "qrsalvage" / "web"
+    page = (web / "index.html").read_text(encoding="utf-8")
+    style = (web / "style.css").read_text(encoding="utf-8")
+    script = (web / "companion.js").read_text(encoding="utf-8")
+
+    assert page.count('id="companion"') == 1
+    assert page.index('id="studioShell"') < page.index('id="companion"')
+    assert 'id="companionSprite" aria-hidden="true"' in page
+    assert re.search(r'id="companionBubble"[^>]*\bhidden\b', page)
+    for anchor in ("hero", "studio", "progress", "canvas", "manual", "result", "recovery"):
+        assert page.count(f'data-companion-anchor="{anchor}"') == 1
+    assert re.search(r"#companion\s*\{[^}]*pointer-events:\s*none", style, re.DOTALL)
+    assert re.search(r"#companionBubble[^}]*pointer-events:\s*auto", style, re.DOTALL)
+    assert "new IntersectionObserver" in script
+    assert ".getBoundingClientRect()" in script
+    assert ".animate(" in script
+    assert "currentAnimation?.cancel()" in script
+    assert "observer?.disconnect()" in script
+    assert "steps(" in style
+    reduced = style[style.rindex("@media (prefers-reduced-motion: reduce)") :]
+    assert "#companion" in reduced
+    assert "animation: none" in reduced
+
+
+def test_companion_assets_are_served_built_and_loaded_between_locale_and_app(running_server):
+    host, port = running_server
+    connection = http.client.HTTPConnection(host, port, timeout=10)
+    assets = {}
+    for path in ("/", "/companion.js", "/axolotl-companion.png"):
+        connection.request("GET", path)
+        response = connection.getresponse()
+        assert response.status == 200, path
+        assets[path] = response.read()
+    connection.close()
+
+    page = assets["/"].decode("utf-8")
+    assert page.index('src="locale.js"') < page.index('src="companion.js"')
+    assert page.index('src="companion.js"') < page.index('src="app.js"')
+    assert b"companionDecision" in assets["/companion.js"]
+    assert assets["/axolotl-companion.png"].startswith(b"\x89PNG\r\n\x1a\n")
+
+    from scripts.build_site import PAGE_FILES
+
+    assert {"companion.js", "axolotl-companion.png"} <= set(PAGE_FILES)
+
+
+def test_companion_uses_the_single_dispatch_path_and_visible_payload_gate():
+    script = (ROOT / "src" / "qrsalvage" / "web" / "app.js").read_text(encoding="utf-8")
+    dispatch = script[
+        script.index("function dispatchStudio") : script.index(
+            "window.dispatchStudio = dispatchStudio"
+        )
+    ]
+    assert "companion.update" in dispatch
+    finder_handler = script[
+        script.index('$("retry").addEventListener') : script.index(
+            '$("outlineRetry").addEventListener'
+        )
+    ]
+    outline_handler = script[
+        script.index('$("outlineRetry").addEventListener') : script.index(
+            '$("outlineSolve").addEventListener'
+        )
+    ]
+    assert 'companionDetail.assistance = "finders"' in finder_handler
+    assert 'dispatchStudio({ type: "ASSISTANCE_REQUIRED" })' in finder_handler
+    assert 'companionDetail.assistance = "outline"' in outline_handler
+    assert 'dispatchStudio({ type: "ASSISTANCE_REQUIRED" })' in outline_handler
+
+    success_render = script[
+        script.index("function renderAnswer") : script.index("async function download")
+    ]
+    assert success_render.index("payload.innerHTML") < success_render.index(
+        '$("resultHeading").focus()'
+    )
+    assert success_render.index('$("resultHeading").focus()') < success_render.index(
+        "companionDetail.payloadReady = true"
+    )
+
+
+def test_companion_kofi_is_a_clicked_post_success_link_once_per_session():
+    web = ROOT / "src" / "qrsalvage" / "web"
+    companion = (web / "companion.js").read_text(encoding="utf-8")
+    app = (web / "app.js").read_text(encoding="utf-8")
+
+    assert 'href="https://ko-fi.com/shadesmaverick"' in companion
+    assert 'target="_blank"' in companion
+    assert 'rel="noopener noreferrer"' in companion
+    assert "fetch(" not in companion
+    assert "iframe" not in companion.lower()
+    assert "thanksHtml" not in app
+    assert "axolotl.png" not in app
+    assert set(re.findall(r"qrsalvage\.donation[A-Za-z]+", companion)) == {
+        "qrsalvage.donationShown"
+    }
+
+
 @pytest.mark.parametrize(
     ("event", "phase"),
     [
@@ -560,9 +706,7 @@ def test_studio_state_reducer_keeps_mode_separate_from_recovery_phase():
 )
 def test_studio_state_reducer_has_one_named_phase(event, phase):
     state = _call_web_module("studio-state.js", "createStudioState", "invalid")
-    state = _call_web_module(
-        "studio-state.js", "reduceStudioState", state, {"type": event}
-    )
+    state = _call_web_module("studio-state.js", "reduceStudioState", state, {"type": event})
     view = _call_web_module("studio-state.js", "viewForState", state)
     assert state["phase"] == phase
     assert state["mode"] == "easy"
@@ -578,19 +722,13 @@ def test_easy_and_pro_change_visibility_not_recovery_requests():
     )
     assert easy["diagnosticsExpanded"] is False
     assert pro["diagnosticsExpanded"] is True
-    script = (ROOT / "src" / "qrsalvage" / "web" / "app.js").read_text(
-        encoding="utf-8"
-    )
-    solve = script[
-        script.index("async function solve") : script.index("/* --- the live view")
-    ]
+    script = (ROOT / "src" / "qrsalvage" / "web" / "app.js").read_text(encoding="utf-8")
+    solve = script[script.index("async function solve") : script.index("/* --- the live view")]
     assert "studioState.mode" not in solve
 
 
 def test_runtime_messages_use_locale_keys_instead_of_raw_english_assignments():
-    script = (ROOT / "src" / "qrsalvage" / "web" / "app.js").read_text(
-        encoding="utf-8"
-    )
+    script = (ROOT / "src" / "qrsalvage" / "web" / "app.js").read_text(encoding="utf-8")
     messages = {
         '"requesting camera access…"': "camera.requesting",
         '"capturing photographs…"': "camera.capturing",
@@ -634,7 +772,7 @@ def test_studio_modes_share_controls_and_only_change_disclosure():
     assert "view.manualToolsExpanded" in dispatch
     mode_handlers = script[
         script.index('for (const [id, modeName] of [["modeEasy"') : script.index(
-            "/* Where the thanks go."
+            'motionToggle.addEventListener("click"'
         )
     ]
     assert "dispatchStudio" in mode_handlers
@@ -667,45 +805,44 @@ def test_locale_dictionaries_have_identical_keys():
 
 def test_locale_manifest_covers_every_static_app_and_html_consumer():
     web = ROOT / "src" / "qrsalvage" / "web"
-    script = (web / "app.js").read_text(encoding="utf-8")
+    script = "\n".join(
+        (web / name).read_text(encoding="utf-8") for name in ("app.js", "companion.js")
+    )
     keys = set(_call_web_module("locale.js", "dictionaryKeys")["en"])
 
-    literal_calls = {
-        key
-        for _, key in re.findall(r"(?<![\w.])t\(\s*(['\"])([^'\"]+)\1", script)
-    }
-    call_heads = re.findall(r'(?<![\w.])t\(\s*([^,\n)]+)', script)
+    literal_calls = {key for _, key in re.findall(r"(?<![\w.])t\(\s*(['\"])([^'\"]+)\1", script)}
+    call_heads = re.findall(r"(?<![\w.])t\(\s*([^,\n)]+)", script)
     dynamic_calls = {
-        head.strip()
-        for head in call_heads
-        if not head.lstrip().startswith(('"', "'"))
+        head.strip() for head in call_heads if not head.lstrip().startswith(('"', "'"))
     }
     assert dynamic_calls == {
         "DYNAMIC_LOCALE_KEYS.outlineCorners[outlineCorners.length]",
         "DYNAMIC_LOCALE_KEYS.recoveryStages[e.type]",
+        "decision.hintKey",
     }
 
-    manifest = re.search(
+    manifests = re.findall(
         r"// DYNAMIC-LOCALE-CONSUMERS: START(?P<body>.*?)"
         r"// DYNAMIC-LOCALE-CONSUMERS: END",
         script,
         re.DOTALL,
     )
-    assert manifest is not None
+    assert len(manifests) == 2
     dynamic_keys = {
         key
-        for _, key in re.findall(
-            r"(['\"])([a-z][A-Za-z0-9]*(?:\.[A-Za-z0-9]+)+)\1",
-            manifest["body"],
-        )
+        for body in manifests
+        for _, key in re.findall(r"(['\"])([a-z][A-Za-z0-9]*(?:\.[A-Za-z0-9]+)+)\1", body)
     }
 
-    html_keys = set()
+    html_keys: set[str] = set()
     for page in web.glob("*.html"):
-        html_keys.update(key for _, key in re.findall(
-            r"data-i18n(?:-aria)?=(['\"])([^'\"]+)\1",
-            page.read_text(encoding="utf-8"),
-        ))
+        html_keys.update(
+            key
+            for _, key in re.findall(
+                r"data-i18n(?:-aria)?=(['\"])([^'\"]+)\1",
+                page.read_text(encoding="utf-8"),
+            )
+        )
 
     consumers = literal_calls | dynamic_keys | html_keys
     assert consumers <= keys, f"Unknown locale consumers: {sorted(consumers - keys)}"
@@ -928,10 +1065,10 @@ def test_the_legal_page_is_reachable_and_still_has_blanks_to_fill(running_server
     connection.close()
 
 
-def test_the_success_card_points_at_the_live_kofi_page():
-    script = (ROOT / "src" / "qrsalvage" / "web" / "app.js").read_text(encoding="utf-8")
+def test_the_success_companion_points_at_the_live_kofi_page():
+    script = (ROOT / "src" / "qrsalvage" / "web" / "companion.js").read_text(encoding="utf-8")
 
-    assert 'url: "https://ko-fi.com/shadesmaverick"' in script
+    assert 'href="https://ko-fi.com/shadesmaverick"' in script
     assert "ko-fi.com/yourname" not in script
 
 
@@ -952,9 +1089,8 @@ def test_the_public_page_declares_its_canonical_address_and_search_files():
 def test_the_public_page_leads_with_general_qr_recovery():
     page = (ROOT / "src" / "qrsalvage" / "web" / "index.html").read_text(encoding="utf-8")
     script = (ROOT / "src" / "qrsalvage" / "web" / "app.js").read_text(encoding="utf-8")
-    locale = (ROOT / "src" / "qrsalvage" / "web" / "locale.js").read_text(
-        encoding="utf-8"
-    )
+    companion = (ROOT / "src" / "qrsalvage" / "web" / "companion.js").read_text(encoding="utf-8")
+    locale = (ROOT / "src" / "qrsalvage" / "web" / "locale.js").read_text(encoding="utf-8")
     head, body = page.split("</head>", 1)
 
     assert "damaged qr code recovery" in head.lower()
@@ -963,7 +1099,7 @@ def test_the_public_page_leads_with_general_qr_recovery():
     assert "including codes on curved surfaces like light bulbs" not in head.lower()
     assert "every qr code can carry something different" in body.lower()
     assert "saved your qr code?" in locale.lower()
-    assert 't("donation.successPrompt")' in script
+    assert 't("donation.successPrompt")' in companion
     assert "saved your lamp?" not in script.lower()
 
 
@@ -1013,12 +1149,8 @@ def test_reduced_motion_statically_disables_every_shell_movement():
 def test_new_shell_spacing_stays_on_the_four_pixel_grid():
     style = (ROOT / "src" / "qrsalvage" / "web" / "style.css").read_text(encoding="utf-8")
     sections = (
-        style[
-            style.index("/* --- shared navigation") : style.index("/* --- identity")
-        ],
-        style[
-            style.index("/* --- Studio toolbar") : style.index("/* --- drop zone")
-        ],
+        style[style.index("/* --- shared navigation") : style.index("/* --- identity")],
+        style[style.index("/* --- Studio toolbar") : style.index("/* --- drop zone")],
         style[
             style.index("/* --- editorial sections") : style.index(
                 "@media (prefers-reduced-motion: reduce)"
@@ -1106,7 +1238,7 @@ def test_success_reveal_locks_on_without_forcing_motion(running_server):
     connection.request("GET", "/app.js")
     script = connection.getresponse().read().decode("utf-8")
 
-    assert '<div id="photoStage" class="photo-stage">' in page
+    assert '<div id="photoStage" class="photo-stage" data-companion-anchor="canvas">' in page
     assert '<div id="successLock" class="success-lock" aria-hidden="true">' in page
     assert style.count(".lock-corner") >= 4
     assert "@keyframes success-lock" in style

@@ -40,6 +40,45 @@ function writePreference(key, value) {
 
 let studioState = window.qrStudioState.createStudioState(readPreference("qrsalvage.mode"));
 let disclosureMode = null;
+const companionDetail = { assistance: null, payloadReady: false };
+
+function guardedStorage(name) {
+  let storage = null;
+  const memory = new Map();
+  try { storage = window[name]; } catch { /* private browsing may refuse the storage object */ }
+  return {
+    get(key) {
+      try { return storage ? storage.getItem(key) ?? memory.get(key) ?? null : memory.get(key) ?? null; }
+      catch { return memory.get(key) ?? null; }
+    },
+    set(key, value) {
+      memory.set(key, value);
+      try { if (storage) storage.setItem(key, value); } catch { /* the current view still works */ }
+    },
+  };
+}
+
+const companionLocal = guardedStorage("localStorage");
+const companionSession = guardedStorage("sessionStorage");
+const companionMedia = window.matchMedia("(prefers-reduced-motion: reduce)");
+const companionAnchors = Object.fromEntries(
+  [...document.querySelectorAll("[data-companion-anchor]")]
+    .map((element) => [element.dataset.companionAnchor, element]),
+);
+const companion = window.qrCompanion.createCompanionController({
+  root: $("companion"),
+  bubble: $("companionBubble"),
+  anchors: companionAnchors,
+  t,
+  local: companionLocal,
+  session: companionSession,
+  media: companionMedia,
+});
+const motionToggle = $("motionToggle");
+
+function syncCompanionControl(decision) {
+  motionToggle.setAttribute("aria-pressed", String(decision.motion === "still"));
+}
 
 function setDisclosure(id, expanded) {
   const details = $(id);
@@ -51,6 +90,8 @@ function setDisclosure(id, expanded) {
 function dispatchStudio(event) {
   studioState = window.qrStudioState.reduceStudioState(studioState, event);
   const view = window.qrStudioState.viewForState(studioState);
+  if (studioState.phase !== "success") companionDetail.payloadReady = false;
+  if (studioState.phase !== "assistance") companionDetail.assistance = null;
   const shell = $("studioShell");
   shell.className = `${view.phaseClass} ${view.modeClass}`;
   $("modeEasy").setAttribute("aria-pressed", String(studioState.mode === "easy"));
@@ -62,6 +103,7 @@ function dispatchStudio(event) {
     disclosureMode = studioState.mode;
   }
   syncManualTools(view.manualToolsExpanded);
+  syncCompanionControl(companion.update({ ...studioState, ...companionDetail }));
 }
 
 window.dispatchStudio = dispatchStudio;
@@ -73,37 +115,22 @@ for (const [id, modeName] of [["modeEasy", "easy"], ["modePro", "pro"]]) {
   });
 }
 
+motionToggle.addEventListener("click", () => {
+  const next = companionLocal.get("qrsalvage.motionReduced") !== "true";
+  companionLocal.set("qrsalvage.motionReduced", String(next));
+  syncCompanionControl(companion.update({ ...studioState, ...companionDetail }));
+});
+
+companionMedia.addEventListener("change", () => {
+  syncCompanionControl(companion.update({ ...studioState, ...companionDetail }));
+});
+
 for (const id of ["diagnosticsDetails", "advancedExport", "matrixDetails"]) {
   $(id).addEventListener("toggle", () => {
     $(id).querySelector("summary").setAttribute("aria-expanded", String($(id).open));
   });
 }
 
-/* Where the thanks go. A verified URL makes its button appear; an empty one keeps the page
-   silent about that provider. The ask lives on the success card and nowhere
-   else: a donation is reciprocity, and reciprocity has a moment. It shares its sentence with
-   the privacy fact because that answers the unspoken question of what this tool lives on. */
-const DONATE = [
-  // PayPal first: for a German audience it is the button people recognise and already have.
-  { label: "PayPal", url: "" },
-  { label: "Ko-fi", url: "https://ko-fi.com/shadesmaverick" },
-  { label: "LiberaPay", url: "" },
-];
-
-function thanksHtml() {
-  const targets = DONATE.filter((d) => d.url);
-  if (!targets.length) return "";
-  const links = targets
-    .map((d) => `<a href="${escapeHtml(d.url)}" target="_blank" rel="noopener noreferrer">` +
-                `<button>${escapeHtml(d.label)}</button></a>`)
-    .join("");
-  // A named amount and a named purpose make the ask concrete rather than leaving an empty
-  // decision. The wording applies equally to every kind of recovered QR code.
-  return `<div class="thanks"><img src="axolotl.png" alt="">
-    <span>${escapeHtml(window.qrBackend.privacyNote)}
-    ${escapeHtml(t("donation.successPrompt"))}</span>
-    <span class="links">${links}</span></div>`;
-}
 const drop = $("drop"), fileInput = $("file"), status = $("status");
 const progress = $("progress"), statusLive = $("statusLive"), workspace = $("workspace");
 const canvas = $("photo"), ctx = canvas.getContext("2d");
@@ -886,7 +913,7 @@ async function solve(points, outlineHint) {
   clearOutlineEditor(false);
   liveEnd(!!answer.ok);
   if (answer) {
-    render(answer);
+    renderAnswer(answer);
     if (answer.ok) {
       progressComplete(t("result.success"));
       celebrateRecovery();
@@ -1216,7 +1243,6 @@ $("catalogPdf").addEventListener("click", async () => {
   URL.revokeObjectURL(url);
   document.body.classList.remove("busy");
   progressComplete(t("catalogue.downloaded"));
-  $("catalogThanks").innerHTML = thanksHtml();
 });
 
 function informationGone(a) {
@@ -1251,8 +1277,9 @@ function verdictFor(a) {
   return ["warn", t("verdict.outOfReach")];
 }
 
-function render(a) {
+function renderAnswer(a) {
   lastSolved = !!a.ok;
+  companionDetail.payloadReady = false;
   $("results").classList.remove("hidden");
   $("payload").classList.remove("hidden");
   liveGrid = null;
@@ -1337,17 +1364,19 @@ function render(a) {
         }))}</span> ${escapeHtml(t("result.verifyAdvice"))}</div>`
       : "";
     payload.innerHTML =
-      `<div class="label" style="color:var(--pink)">${escapeHtml(t("result.recovered", {
+      `<h2 id="resultHeading" class="label" tabindex="-1" style="color:var(--pink)">${escapeHtml(t("result.recovered", {
         count: a.text.length,
-      }))}</div>
+      }))}</h2>
        <code>${escapeHtml(a.text)}</code>${knowledge}${caveat}
-       <div class="actions"><button id="copy">${escapeHtml(t("action.copy"))}</button></div>${thanksHtml()}`;
+       <div class="actions"><button id="copy">${escapeHtml(t("action.copy"))}</button></div>`;
     $("copy").addEventListener("click", async () => {
       const button = $("copy");
       try { await navigator.clipboard.writeText(a.text); button.textContent = t("clipboard.copied"); }
       catch { button.textContent = t("clipboard.failure"); }
       setTimeout(() => { button.textContent = t("clipboard.copy"); }, 1600);
     });
+    $("resultHeading").focus();
+    companionDetail.payloadReady = true;
   } else {
     // The moment of failure is the one moment advice is worth anything. The order follows
     // what actually rescues photographs, measured: geometry first, then the fusion.
@@ -1364,7 +1393,7 @@ function render(a) {
       tips.push(t("assistance.morePhotographs"));
     }
     payload.innerHTML =
-      `<div class="label" style="color:var(--bad)">${escapeHtml(t("result.notRecovered"))}</div>
+      `<h2 id="resultHeading" class="label" tabindex="-1" style="color:var(--bad)">${escapeHtml(t("result.notRecovered"))}</h2>
        <div class="note">${escapeHtml(a.failure || t("result.unknownReason"))}</div>
        <ul class="tips">${tips.map((tip) => `<li>${escapeHtml(tip)}</li>`).join("")}</ul>
        <div class="actions"><button id="addMore">${escapeHtml(t("action.addPhotographs"))}</button></div>`;
@@ -1444,6 +1473,7 @@ function panel(title, dataUrl, filename, note) {
 }
 
 $("retry").addEventListener("click", () => {
+  companionDetail.assistance = "finders";
   dispatchStudio({ type: "ASSISTANCE_REQUIRED" });
   clearOutlineEditor(false);
   picked = []; picking = true; draw();
@@ -1454,6 +1484,7 @@ $("retry").addEventListener("click", () => {
 });
 
 $("outlineRetry").addEventListener("click", () => {
+  companionDetail.assistance = "outline";
   dispatchStudio({ type: "ASSISTANCE_REQUIRED" });
   picked = []; picking = false;
   outlineEditing = true;
