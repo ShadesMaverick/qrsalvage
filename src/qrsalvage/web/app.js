@@ -159,6 +159,8 @@ let outlineEditing = false;
 let outlineCorners = [];
 let outlineMidpoints = [];
 let outlineDrag = null;
+let outlineKeyboardCursor = null;
+let outlineKeyboardHandle = null;
 let token = null;   // identifies the result the backend is holding for export
 let seq = 0;        // solve sequence; a late answer from a superseded run must not render
 let timerId = null;
@@ -470,6 +472,11 @@ function run() {
 drop.addEventListener("click", () => {
   if (!document.body.classList.contains("busy")) fileInput.click();
 });
+drop.addEventListener("keydown", (event) => {
+  if (event.target !== drop || !window.qrStudioState.isActivationKey(event.key)) return;
+  event.preventDefault();
+  if (!document.body.classList.contains("busy")) fileInput.click();
+});
 drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
 drop.addEventListener("dragleave", () => drop.classList.remove("over"));
 drop.addEventListener("drop", (e) => {
@@ -710,6 +717,19 @@ function drawEditableOutline(scale) {
     ctx.fillStyle = "#f7b3c8";
     ctx.fillText(String(i + 1), p.x * scale + 16, p.y * scale + 5);
   });
+  if (outlineKeyboardCursor) {
+    diamond(
+      outlineKeyboardCursor.x * scale,
+      outlineKeyboardCursor.y * scale,
+      7,
+      "#8fd3b0"
+    );
+  }
+  if (outlineKeyboardHandle && outlineCorners.length === 4) {
+    const points = outlineKeyboardHandle.kind === "corner" ? outlineCorners : outlineMidpoints;
+    const selected = points[outlineKeyboardHandle.index];
+    ring(selected.x * scale, selected.y * scale, 16, "#8fd3b0", 2.5);
+  }
 }
 
 function ring(x, y, r, colour, width) {
@@ -739,15 +759,18 @@ canvas.addEventListener("click", (e) => {
 });
 
 function updateOutlineInstructions() {
+  let message;
   if (outlineCorners.length < 4) {
     const next = t(DYNAMIC_LOCALE_KEYS.outlineCorners[outlineCorners.length]);
-    $("canvasNote").textContent = t("manual.outlineProgress", {
+    message = `${t("manual.outlineProgress", {
       count: outlineCorners.length,
       next,
-    });
-    return;
+    })} ${t("manual.outlineKeyboardPlace")}`;
+  } else {
+    message = `${t("manual.outlineAdjust")} ${t("manual.outlineKeyboardAdjust")}`;
   }
-  $("canvasNote").textContent = t("manual.outlineAdjust");
+  $("canvasNote").textContent = message;
+  canvas.setAttribute("aria-label", message);
 }
 
 function freezeOutlineEditor() {
@@ -763,8 +786,33 @@ function clearOutlineEditor(redraw = true) {
   freezeOutlineEditor();
   outlineCorners = [];
   outlineMidpoints = [];
+  outlineKeyboardCursor = null;
+  outlineKeyboardHandle = null;
+  canvas.setAttribute("aria-label", t("manual.outlineCanvas"));
   $("outlineSolve").hidden = true;
   if (redraw && loaded.length) draw();
+}
+
+function nextOutlineKeyboardCursor() {
+  const bitmap = loaded[0].bitmap;
+  const positions = [
+    [0.1, 0.1],
+    [0.9, 0.1],
+    [0.9, 0.9],
+    [0.1, 0.9],
+  ];
+  const [x, y] = positions[outlineCorners.length];
+  return { x: bitmap.width * x, y: bitmap.height * y };
+}
+
+function cycleOutlineKeyboardHandle(direction) {
+  const current = outlineKeyboardHandle
+    ? outlineKeyboardHandle.index + (outlineKeyboardHandle.kind === "midpoint" ? 4 : 0)
+    : 0;
+  const next = (current + direction + 8) % 8;
+  outlineKeyboardHandle = next < 4
+    ? { kind: "corner", index: next }
+    : { kind: "midpoint", index: next - 4 };
 }
 
 function outlineHandleAt(point) {
@@ -785,8 +833,12 @@ canvas.addEventListener("pointerdown", (e) => {
     outlineCorners.push(point);
     if (outlineCorners.length === 4) {
       outlineMidpoints = defaultEdgeMidpoints(outlineCorners);
+      outlineKeyboardCursor = null;
+      outlineKeyboardHandle = { kind: "corner", index: 0 };
       canvas.classList.add("outline-ready");
       $("outlineSolve").hidden = false;
+    } else {
+      outlineKeyboardCursor = nextOutlineKeyboardCursor();
     }
     updateOutlineInstructions();
     draw();
@@ -824,6 +876,44 @@ function finishOutlineDrag(e) {
 
 canvas.addEventListener("pointerup", finishOutlineDrag);
 canvas.addEventListener("pointercancel", finishOutlineDrag);
+
+canvas.addEventListener("keydown", (event) => {
+  if (!outlineEditing) return;
+  const command = window.qrOutlineEditor.keyboardCommand(event.key, event.shiftKey);
+  if (!command) return;
+  event.preventDefault();
+  if (command.type === "place") {
+    if (outlineCorners.length >= 4 || !outlineKeyboardCursor) return;
+    outlineCorners.push({ ...outlineKeyboardCursor });
+    if (outlineCorners.length === 4) {
+      outlineMidpoints = defaultEdgeMidpoints(outlineCorners);
+      outlineKeyboardCursor = null;
+      outlineKeyboardHandle = { kind: "corner", index: 0 };
+      canvas.classList.add("outline-ready");
+      $("outlineSolve").hidden = false;
+    } else {
+      outlineKeyboardCursor = nextOutlineKeyboardCursor();
+    }
+  } else if (command.type === "cycle" && outlineCorners.length === 4) {
+    cycleOutlineKeyboardHandle(command.direction);
+  } else if (command.type === "move") {
+    const bitmap = loaded[0].bitmap;
+    const step = Math.max(bitmap.width, bitmap.height) / 100 * command.multiplier;
+    const delta = { x: command.x * step, y: command.y * step };
+    if (outlineCorners.length < 4 && outlineKeyboardCursor) {
+      outlineKeyboardCursor.x = Math.max(0, Math.min(bitmap.width, outlineKeyboardCursor.x + delta.x));
+      outlineKeyboardCursor.y = Math.max(0, Math.min(bitmap.height, outlineKeyboardCursor.y + delta.y));
+    } else if (outlineKeyboardHandle) {
+      const moved = window.qrOutlineEditor.moveHandle(
+        outlineCorners, outlineMidpoints, outlineKeyboardHandle, delta
+      );
+      outlineCorners = moved.corners;
+      outlineMidpoints = moved.edgeMidpoints;
+    }
+  }
+  updateOutlineInstructions();
+  draw();
+});
 
 function busy(on, owner) {
   if (!on) {
@@ -1493,6 +1583,8 @@ $("outlineRetry").addEventListener("click", () => {
   outlineCorners = [];
   outlineMidpoints = [];
   outlineDrag = null;
+  outlineKeyboardCursor = nextOutlineKeyboardCursor();
+  outlineKeyboardHandle = null;
   canvas.classList.add("outline-editing");
   canvas.classList.remove("outline-ready", "outline-dragging");
   $("retry").hidden = true;
@@ -1501,6 +1593,7 @@ $("outlineRetry").addEventListener("click", () => {
   $("cancel").hidden = false;
   updateOutlineInstructions();
   draw();
+  canvas.focus();
 });
 
 $("outlineSolve").addEventListener("click", () => {

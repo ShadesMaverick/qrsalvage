@@ -87,7 +87,7 @@
       </div>
   <div id="workspace" aria-busy="false">
 
-  <div id="drop">
+  <div id="drop" role="button" tabindex="0" data-i18n-aria="action.choose">
     <p><strong id="dropTitle">Drop a photograph here</strong>
        <span id="dropMore">&nbsp;or click to choose one</span>
        <button id="cameraOpen" class="linkish hidden">· use the camera</button>
@@ -129,7 +129,8 @@
         <h2>Input</h2>
         <div id="thumbs" class="hidden"></div>
         <div id="photoStage" class="photo-stage" data-companion-anchor="canvas">
-          <canvas id="photo"></canvas>
+          <canvas id="photo" role="application" tabindex="0"
+                  data-i18n-aria="manual.outlineCanvas"></canvas>
           <div id="successLock" class="success-lock" aria-hidden="true">
             <span class="lock-corner top-left"></span>
             <span class="lock-corner top-right"></span>
