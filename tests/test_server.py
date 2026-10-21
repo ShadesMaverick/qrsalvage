@@ -119,21 +119,38 @@ function createHarness() {
     getComputedStyle() { return { transform: "none" }; },
     IntersectionObserver: FakeObserver,
   };
-  const button = { addEventListener() {} };
   const sprite = { style: {} };
+  const controls = [];
   const bubble = {
     hidden: true,
     style: {},
-    innerHTML: "",
+    _innerHTML: "",
     offsetWidth: 208,
     offsetHeight: 160,
+    get innerHTML() { return this._innerHTML; },
+    set innerHTML(value) {
+      this._innerHTML = value;
+      controls.length = 0;
+      if (value.includes("<a ")) {
+        controls.push({ tagName: "A", style: {}, addEventListener() {} });
+      }
+      if (value.includes("<button ")) {
+        controls.push({ tagName: "BUTTON", style: {}, addEventListener() {} });
+      }
+    },
     get offsetLeft() {
       return this.style.left ? Number.parseFloat(this.style.left) : 76;
     },
     get offsetTop() {
       return this.style.top ? Number.parseFloat(this.style.top) : 64;
     },
-    querySelector() { return button; },
+    querySelector(selector) {
+      return controls.find((control) => control.tagName === selector.toUpperCase()) ?? null;
+    },
+    querySelectorAll(selector) {
+      if (selector !== "a, button") throw new Error(`unexpected selector: ${selector}`);
+      return controls;
+    },
     replaceChildren() { this.innerHTML = ""; },
   };
   function anchor(rect) {
@@ -195,6 +212,14 @@ if (probe === "same-anchor-reduction") {
     motion: decision.motion,
     renderedMotion: harness.root.dataset.motion,
   }));
+} else if (probe === "same-anchor-active") {
+  harness.controller.update({ phase: "ready", payloadReady: false });
+  harness.controller.update({ phase: "ready", payloadReady: false });
+  process.stdout.write(JSON.stringify({
+    animationCount: harness.animations.length,
+    cancelled: harness.animations[0].cancelled,
+    motion: harness.root.dataset.motion,
+  }));
 } else if (probe === "destroy") {
   harness.controller.update({ phase: "recovering", payloadReady: false });
   harness.controller.destroy();
@@ -221,6 +246,30 @@ if (probe === "same-anchor-reduction") {
     y + harness.bubble.offsetTop + harness.bubble.offsetHeight,
   );
   process.stdout.write(JSON.stringify({ left, right, top, bottom }));
+} else if (probe === "pointer-policy") {
+  const initial = {
+    layer: harness.root.style.pointerEvents ?? null,
+    bubble: harness.bubble.style.pointerEvents ?? null,
+  };
+  harness.controller.update({ phase: "success", payloadReady: true });
+  const donationControls = harness.bubble.querySelectorAll("a, button").map((control) => ({
+    tagName: control.tagName,
+    pointerEvents: control.style.pointerEvents ?? null,
+  }));
+  harness.controller.update({
+    phase: "assistance", assistance: "outline", payloadReady: false,
+  });
+  const hintControls = harness.bubble.querySelectorAll("a, button").map((control) => ({
+    tagName: control.tagName,
+    pointerEvents: control.style.pointerEvents ?? null,
+  }));
+  process.stdout.write(JSON.stringify({
+    initial,
+    layer: harness.root.style.pointerEvents ?? null,
+    bubble: harness.bubble.style.pointerEvents ?? null,
+    donationControls,
+    hintControls,
+  }));
 } else {
   throw new Error(`unknown probe: ${probe}`);
 }
@@ -777,6 +826,12 @@ def test_companion_reduction_cancels_an_in_flight_same_anchor_animation():
     assert result == {"cancelled": 1, "motion": "still", "renderedMotion": "still"}
 
 
+def test_companion_same_anchor_active_update_preserves_in_flight_animation():
+    result = _call_companion_controller_probe("same-anchor-active")
+
+    assert result == {"animationCount": 1, "cancelled": 0, "motion": "active"}
+
+
 def test_companion_destroy_cancels_all_motion_and_leaves_a_still_sprite():
     result = _call_companion_controller_probe("destroy")
 
@@ -806,6 +861,21 @@ def test_companion_storage_prefers_memory_after_browser_storage_fails():
         "afterFailedRead": "true",
         "failedRead": None,
         "memoryAfterReadFailure": "true",
+    }
+
+
+def test_companion_controller_enforces_pointer_policy_for_dynamic_controls():
+    result = _call_companion_controller_probe("pointer-policy")
+
+    assert result == {
+        "initial": {"layer": "none", "bubble": "none"},
+        "layer": "none",
+        "bubble": "none",
+        "donationControls": [
+            {"tagName": "A", "pointerEvents": "auto"},
+            {"tagName": "BUTTON", "pointerEvents": "auto"},
+        ],
+        "hintControls": [{"tagName": "BUTTON", "pointerEvents": "auto"}],
     }
 
 
