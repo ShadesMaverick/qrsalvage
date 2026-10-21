@@ -665,172 +665,77 @@ def test_locale_dictionaries_have_identical_keys():
     assert keys["en"] == keys["de"]
 
 
-def test_locale_dictionaries_cover_every_runtime_copy_consumer():
-    keys = _call_web_module("locale.js", "dictionaryKeys")
-    required = {
-        "action.addPhotographs",
-        "action.copy",
-        "boot.ready",
-        "boot.starting",
-        "boot.startingIn",
-        "boot.once",
-        "boot.failure",
-        "camera.requesting",
-        "camera.requestingAnnouncement",
-        "camera.unavailable",
-        "camera.unavailableAnnouncement",
-        "camera.noteBurst",
-        "camera.noteSingle",
-        "camera.captureBurst",
-        "camera.captureSingle",
-        "camera.lightOn",
-        "camera.lightOff",
-        "camera.starting",
-        "camera.capturing",
-        "camera.capturingAnnouncement",
-        "camera.frame",
-        "camera.captured",
-        "camera.preparing",
-        "camera.preparingAnnouncement",
-        "camera.failure",
-        "camera.failureAnnouncement",
-        "input.readingOne",
-        "input.readingMany",
-        "input.readingOneAnnouncement",
-        "input.readingManyAnnouncement",
-        "input.unreadable",
-        "input.unreadableAnnouncement",
-        "input.drop",
-        "input.choose",
-        "input.loadedOne",
-        "input.loadedMany",
-        "input.more",
-        "input.remove",
-        "progress.preparing",
-        "progress.preparingAnnouncement",
-        "progress.photoCount",
-        "progress.recovering",
-        "progress.readingOne",
-        "progress.readingTogether",
-        "progress.largePhoto",
-        "progress.started",
-        "progress.startedWarning",
-        "progress.stage",
-        "manual.finderProgress",
-        "manual.findersReady",
-        "manual.outlineProgress",
-        "manual.outlineAdjust",
-        "manual.finderInstructions",
-        "manual.outlineReady",
-        "manual.topLeft",
-        "manual.topRight",
-        "manual.bottomRight",
-        "manual.bottomLeft",
-        "manual.markFinders",
-        "manual.markOutline",
-        "manual.recoverOutline",
-        "recovery.stage.image",
-        "recovery.stage.finders",
-        "recovery.stage.polarity",
-        "recovery.stage.grid",
-        "recovery.stage.chosen",
-        "recovery.stage.sampled",
-        "recovery.stage.repair",
-        "recovery.stage.probe",
-        "recovery.stage.member",
-        "recovery.stage.fusion",
-        "recovery.member",
-        "recovery.gridBow",
-        "recovery.gridRestart",
-        "recovery.probeAttempts",
-        "recovery.repairErasures",
-        "recovery.repairSets",
-        "recovery.memberProgress",
-        "diagnostics.modules",
-        "diagnostics.wrong",
-        "diagnostics.heatmap",
-        "diagnostics.title",
-        "diagnostics.details",
-        "diagnostics.matrix",
-        "metrics.image",
-        "metrics.route",
-        "metrics.directReader",
-        "metrics.finders",
-        "metrics.version",
-        "metrics.versionValue",
-        "metrics.knownWrong",
-        "metrics.timing",
-        "metrics.uncertain",
-        "metrics.decodeAttempts",
-        "metrics.reedSolomon",
-        "metrics.photographsFused",
-        "metrics.agreement",
-        "metrics.agreementLowest",
-        "metrics.cellsInDispute",
-        "metrics.dropped",
-        "metrics.droppedValue",
-        "metrics.mirrored",
-        "metrics.mirroredValue",
-        "verdict.direct",
-        "verdict.noGrid",
-        "verdict.noGridOne",
-        "verdict.clean",
-        "verdict.recovered",
-        "verdict.geometry",
-        "verdict.informationGone",
-        "verdict.outOfReach",
-        "result.showingFirst",
-        "result.success",
-        "result.failure",
-        "result.recovered",
-        "result.notRecovered",
-        "result.unknownReason",
-        "result.hardWon",
-        "result.verifyAdvice",
-        "result.noGridSampled",
-        "assistance.photographCloser",
-        "assistance.markFinders",
-        "assistance.informationLimited",
-        "assistance.morePhotographs",
-        "panel.recoveredMatrix",
-        "panel.recoveredMatrixNote",
-        "panel.cleanMatrix",
-        "panel.cleanMatrixNote",
-        "catalogue.untitled",
-        "catalogue.waiting",
-        "catalogue.notRecovered",
-        "catalogue.failureAdvice",
-        "catalogue.duplicate",
-        "catalogue.recovered",
-        "catalogue.titlePlaceholder",
-        "catalogue.version",
-        "catalogue.errorCorrection",
-        "catalogue.characters",
-        "catalogue.preparing",
-        "catalogue.preparingAnnouncement",
-        "catalogue.preparingWarning",
-        "catalogue.recovering",
-        "catalogue.recoveringAnnouncement",
-        "catalogue.recoveryFailure",
-        "catalogue.complete",
-        "catalogue.preparingDownload",
-        "catalogue.preparingDownloadAnnouncement",
-        "catalogue.exportFailure",
-        "catalogue.exportFailureAnnouncement",
-        "catalogue.downloaded",
-        "export.preparing",
-        "export.preparingAnnouncement",
-        "export.failure",
-        "export.failureAnnouncement",
-        "export.downloaded",
-        "export.downloadPng",
-        "export.advanced",
-        "clipboard.copied",
-        "clipboard.failure",
-        "clipboard.copy",
-        "donation.successPrompt",
+def test_locale_manifest_covers_every_static_app_and_html_consumer():
+    web = ROOT / "src" / "qrsalvage" / "web"
+    script = (web / "app.js").read_text(encoding="utf-8")
+    keys = set(_call_web_module("locale.js", "dictionaryKeys")["en"])
+
+    literal_calls = {
+        key
+        for _, key in re.findall(r"(?<![\w.])t\(\s*(['\"])([^'\"]+)\1", script)
     }
-    assert required <= set(keys["en"])
+    call_heads = re.findall(r'(?<![\w.])t\(\s*([^,\n)]+)', script)
+    dynamic_calls = {
+        head.strip()
+        for head in call_heads
+        if not head.lstrip().startswith(('"', "'"))
+    }
+    assert dynamic_calls == {
+        "DYNAMIC_LOCALE_KEYS.outlineCorners[outlineCorners.length]",
+        "DYNAMIC_LOCALE_KEYS.recoveryStages[e.type]",
+    }
+
+    manifest = re.search(
+        r"// DYNAMIC-LOCALE-CONSUMERS: START(?P<body>.*?)"
+        r"// DYNAMIC-LOCALE-CONSUMERS: END",
+        script,
+        re.DOTALL,
+    )
+    assert manifest is not None
+    dynamic_keys = {
+        key
+        for _, key in re.findall(
+            r"(['\"])([a-z][A-Za-z0-9]*(?:\.[A-Za-z0-9]+)+)\1",
+            manifest["body"],
+        )
+    }
+
+    html_keys = set()
+    for page in web.glob("*.html"):
+        html_keys.update(key for _, key in re.findall(
+            r"data-i18n(?:-aria)?=(['\"])([^'\"]+)\1",
+            page.read_text(encoding="utf-8"),
+        ))
+
+    consumers = literal_calls | dynamic_keys | html_keys
+    assert consumers <= keys, f"Unknown locale consumers: {sorted(consumers - keys)}"
+
+
+def test_locale_translate_rejects_an_unknown_key():
+    helper = ROOT / "src" / "qrsalvage" / "web" / "locale.js"
+    script = r"""
+const { translate } = require(process.argv[1]);
+let outcome;
+try {
+  translate("en", "review.deliberatelyMissing");
+  outcome = { threw: false };
+} catch (error) {
+  outcome = { threw: true, message: error.message };
+}
+process.stdout.write(JSON.stringify(outcome));
+"""
+    completed = subprocess.run(
+        ["node", "-e", script, str(helper)],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert completed.returncode == 0, completed.stderr
+    assert json.loads(completed.stdout) == {
+        "threw": True,
+        "message": "Unknown translation key: review.deliberatelyMissing",
+    }
 
 
 def test_locale_controller_applies_the_dom_and_survives_failed_storage():
