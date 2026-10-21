@@ -95,6 +95,9 @@ Break any of these and the project stops being itself:
 | **Oracle** | `core/oracle.py`, swap with `oracle.use()` | the single native dependency (zxing-cpp); the browser build hands in the same oracle compiled to WASM, both directions synchronous |
 | **Request layer** | `api.py` | what a shell asks for from how the request travelled; validates the single-image manual clockwise outline before it reaches the core; the local server and the browser worker call these same functions, so their answers cannot diverge |
 | **Backend** | `web/backend-server.js` / `web/backend-worker.js`, one of them installed as `backend.js` | the page from where the work happens — loopback HTTP or Pyodide in a worker |
+| **Browser state** | `web/studio-state.js` | the pure recovery phase and easy/pro mode from browser presentation; it has no transport or DOM responsibility |
+| **Browser copy** | `web/locale.js` | visible and accessible English/German copy from behavior and API payloads |
+| **Companion** | `web/companion.js` | presentation of the current state as the axolotl companion; it never decides recovery behavior |
 | **Progress** | `progress=` callback on `solve()`/`solve_many()` | live reporting from the core without the core knowing who listens; feeds the CLI, the NDJSON stream and the worker unchanged |
 | **Fusion** | `ensemble.fuse_images`, rules in `FUSION_RULES` | how several photographs of one code are combined |
 | **Payload intelligence** | `export.payload_fields` | conservatively identifying recovered content (Zigbee, Matter, Wi-Fi, URL, email, phone, SMS, geo, vCard or plain text) without guessing its product or purpose |
@@ -113,11 +116,32 @@ Break any of these and the project stops being itself:
 | handle coloured overlays (marker, guide lines) | `preprocess.prepare` (`NEUTRAL_SATURATION`) — ships off, cap at zero; `scripts/ab_marker.py` is the instrument that says why |
 | change what the repair may try | `repair.py`; the decode chain order is `pipeline._decode_chain` |
 | add an export format | `export.py`, wired into the request layer in `api.py` (both web shells inherit it) |
-| change the web page | `web/index.html` + `web/app.js` + `web/style.css` — static files, no build step; served by `server.py` locally and copied verbatim into the published site |
+| change the web page | `web/index.html`, `web/style.css`, `web/app.js`, `web/studio-state.js`, `web/locale.js`, `web/companion.js` and `web/outline-editor.js` — static files, no build step; served by `server.py` locally and copied verbatim into the published site |
 | change what a shell may ask for | `api.py` — never one of the two backends, or the paths drift |
 | work on the published site | `scripts/build_site.py` assembles `site/`; `web/worker.js` is the browser's shell over the core |
 | add a payload type | `export.payload_fields` + a `*_fields` parser + `PAYLOAD_HINTS` |
 | touch anything user-visible about waiting | the progress events (`pipeline._emit` call sites) and their consumers |
+
+## Browser module flow
+
+The browser side has one direction of control; presentation never feeds decisions back into
+recovery:
+
+```text
+backend progress + user actions
+        -> app.js
+        -> studio-state.js (pure phase/mode)
+        -> companion.js (presentation only)
+        -> DOM/CSS
+
+locale.js -> visible and accessible copy only
+```
+
+`app.js` is the coordinator. `studio-state.js` reduces only phase and mode, `companion.js`
+renders their presentation, and `locale.js` supplies human-facing and assistive copy. No UI
+module may change API payloads or import the core. The API contract remains the boundary, so
+the loopback `backend-server.js` and browser-worker `backend-worker.js` stay interchangeable
+under the same `backend.js` name.
 
 ## Repository conventions
 

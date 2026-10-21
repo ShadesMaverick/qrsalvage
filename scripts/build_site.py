@@ -99,7 +99,8 @@ PYODIDE_PACKAGES = ("numpy", "opencv-python")
 
 # The page, file by file. Named rather than globbed for the same reason server.py names them:
 # a build that silently ships whatever happens to lie in the source directory is a build that
-# one day ships a scratch file.
+# one day ships a scratch file. tests/test_repository.py keeps this explicit Pages inventory,
+# the server allowlist and the wheel's deliberately shallow package-data patterns in agreement.
 PAGE_FILES = (
     "index.html",
     "method.html",

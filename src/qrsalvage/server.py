@@ -5,10 +5,10 @@ damaged code is often a secret -- a device pairing code, a key, a serial number 
 that to a server would defeat the point. Nothing here reaches out to the network, and the
 listening socket is not reachable from another machine.
 
-The page lives in qrsalvage/web/ as three static files -- markup, style, script. No build
-step, no package manager, no dependency that can go stale. They sit inside the package rather
-than beside it: resolving them against the repository root worked from a source checkout and
-would have shipped a wheel with no page in it at all.
+The page lives in qrsalvage/web/ as explicitly inventoried markup, styles, browser modules and
+images. There is no build step, package manager or dependency that can go stale. The assets sit
+inside the package rather than beside it: resolving them against the repository root worked from
+a source checkout and would have shipped a wheel with no page in it at all.
 
 The answers themselves are built in api.py, which knows nothing about HTTP. This file is the
 socket, the headers and the status codes -- and nothing else. The browser build calls that
@@ -148,7 +148,8 @@ class Handler(BaseHTTPRequestHandler):
 
     # Only these, by name. No path joining, so no traversal to worry about. The figures on the
     # method page are listed one by one for the same reason; docs/make_method_figures.py builds
-    # them, and test_server.py checks that every figure the page asks for is in here.
+    # them. The repository inventory contract keeps the production UI assets aligned with the
+    # Pages build and the wheel's deliberately shallow package-data patterns.
     STATIC = {
         "/": ("index.html", "text/html; charset=utf-8"),
         "/index.html": ("index.html", "text/html; charset=utf-8"),
