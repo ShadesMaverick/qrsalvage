@@ -107,6 +107,7 @@ PAGE_FILES = (
     "robots.txt",
     "sitemap.xml",
     "outline-editor.js",
+    "locale.js",
     "app.js",
     "worker.js",
     "style.css",
