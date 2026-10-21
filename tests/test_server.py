@@ -328,7 +328,12 @@ if (probeName === "failure-locale") {
     liveEvent,
     load(entry) { loaded = [entry]; },
   };`;
-} else if (probeName === "malformed-success") {
+} else if (
+  probeName === "malformed-success" ||
+  probeName === "malformed-payload-guard" ||
+  probeName === "malformed-payload-solve" ||
+  probeName === "malformed-payload-catalogue"
+) {
   exposure = `globalThis.__app = {
     solve,
     catalogRun,
@@ -361,6 +366,20 @@ const failure = {
   grid: "",
   exportable: false,
 };
+const successfulAnswer = (payloadInfo) => ({
+  ok: true,
+  text: "MT:Y.K9042C00KA0648G00",
+  finders: [],
+  width: 16,
+  height: 8,
+  images_given: 1,
+  candidates_tried: 1,
+  source: "direct",
+  clean_png: "data:image/png;base64,AA==",
+  token: "public-token",
+  exportable: true,
+  payload_info: payloadInfo,
+});
 
 if (probeName === "failure-locale") {
   const localizedFailures = {};
@@ -521,6 +540,59 @@ if (probeName === "failure-locale") {
         backendSolveCalls,
       }));
     });
+  }).catch((error) => { console.error(error); process.exitCode = 1; });
+} else if (probeName === "malformed-payload-guard") {
+  const malformed = [
+    { kind: "unknown", fields: {} },
+    { kind: "matter" },
+    { kind: "matter", fields: [] },
+    { kind: "matter", fields: { unknown_field: "value" } },
+  ];
+  const rejected = malformed.map((payloadInfo) => {
+    try { app.requireSolveAnswer(successfulAnswer(payloadInfo)); return null; }
+    catch (error) { return String(error); }
+  });
+  const valid = successfulAnswer({
+    kind: "matter",
+    label: "Matter onboarding code",
+    hint: "A Matter onboarding code.",
+    fields: {
+      manual_pairing_code: "3497-011-2332",
+      setup_passcode: "20202021",
+      discriminator: 3840,
+      vendor_id: 65521,
+      product_id: 32768,
+      commissioning_flow: "standard",
+      discovery: "on network",
+      warning: "passcode and manual code commission the device. Treat them like keys.",
+    },
+  });
+  process.stdout.write(JSON.stringify({
+    rejected,
+    successUnchanged: app.requireSolveAnswer(valid) === valid,
+  }));
+} else if (probeName === "malformed-payload-solve") {
+  app.setBackendAnswer(successfulAnswer({ kind: "unknown", fields: {} }));
+  app.load(entry);
+  app.solve().then(() => {
+    process.stdout.write(JSON.stringify({
+      status: getElement("status").textContent,
+      phase: app.phase(),
+      backendSolveCalls,
+    }));
+  }).catch((error) => { console.error(error); process.exitCode = 1; });
+} else if (probeName === "malformed-payload-catalogue") {
+  app.setBackendAnswer(successfulAnswer({
+    kind: "matter",
+    fields: { unknown_field: "value" },
+  }));
+  app.load(entry);
+  app.catalogRun().then(() => {
+    process.stdout.write(JSON.stringify({
+      status: getElement("status").textContent,
+      phase: app.phase(),
+      backendSolveCalls,
+    }));
   }).catch((error) => { console.error(error); process.exitCode = 1; });
 }
 """
@@ -1391,6 +1463,29 @@ def test_app_rejects_incomplete_successes_inside_solve_and_catalogue():
     assert result["catalogueFailure"]["phase"] == "failure"
     assert result["successUnchanged"] is True
     assert result["backendSolveCalls"] == 2
+
+
+def test_app_rejects_malformed_payload_metadata_without_weakening_real_payloads():
+    result = _call_app_runtime_probe("malformed-payload-guard")
+
+    assert all("incomplete successful result" in message for message in result["rejected"])
+    assert result["successUnchanged"] is True
+
+
+def test_app_rejects_unknown_payload_kind_inside_solve():
+    result = _call_app_runtime_probe("malformed-payload-solve")
+
+    assert "incomplete successful result" in result["status"]
+    assert result["phase"] == "failure"
+    assert result["backendSolveCalls"] == 1
+
+
+def test_app_rejects_unknown_payload_field_inside_catalogue():
+    result = _call_app_runtime_probe("malformed-payload-catalogue")
+
+    assert "incomplete successful result" in result["status"]
+    assert result["phase"] == "failure"
+    assert result["backendSolveCalls"] == 1
 
 
 def test_outline_editor_is_served_with_touch_and_curved_geometry(running_server):

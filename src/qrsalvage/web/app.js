@@ -1073,12 +1073,17 @@ function requireSolveAnswer(answer) {
       Array.isArray(answer.fusion.mirrored) &&
       Number.isFinite(answer.fusion.disagreeing)
     );
-    const payload = !answer.payload_info || (
-      typeof answer.payload_info === "object" &&
-      typeof answer.payload_info.kind === "string" &&
-      typeof answer.payload_info.fields === "object" &&
-      answer.payload_info.fields !== null
-    );
+    const payload = !answer.payload_info || (() => {
+      const { kind, fields } = answer.payload_info;
+      const owns = (map, key) => Object.prototype.hasOwnProperty.call(map, key);
+      return typeof answer.payload_info === "object" &&
+        owns(DYNAMIC_LOCALE_KEYS.payloadLabels, kind) &&
+        owns(DYNAMIC_LOCALE_KEYS.payloadHints, kind) &&
+        typeof fields === "object" && fields !== null && !Array.isArray(fields) &&
+        Object.keys(fields).every((key) =>
+          key === "warning" || owns(DYNAMIC_LOCALE_KEYS.payloadFields, key)
+        );
+    })();
     if (!complete || !measured || !fusion || !payload) {
       throw new Error("the recovery engine returned an incomplete successful result");
     }
