@@ -99,6 +99,350 @@ window.qrBackend.solve({ images: ["public"] }, (event) => events.push(event))
     return json.loads(completed.stdout)
 
 
+def _call_backend_contract_probe():
+    web = ROOT / "src" / "qrsalvage" / "web"
+    script = r"""
+global.window = {};
+global.fetch = async () => { throw new Error("not called"); };
+require(process.argv[1]);
+const server = window.qrBackend;
+delete require.cache[require.resolve(process.argv[2])];
+global.window = {};
+global.document = { baseURI: "https://example.invalid/" };
+global.Worker = class Worker {};
+require(process.argv[2]);
+const worker = window.qrBackend;
+process.stdout.write(JSON.stringify({
+  server: {
+    failurePrefixKey: server.failurePrefixKey,
+    rawFailurePrefix: server.failurePrefix,
+  },
+  worker: {
+    failurePrefixKey: worker.failurePrefixKey,
+    rawFailurePrefix: worker.failurePrefix,
+  },
+}));
+"""
+    completed = subprocess.run(
+        [
+            "node",
+            "-e",
+            script,
+            str(web / "backend-server.js"),
+            str(web / "backend-worker.js"),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=10,
+    )
+    assert completed.returncode == 0, completed.stderr
+    return json.loads(completed.stdout)
+
+
+def _call_app_runtime_probe(probe: str):
+    web = ROOT / "src" / "qrsalvage" / "web"
+    script = r"""
+const fs = require("fs");
+const vm = require("vm");
+const probeName = process.argv[5];
+const elements = new Map();
+const documentListeners = new Map();
+let activeLocale = "en";
+let backendSolveCalls = 0;
+
+function classList() {
+  const names = new Set();
+  return {
+    add(...values) { values.forEach((value) => names.add(value)); },
+    remove(...values) { values.forEach((value) => names.delete(value)); },
+    contains(value) { return names.has(value); },
+    toggle(value, force) {
+      const enabled = force === undefined ? !names.has(value) : Boolean(force);
+      if (enabled) names.add(value); else names.delete(value);
+      return enabled;
+    },
+    toString() { return [...names].join(" "); },
+  };
+}
+
+const context2d = {
+  beginPath() {}, arc() {}, stroke() {}, moveTo() {}, lineTo() {}, closePath() {}, fill() {},
+  drawImage() {}, strokeText() {}, fillText() {}, quadraticCurveTo() {}, putImageData() {},
+  createImageData(width, height) {
+    return { data: new Uint8ClampedArray(width * height * 4) };
+  },
+};
+
+function element(id = "") {
+  const listeners = new Map();
+  const attributes = new Map();
+  const node = {
+    id,
+    hidden: false,
+    disabled: false,
+    open: false,
+    width: 0,
+    height: 0,
+    value: "",
+    checked: false,
+    textContent: "",
+    innerHTML: "",
+    dataset: {},
+    style: {},
+    classList: classList(),
+    addEventListener(name, callback) { listeners.set(name, callback); },
+    emit(name, event = {}) {
+      const callback = listeners.get(name);
+      if (callback) callback({ preventDefault() {}, stopPropagation() {}, ...event });
+    },
+    setAttribute(name, value) { attributes.set(name, String(value)); },
+    removeAttribute(name) { attributes.delete(name); },
+    getAttribute(name) { return attributes.get(name) ?? null; },
+    querySelector() { return element(`${id}-child`); },
+    querySelectorAll() { return []; },
+    getContext() { return context2d; },
+    getBoundingClientRect() {
+      return {
+        left: 0,
+        top: 0,
+        width: Number.parseFloat(this.style.width) || this.width || 100,
+        height: Number.parseFloat(this.style.height) || this.height || 100,
+      };
+    },
+    hasPointerCapture() { return false; },
+    setPointerCapture() {},
+    releasePointerCapture() {},
+    appendChild() {},
+    replaceChildren() { this.innerHTML = ""; },
+    focus() {},
+    click() { this.emit("click"); },
+  };
+  return node;
+}
+
+function getElement(id) {
+  if (!elements.has(id)) elements.set(id, element(id));
+  return elements.get(id);
+}
+
+const document = {
+  body: getElement("body"),
+  documentElement: getElement("html"),
+  getElementById: getElement,
+  querySelectorAll() { return []; },
+  querySelector() { return null; },
+  createElement(tag) { return element(tag); },
+  addEventListener(name, callback) { documentListeners.set(name, callback); },
+};
+const locale = require(process.argv[2]);
+const media = { matches: false, addEventListener() {} };
+const browserWindow = {
+  document,
+  qrLocale: { t(key, values) { return locale.translate(activeLocale, key, values); } },
+  qrStudioState: require(process.argv[3]),
+  qrOutlineEditor: require(process.argv[4]),
+  qrCompanion: { createCompanionController() { return {
+    update() { return { motion: "walk" }; },
+    refreshLocale() {},
+  }; } },
+  qrBackend: {
+    modeKey: "backend.mode.server",
+    privacyKey: "privacy.server",
+    failurePrefixKey: "backend.failure.server",
+    ready: Promise.resolve(),
+    onBoot() {},
+    solve() { backendSolveCalls += 1; return Promise.resolve({ ok: false }); },
+    file() { throw new Error("not called"); },
+  },
+  localStorage: { getItem() { return null; }, setItem() {} },
+  sessionStorage: { getItem() { return null; }, setItem() {} },
+  matchMedia() { return media; },
+};
+document.defaultView = browserWindow;
+const sandbox = {
+  window: browserWindow,
+  document,
+  navigator: { mediaDevices: null, clipboard: { writeText: async () => {} } },
+  console,
+  URL: { createObjectURL() { return "blob:test"; }, revokeObjectURL() {} },
+  Blob,
+  atob,
+  Uint8Array,
+  Uint8ClampedArray,
+  Symbol,
+  Map,
+  Set,
+  Promise,
+  Math,
+  Number,
+  String,
+  Object,
+  Array,
+  JSON,
+  Date,
+  parseInt,
+  parseFloat,
+  isFinite,
+  setTimeout() { return 1; },
+  clearTimeout() {},
+  setInterval() { return 1; },
+  clearInterval() {},
+  requestAnimationFrame(callback) { callback(); return 1; },
+};
+sandbox.globalThis = sandbox;
+const appSource = fs.readFileSync(process.argv[1], "utf8");
+let exposure;
+if (probeName === "failure-locale") {
+  exposure = `globalThis.__app = {
+    showBackendFailure,
+    setFailurePhase() { studioState = { ...studioState, phase: "failure" }; },
+  };`;
+} else if (probeName === "assistance-locale") {
+  exposure = `globalThis.__app = {
+    renderAnswer,
+    syncAssistanceControls,
+    load(entry) { loaded = [entry]; },
+    setFinders(points) { picking = true; picked = points; outlineEditing = false; },
+    setOutline(corners, midpoints) {
+      picking = false; picked = []; outlineEditing = true;
+      outlineCorners = corners; outlineMidpoints = midpoints;
+    },
+    geometry() { return { corners: outlineCorners, midpoints: outlineMidpoints }; },
+  };`;
+} else if (probeName === "narrow-failure") {
+  exposure = `globalThis.__app = {
+    requireSolveAnswer,
+    renderAnswer,
+    load(entry) { loaded = [entry]; },
+  };`;
+} else if (probeName === "dynamic-targets") {
+  exposure = `globalThis.__app = {
+    liveEvent,
+    load(entry) { loaded = [entry]; },
+  };`;
+} else {
+  throw new Error(`unknown probe: ${probeName}`);
+}
+vm.runInNewContext(`${appSource}\n${exposure}`, sandbox, { filename: process.argv[1] });
+const app = sandbox.__app;
+const emitLocaleChange = () => documentListeners.get("qrsalvage:localechange")();
+const snapshotControls = () => ({
+  retry: getElement("retry").hidden,
+  outlineRetry: getElement("outlineRetry").hidden,
+  outlineSolve: getElement("outlineSolve").hidden,
+  cancel: getElement("cancel").hidden,
+});
+const bitmap = { width: 16, height: 8, close() {} };
+const entry = { bitmap, dataUrl: "data:image/png;base64,AA==", name: "small.png" };
+const failure = {
+  ok: false,
+  failure: "not recovered",
+  finders: [],
+  width: 16,
+  height: 8,
+  modules: null,
+  grid: "",
+  exportable: false,
+};
+
+if (probeName === "failure-locale") {
+  app.showBackendFailure(new Error("503"), "result.failure");
+  app.setFailurePhase();
+  const english = getElement("status").textContent;
+  activeLocale = "de";
+  emitLocaleChange();
+  process.stdout.write(JSON.stringify({
+    english,
+    german: getElement("status").textContent,
+    detail: "Error: 503",
+    backendSolveCalls,
+  }));
+} else if (probeName === "assistance-locale") {
+  app.load(entry);
+  app.renderAnswer(failure, { focus: false });
+  app.setFinders([{ x: 2, y: 3 }]);
+  app.syncAssistanceControls(true);
+  const findersBefore = snapshotControls();
+  activeLocale = "de";
+  emitLocaleChange();
+  const findersAfter = snapshotControls();
+  const corners = [
+    { x: 1, y: 1 }, { x: 14, y: 1 }, { x: 14, y: 7 }, { x: 1, y: 7 },
+  ];
+  const midpoints = [
+    { x: 8, y: 1 }, { x: 14, y: 4 }, { x: 8, y: 7 }, { x: 1, y: 4 },
+  ];
+  app.setOutline(corners, midpoints);
+  app.syncAssistanceControls(true);
+  const outlineBefore = snapshotControls();
+  const geometryBefore = app.geometry();
+  activeLocale = "en";
+  emitLocaleChange();
+  process.stdout.write(JSON.stringify({
+    findersBefore,
+    findersAfter,
+    outlineBefore,
+    outlineAfter: snapshotControls(),
+    geometryBefore,
+    geometryAfter: app.geometry(),
+    backendSolveCalls,
+  }));
+} else if (probeName === "narrow-failure") {
+  app.load(entry);
+  const narrow = app.requireSolveAnswer({
+    ok: false,
+    failure: "at most 12 photographs of one code at a time",
+  });
+  app.renderAnswer(narrow, { focus: false });
+  const success = {
+    ok: true,
+    text: "PUBLIC",
+    finders: [],
+    width: 16,
+    height: 8,
+    source: "direct",
+  };
+  process.stdout.write(JSON.stringify({
+    payload: getElement("payload").innerHTML,
+    verdict: getElement("verdict").textContent,
+    finders: narrow.finders,
+    successUnchanged: app.requireSolveAnswer(success) === success,
+  }));
+} else if (probeName === "dynamic-targets") {
+  app.load(entry);
+  app.liveEvent({ type: "finders", points: [] });
+  getElement("outlineRetry").emit("click");
+  process.stdout.write(JSON.stringify({
+    liveStage: getElement("liveStage").innerHTML,
+    canvasClass: getElement("photo").classList.toString(),
+    canvasWidth: getElement("photo").width,
+    canvasHeight: getElement("photo").height,
+  }));
+}
+"""
+    completed = subprocess.run(
+        [
+            "node",
+            "-e",
+            script,
+            str(web / "app.js"),
+            str(web / "locale.js"),
+            str(web / "studio-state.js"),
+            str(web / "outline-editor.js"),
+            probe,
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=10,
+    )
+    assert completed.returncode == 0, completed.stderr
+    return json.loads(completed.stdout)
+
+
 def _call_companion_controller_probe(probe: str):
     helper = ROOT / "src" / "qrsalvage" / "web" / "companion.js"
     app = ROOT / "src" / "qrsalvage" / "web" / "app.js"
@@ -831,6 +1175,14 @@ def test_app_rejects_a_missing_or_malformed_backend_answer_before_rendering():
     assert solve.index("requireSolveAnswer(answer)") < solve.index("answer.ok")
 
 
+def test_app_normalizes_narrow_api_failures_without_weakening_successes():
+    result = _call_app_runtime_probe("narrow-failure")
+
+    assert "at most 12 photographs of one code at a time" in result["payload"]
+    assert result["finders"] == []
+    assert result["successUnchanged"] is True
+
+
 def test_outline_editor_is_served_with_touch_and_curved_geometry(running_server):
     """The manual escape hatch must survive unchanged in every static deployment."""
     host, port = running_server
@@ -1306,6 +1658,47 @@ def test_locale_change_rerenders_runtime_state_without_starting_recovery():
     assert "window.qrBackend.file" not in handler
 
 
+def test_backend_failure_prefix_is_localized_again_without_losing_technical_detail():
+    contract = _call_backend_contract_probe()
+    result = _call_app_runtime_probe("failure-locale")
+
+    assert contract == {
+        "server": {
+            "failurePrefixKey": "backend.failure.server",
+        },
+        "worker": {
+            "failurePrefixKey": "backend.failure.browser",
+        },
+    }
+    assert result["english"].endswith(result["detail"])
+    assert result["german"].endswith(result["detail"])
+    assert result["english"] != result["german"]
+    assert result["backendSolveCalls"] == 0
+
+
+def test_locale_rerender_preserves_active_assistance_controls_and_geometry():
+    result = _call_app_runtime_probe("assistance-locale")
+
+    finder_controls = {
+        "retry": True,
+        "outlineRetry": True,
+        "outlineSolve": True,
+        "cancel": False,
+    }
+    outline_controls = {
+        "retry": True,
+        "outlineRetry": True,
+        "outlineSolve": False,
+        "cancel": False,
+    }
+    assert result["findersBefore"] == finder_controls
+    assert result["findersAfter"] == finder_controls
+    assert result["outlineBefore"] == outline_controls
+    assert result["outlineAfter"] == outline_controls
+    assert result["geometryAfter"] == result["geometryBefore"]
+    assert result["backendSolveCalls"] == 0
+
+
 def test_studio_modes_share_controls_and_only_change_disclosure():
     web = ROOT / "src" / "qrsalvage" / "web"
     page = (web / "index.html").read_text(encoding="utf-8")
@@ -1379,6 +1772,7 @@ def test_locale_manifest_covers_every_static_app_and_html_consumer():
         "direct",
         "hintKey",
         "labelKey",
+        "lastBackendFailure.prefixKey",
         "localeKey",
         "warningKey",
         "window.qrBackend.modeKey",
@@ -1549,6 +1943,22 @@ def test_every_visible_interactive_kind_has_a_forty_four_pixel_contract():
         assert selector in rule["selectors"], selector
     assert "min-width: 44px" in rule["body"]
     assert "min-height: 44px" in rule["body"]
+
+
+def test_dynamic_live_link_and_outline_canvas_keep_44_pixel_targets():
+    style = (ROOT / "src" / "qrsalvage" / "web" / "style.css").read_text(encoding="utf-8")
+    state = _call_app_runtime_probe("dynamic-targets")
+
+    live_link = re.search(r"#live \.stage a\s*\{(?P<body>[^}]*)\}", style, re.DOTALL)
+    outline_canvas = re.search(r"canvas\.outline-editing\s*\{(?P<body>[^}]*)\}", style, re.DOTALL)
+    assert '<a href="method.html#search"' in state["liveStage"]
+    assert "outline-editing" in state["canvasClass"]
+    assert live_link is not None
+    assert "min-height: 44px" in live_link["body"]
+    assert outline_canvas is not None
+    assert "min-width: 44px" in outline_canvas["body"]
+    assert "min-height: 44px" in outline_canvas["body"]
+    assert (state["canvasWidth"], state["canvasHeight"]) == (16, 8)
 
 
 def test_generated_png_download_is_one_anchor_control_not_nested_interactives():

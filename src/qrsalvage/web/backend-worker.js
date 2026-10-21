@@ -73,7 +73,7 @@ window.qrBackend = (() => {
   return {
     modeKey: "backend.mode.browser",
     privacyKey: "privacy.browser",
-    failurePrefix: "the recovery engine failed: ",
+    failurePrefixKey: "backend.failure.browser",
     ready,
     onBoot(fn) {
       bootListeners.push(fn);

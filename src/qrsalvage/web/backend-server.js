@@ -8,7 +8,7 @@
  *
  *   qrBackend.modeKey        locale key naming where recovery runs
  *   qrBackend.privacyKey     locale key saying "this stayed with you" truthfully
- *   qrBackend.failurePrefix  how to introduce a failure that is the backend's fault
+ *   qrBackend.failurePrefixKey  locale key introducing a failure that is the backend's fault
  *   qrBackend.ready          a promise that resolves once recovering is possible
  *   qrBackend.onBoot(fn)     progress while that promise is pending (here: nothing to report)
  *   qrBackend.solve(payload, onEvent)  -> the answer of api.solve_payload; onEvent per event
@@ -20,7 +20,7 @@
 window.qrBackend = {
   modeKey: "backend.mode.server",
   privacyKey: "privacy.server",
-  failurePrefix: "the local server did not answer: ",
+  failurePrefixKey: "backend.failure.server",
   ready: Promise.resolve(),
   onBoot() {},
 
