@@ -253,6 +253,16 @@ function announce(message) {
   statusLive.textContent = message;
 }
 
+function showStatusText(message) {
+  lastBackendFailure = null;
+  status.textContent = message;
+}
+
+function showStatusHtml(message) {
+  lastBackendFailure = null;
+  status.innerHTML = message;
+}
+
 function stopElapsedTimer() {
   clearInterval(timerId);
   timerId = null;
@@ -282,11 +292,11 @@ function progressComplete(message) {
   const owner = Symbol("complete");
   progressOwner = owner;
   progress.classList.add("complete");
-  status.textContent = message;
+  showStatusText(message);
   announce(message);
   statusTimer = setTimeout(() => {
     if (progressOwner === owner) {
-      status.textContent = "";
+      showStatusText("");
       progressIdle(owner);
     }
   }, 4000);
@@ -328,10 +338,11 @@ function renderBackendFailure() {
   status.textContent = t(lastBackendFailure.prefixKey) + lastBackendFailure.detail;
 }
 
-function showBackendFailure(error) {
+function showBackendFailure(error, announcementKey) {
   lastBackendFailure = {
     prefixKey: window.qrBackend.failurePrefixKey,
     detail: String(error),
+    announcementKey,
   };
   renderBackendFailure();
 }
@@ -343,7 +354,7 @@ function showBackendFailure(error) {
 window.qrBackend.onBoot((event) => {
   if (event.done) {
     if (progressOwner === bootProgressOwner && progressIdle(bootProgressOwner)) {
-      status.textContent = "";
+      showStatusText("");
       announce(t("boot.ready"));
     }
     return;
@@ -353,10 +364,11 @@ window.qrBackend.onBoot((event) => {
   const seconds = event.seconds
     ? ` <span class="mono">${escapeHtml(Number(event.seconds))} s</span>`
     : "";
-  status.innerHTML =
+  showStatusHtml(
     escapeHtml(t("boot.startingIn", { mode: t(window.qrBackend.modeKey) })) +
     ` — ${escapeHtml(event.stage)}${seconds}` +
-    `<span class="quiet"> — ${escapeHtml(t("boot.once"))}</span>`;
+    `<span class="quiet"> — ${escapeHtml(t("boot.once"))}</span>`
+  );
   announce(t("boot.starting", { stage: event.stage }));
 });
 
@@ -368,7 +380,7 @@ async function backendReady(owner) {
   } catch (err) {
     if (progressIdle(owner)) {
       document.body.classList.remove("busy");
-      showBackendFailure(err);
+      showBackendFailure(err, "boot.failure");
       announce(t("boot.failure"));
       dispatchStudio({ type: "RECOVERY_FAILED" });
     }
@@ -401,7 +413,7 @@ async function openCamera() {
   if (cameraStream || document.body.classList.contains("busy")) return;
   const owner = Symbol("camera");
   progressWorking(owner);
-  status.textContent = t("camera.requesting");
+  showStatusText(t("camera.requesting"));
   announce(t("camera.requestingAnnouncement"));
   let stream;
   try {
@@ -411,7 +423,7 @@ async function openCamera() {
     });
   } catch (err) {
     if (progressIdle(owner)) {
-      status.textContent = t("camera.unavailable", { name: err.name });
+      showStatusText(t("camera.unavailable", { name: err.name }));
       announce(t("camera.unavailableAnnouncement"));
     }
     return;
@@ -421,7 +433,7 @@ async function openCamera() {
     return;
   }
   cameraStream = stream;
-  if (progressIdle(owner)) status.textContent = "";
+  if (progressIdle(owner)) showStatusText("");
   $("cameraFeed").srcObject = cameraStream;
   $("cameraPanel").classList.remove("hidden");
   $("cameraNote").textContent = mode === "one"
@@ -452,7 +464,7 @@ function cancelCapture() {
   capturing = false;
   if (owner && progressIdle(owner)) {
     document.body.classList.remove("busy");
-    status.textContent = "";
+    showStatusText("");
   }
   closeCamera();
 }
@@ -476,7 +488,7 @@ async function captureBurst() {
   capturing = true;
   document.body.classList.add("busy");
   progressWorking(owner);
-  status.textContent = t("camera.capturing");
+  showStatusText(t("camera.capturing"));
   announce(t("camera.capturingAnnouncement"));
   const count = mode === "one" ? 4 : 1;
   let committed = false;
@@ -507,14 +519,14 @@ async function captureBurst() {
     loaded.push(...frames);
     committed = true;
     closeCamera();
-    status.textContent = t("camera.preparing");
+    showStatusText(t("camera.preparing"));
     announce(t("camera.preparingAnnouncement"));
     refresh();
     run();
   } catch (err) {
     if (progressIdle(owner)) {
       document.body.classList.remove("busy");
-      status.textContent = t("camera.failure", { message: err.message });
+      showStatusText(t("camera.failure", { message: err.message }));
       announce(t("camera.failureAnnouncement"));
     }
   } finally {
@@ -580,9 +592,9 @@ async function addFiles(files) {
   document.body.classList.add("busy");
   const owner = Symbol("selection");
   progressWorking(owner);
-  status.textContent = images.length === 1
+  showStatusText(images.length === 1
     ? t("input.readingOne")
-    : t("input.readingMany", { count: images.length });
+    : t("input.readingMany", { count: images.length }));
   announce(images.length === 1
     ? t("input.readingOneAnnouncement")
     : t("input.readingManyAnnouncement", { count: images.length }));
@@ -627,7 +639,7 @@ async function addFiles(files) {
   if (!accepted.length) {
     if (progressIdle(owner)) {
       document.body.classList.remove("busy");
-      status.textContent = t("input.unreadable", { names: refused.join(", ") });
+      showStatusText(t("input.unreadable", { names: refused.join(", ") }));
       announce(t("input.unreadableAnnouncement"));
     }
     return;
@@ -659,7 +671,6 @@ function resetAll() {
   releaseBitmaps(loaded);
   loaded = []; picked = []; picking = false; token = null; pendingWarning = "";
   lastAnswer = null;
-  lastBackendFailure = null;
   clearOutlineEditor(false);
   lastSolved = false;
   settledGrid = null;
@@ -670,7 +681,7 @@ function resetAll() {
   $("reset").classList.add("hidden");
   $("dropTitle").textContent = t("input.drop");
   $("dropMore").textContent = ` ${t("input.choose")}`;
-  status.textContent = "";
+  showStatusText("");
   dispatchStudio({ type: "RESET" });
 }
 
@@ -1004,7 +1015,7 @@ function busy(on, owner) {
     if (owner !== undefined && progressOwner !== owner) return false;
     document.body.classList.remove("busy");
     progressIdle(owner);
-    status.textContent = "";
+    showStatusText("");
     return true;
   }
   document.body.classList.add("busy");
@@ -1016,12 +1027,13 @@ function busy(on, owner) {
   const warning = pendingWarning
     ? `<span class="quiet"> · ${escapeHtml(pendingWarning)}</span>`
     : "";
-  status.innerHTML =
+  showStatusHtml(
     `<strong>${escapeHtml(t("progress.recovering"))}</strong> ` +
     `<span class="mono" id="elapsed" aria-hidden="true">0 s</span>` +
     `<span class="quiet" id="progressStage">${escapeHtml(
       together || ` · ${t("progress.readingOne")}`
-    )} — ${escapeHtml(t("progress.largePhoto"))}</span>${warning}`;
+    )} — ${escapeHtml(t("progress.largePhoto"))}</span>${warning}`
+  );
   announce(pendingWarning ? t("progress.startedWarning") : t("progress.started"));
   pendingWarning = "";
   timerId = setInterval(() => {
@@ -1035,7 +1047,43 @@ function requireSolveAnswer(answer) {
   if (!answer || typeof answer !== "object" || typeof answer.ok !== "boolean") {
     throw new Error("the recovery engine returned no result");
   }
-  if (answer.ok) return answer;
+  if (answer.ok) {
+    const complete =
+      typeof answer.text === "string" && answer.text.length > 0 &&
+      Array.isArray(answer.finders) &&
+      Number.isFinite(answer.width) && answer.width > 0 &&
+      Number.isFinite(answer.height) && answer.height > 0 &&
+      Number.isFinite(answer.images_given) && answer.images_given > 0 &&
+      Number.isFinite(answer.candidates_tried) &&
+      typeof answer.source === "string" && answer.source.length > 0 &&
+      typeof answer.clean_png === "string" && answer.clean_png.length > 0 &&
+      typeof answer.token === "string" && answer.token.length > 0 &&
+      answer.exportable === true;
+    const measured = answer.source === "direct" || (
+      Number.isFinite(answer.modules) && answer.modules > 0 &&
+      Number.isFinite(answer.wrong_known) &&
+      Number.isFinite(answer.known_total) && answer.known_total > 0 &&
+      Number.isFinite(answer.timing) &&
+      Number.isFinite(answer.uncertain)
+    );
+    const fusion = !answer.fusion || (
+      Number.isFinite(answer.fusion.photographs) &&
+      Array.isArray(answer.fusion.agreement) &&
+      Array.isArray(answer.fusion.rejected) &&
+      Array.isArray(answer.fusion.mirrored) &&
+      Number.isFinite(answer.fusion.disagreeing)
+    );
+    const payload = !answer.payload_info || (
+      typeof answer.payload_info === "object" &&
+      typeof answer.payload_info.kind === "string" &&
+      typeof answer.payload_info.fields === "object" &&
+      answer.payload_info.fields !== null
+    );
+    if (!complete || !measured || !fusion || !payload) {
+      throw new Error("the recovery engine returned an incomplete successful result");
+    }
+    return answer;
+  }
   return {
     ...answer,
     failure: typeof answer.failure === "string" ? answer.failure : "",
@@ -1050,7 +1098,6 @@ function requireSolveAnswer(answer) {
 async function solve(points, outlineHint) {
   if (!loaded.length) return;
   lastAnswer = null;
-  lastBackendFailure = null;
   prepareRecoveryVisuals();
   for (const id of ["retry", "outlineRetry", "outlineSolve", "cancel"]) {
     $(id).hidden = true;
@@ -1060,7 +1107,7 @@ async function solve(points, outlineHint) {
   $("catalogPanel").classList.add("hidden");
   document.body.classList.add("busy");
   progressWorking(owner);
-  status.textContent = t("progress.preparing");
+  showStatusText(t("progress.preparing"));
   announce(t("progress.preparingAnnouncement"));
   dispatchStudio({ type: "PREPARING" });
   const ready = await backendReady(owner);
@@ -1069,7 +1116,7 @@ async function solve(points, outlineHint) {
     if (progressOwner === owner) {
       document.body.classList.remove("busy");
       progressIdle(owner);
-      status.textContent = "";
+      showStatusText("");
     }
     return;
   }
@@ -1097,7 +1144,7 @@ async function solve(points, outlineHint) {
     if (my === seq && busy(false, owner)) {
       clearOutlineEditor(false);
       liveEnd(false);
-      showBackendFailure(err);
+      showBackendFailure(err, "result.failure");
       announce(t("result.failure"));
       dispatchStudio({ type: "RECOVERY_FAILED" });
     }
@@ -1284,7 +1331,6 @@ function titleFrom(name) {
 
 async function catalogRun() {
   prepareRecoveryVisuals();
-  lastBackendFailure = null;
   const my = ++seq;
   const owner = Symbol(`catalog-${my}`);
   const warning = pendingWarning;
@@ -1293,8 +1339,10 @@ async function catalogRun() {
   $("catalogPanel").classList.remove("hidden");
   document.body.classList.add("busy");
   progressWorking(owner);
-  status.innerHTML = escapeHtml(t("catalogue.preparing")) +
-    (warning ? `<span class="quiet"> · ${escapeHtml(warning)}</span>` : "");
+  showStatusHtml(
+    escapeHtml(t("catalogue.preparing")) +
+    (warning ? `<span class="quiet"> · ${escapeHtml(warning)}</span>` : "")
+  );
   announce(warning
     ? t("catalogue.preparingWarning")
     : t("catalogue.preparingAnnouncement"));
@@ -1304,7 +1352,7 @@ async function catalogRun() {
     if (progressOwner === owner) {
       document.body.classList.remove("busy");
       progressIdle(owner);
-      status.textContent = "";
+      showStatusText("");
     }
     return;
   }
@@ -1315,13 +1363,14 @@ async function catalogRun() {
   const pending = loaded.filter((l) => !l.result);
   let done = 0;
   for (const item of pending) {
-    status.innerHTML =
+    showStatusHtml(
       `<strong>${escapeHtml(t("catalogue.recovering", {
         current: ++done,
         total: pending.length,
       }))}</strong> ` +
       `<span class="quiet">${escapeHtml(item.name)}</span>` +
-      (warning ? `<span class="quiet"> · ${escapeHtml(warning)}</span>` : "");
+      (warning ? `<span class="quiet"> · ${escapeHtml(warning)}</span>` : "")
+    );
     announce(t("catalogue.recoveringAnnouncement", { current: done, total: pending.length }));
     catalogRender();
     try {
@@ -1336,7 +1385,7 @@ async function catalogRun() {
       if (my !== seq) return;
       if (progressIdle(owner)) {
         document.body.classList.remove("busy");
-        showBackendFailure(err);
+        showBackendFailure(err, "catalogue.recoveryFailure");
         announce(t("catalogue.recoveryFailure"));
         dispatchStudio({ type: "RECOVERY_FAILED" });
       }
@@ -1414,7 +1463,7 @@ $("catalogPdf").addEventListener("click", async () => {
   const owner = Symbol("catalog-export");
   document.body.classList.add("busy");
   progressWorking(owner);
-  status.textContent = t("catalogue.preparingDownload");
+  showStatusText(t("catalogue.preparingDownload"));
   announce(t("catalogue.preparingDownloadAnnouncement"));
   let file;
   try {
@@ -1425,7 +1474,7 @@ $("catalogPdf").addEventListener("click", async () => {
   } catch (err) {
     if (progressIdle(owner)) {
       document.body.classList.remove("busy");
-      status.textContent = t("catalogue.exportFailure", { message: err.message });
+      showStatusText(t("catalogue.exportFailure", { message: err.message }));
       announce(t("catalogue.exportFailureAnnouncement"));
     }
     return;
@@ -1651,7 +1700,7 @@ async function download(format) {
   const owner = Symbol("export");
   document.body.classList.add("busy");
   progressWorking(owner);
-  status.textContent = t("export.preparing", { format: format.toUpperCase() });
+  showStatusText(t("export.preparing", { format: format.toUpperCase() }));
   announce(t("export.preparingAnnouncement", { format: format.toUpperCase() }));
   let file;
   try {
@@ -1665,7 +1714,7 @@ async function download(format) {
   } catch (err) {
     if (progressIdle(owner)) {
       document.body.classList.remove("busy");
-      status.textContent = t("export.failure", { message: err.message });
+      showStatusText(t("export.failure", { message: err.message }));
       announce(t("export.failureAnnouncement"));
     }
     return;
@@ -1695,6 +1744,7 @@ function panel(title, dataUrl, filename, note) {
 }
 
 $("retry").addEventListener("click", () => {
+  showStatusText("");
   companionDetail.assistance = "finders";
   dispatchStudio({ type: "ASSISTANCE_REQUIRED" });
   clearOutlineEditor(false);
@@ -1706,6 +1756,7 @@ $("retry").addEventListener("click", () => {
 });
 
 $("outlineRetry").addEventListener("click", () => {
+  showStatusText("");
   companionDetail.assistance = "outline";
   dispatchStudio({ type: "ASSISTANCE_REQUIRED" });
   picked = []; picking = false;
@@ -1758,12 +1809,12 @@ document.addEventListener("qrsalvage:localechange", () => {
   if (mode === "many" && loaded.length) catalogRender();
   if (outlineEditing) updateOutlineInstructions();
   if (picking) $("canvasNote").textContent = t("manual.finderInstructions");
-  if (studioState.phase === "success" && progress.classList.contains("complete")) {
-    status.textContent = t("result.success");
-    announce(t("result.success"));
-  } else if (studioState.phase === "failure") {
+  if (lastBackendFailure) {
     renderBackendFailure();
-    announce(t("result.failure"));
+    announce(t(lastBackendFailure.announcementKey));
+  } else if (studioState.phase === "success" && progress.classList.contains("complete")) {
+    showStatusText(t("result.success"));
+    announce(t("result.success"));
   }
   companion.refreshLocale();
   syncCompanionControl(companion.update({ ...studioState, ...companionDetail }));

@@ -7,9 +7,11 @@ between it and the core is the shape of the JSON. That is what these tests pin d
 from __future__ import annotations
 
 import base64
+import html
 import http.client
 import json
 import re
+import shutil
 import subprocess
 import threading
 from http.server import ThreadingHTTPServer
@@ -151,6 +153,7 @@ const elements = new Map();
 const documentListeners = new Map();
 let activeLocale = "en";
 let backendSolveCalls = 0;
+let backendAnswer = { ok: false };
 
 function classList() {
   const names = new Set();
@@ -243,6 +246,7 @@ const browserWindow = {
   qrLocale: { t(key, values) { return locale.translate(activeLocale, key, values); } },
   qrStudioState: require(process.argv[3]),
   qrOutlineEditor: require(process.argv[4]),
+  __setBackendAnswer(answer) { backendAnswer = answer; },
   qrCompanion: { createCompanionController() { return {
     update() { return { motion: "walk" }; },
     refreshLocale() {},
@@ -253,7 +257,7 @@ const browserWindow = {
     failurePrefixKey: "backend.failure.server",
     ready: Promise.resolve(),
     onBoot() {},
-    solve() { backendSolveCalls += 1; return Promise.resolve({ ok: false }); },
+    solve() { backendSolveCalls += 1; return Promise.resolve(backendAnswer); },
     file() { throw new Error("not called"); },
   },
   localStorage: { getItem() { return null; }, setItem() {} },
@@ -298,6 +302,8 @@ if (probeName === "failure-locale") {
   exposure = `globalThis.__app = {
     showBackendFailure,
     setFailurePhase() { studioState = { ...studioState, phase: "failure" }; },
+    load(entry) { loaded = [entry]; },
+    progressComplete,
   };`;
 } else if (probeName === "assistance-locale") {
   exposure = `globalThis.__app = {
@@ -309,7 +315,7 @@ if (probeName === "failure-locale") {
       picking = false; picked = []; outlineEditing = true;
       outlineCorners = corners; outlineMidpoints = midpoints;
     },
-    geometry() { return { corners: outlineCorners, midpoints: outlineMidpoints }; },
+    geometry() { return { picked, corners: outlineCorners, midpoints: outlineMidpoints }; },
   };`;
 } else if (probeName === "narrow-failure") {
   exposure = `globalThis.__app = {
@@ -321,6 +327,15 @@ if (probeName === "failure-locale") {
   exposure = `globalThis.__app = {
     liveEvent,
     load(entry) { loaded = [entry]; },
+  };`;
+} else if (probeName === "malformed-success") {
+  exposure = `globalThis.__app = {
+    solve,
+    catalogRun,
+    requireSolveAnswer,
+    load(entry) { loaded = [entry]; },
+    setBackendAnswer(answer) { window.__setBackendAnswer(answer); },
+    phase() { return studioState.phase; },
   };`;
 } else {
   throw new Error(`unknown probe: ${probeName}`);
@@ -348,14 +363,41 @@ const failure = {
 };
 
 if (probeName === "failure-locale") {
-  app.showBackendFailure(new Error("503"), "result.failure");
+  const localizedFailures = {};
+  for (const announcementKey of ["boot.failure", "result.failure", "catalogue.recoveryFailure"]) {
+    activeLocale = "en";
+    app.showBackendFailure(new Error("503"), announcementKey);
+    app.setFailurePhase();
+    const english = getElement("status").textContent;
+    activeLocale = "de";
+    emitLocaleChange();
+    localizedFailures[announcementKey] = {
+      english,
+      german: getElement("status").textContent,
+      announcement: getElement("statusLive").textContent,
+    };
+  }
+  activeLocale = "en";
+  app.load(entry);
+  app.showBackendFailure(new Error("stale"), "result.failure");
   app.setFailurePhase();
-  const english = getElement("status").textContent;
+  getElement("retry").emit("click");
+  activeLocale = "de";
+  emitLocaleChange();
+  const assistance = {
+    status: getElement("status").textContent,
+    controls: snapshotControls(),
+  };
+  activeLocale = "en";
+  app.showBackendFailure(new Error("stale"), "result.failure");
+  app.setFailurePhase();
+  app.progressComplete("requesting camera access…");
   activeLocale = "de";
   emitLocaleChange();
   process.stdout.write(JSON.stringify({
-    english,
-    german: getElement("status").textContent,
+    localizedFailures,
+    assistance,
+    newerStatus: getElement("status").textContent,
     detail: "Error: 503",
     backendSolveCalls,
   }));
@@ -364,10 +406,23 @@ if (probeName === "failure-locale") {
   app.renderAnswer(failure, { focus: false });
   app.setFinders([{ x: 2, y: 3 }]);
   app.syncAssistanceControls(true);
-  const findersBefore = snapshotControls();
+  const oneFinderBefore = { controls: snapshotControls(), geometry: app.geometry() };
   activeLocale = "de";
   emitLocaleChange();
-  const findersAfter = snapshotControls();
+  const oneFinderAfter = { controls: snapshotControls(), geometry: app.geometry() };
+  app.setFinders([{ x: 2, y: 3 }, { x: 12, y: 3 }]);
+  app.syncAssistanceControls(true);
+  const twoFindersBefore = { controls: snapshotControls(), geometry: app.geometry() };
+  activeLocale = "en";
+  emitLocaleChange();
+  const twoFindersAfter = { controls: snapshotControls(), geometry: app.geometry() };
+  const incompleteCorners = [{ x: 1, y: 1 }, { x: 14, y: 1 }];
+  app.setOutline(incompleteCorners, []);
+  app.syncAssistanceControls(true);
+  const incompleteOutlineBefore = { controls: snapshotControls(), geometry: app.geometry() };
+  activeLocale = "de";
+  emitLocaleChange();
+  const incompleteOutlineAfter = { controls: snapshotControls(), geometry: app.geometry() };
   const corners = [
     { x: 1, y: 1 }, { x: 14, y: 1 }, { x: 14, y: 7 }, { x: 1, y: 7 },
   ];
@@ -381,8 +436,12 @@ if (probeName === "failure-locale") {
   activeLocale = "en";
   emitLocaleChange();
   process.stdout.write(JSON.stringify({
-    findersBefore,
-    findersAfter,
+    oneFinderBefore,
+    oneFinderAfter,
+    twoFindersBefore,
+    twoFindersAfter,
+    incompleteOutlineBefore,
+    incompleteOutlineAfter,
     outlineBefore,
     outlineAfter: snapshotControls(),
     geometryBefore,
@@ -402,7 +461,12 @@ if (probeName === "failure-locale") {
     finders: [],
     width: 16,
     height: 8,
+    images_given: 1,
+    candidates_tried: 1,
     source: "direct",
+    clean_png: "data:image/png;base64,AA==",
+    token: "public-token",
+    exportable: true,
   };
   process.stdout.write(JSON.stringify({
     payload: getElement("payload").innerHTML,
@@ -420,6 +484,44 @@ if (probeName === "failure-locale") {
     canvasWidth: getElement("photo").width,
     canvasHeight: getElement("photo").height,
   }));
+} else if (probeName === "malformed-success") {
+  const malformed = [
+    { ok: true },
+    { ok: true, text: "PUBLIC", finders: null },
+    { ok: true, text: "PUBLIC", finders: [], width: 16, height: 8, source: "direct" },
+  ];
+  const rejected = malformed.map((answer) => {
+    try { app.requireSolveAnswer(answer); return null; }
+    catch (error) { return String(error); }
+  });
+  const success = {
+    ok: true,
+    text: "PUBLIC",
+    finders: [],
+    width: 16,
+    height: 8,
+    images_given: 1,
+    candidates_tried: 1,
+    source: "direct",
+    clean_png: "data:image/png;base64,AA==",
+    token: "public-token",
+    exportable: true,
+  };
+  app.setBackendAnswer({ ok: true });
+  app.load(entry);
+  app.solve().then(() => {
+    const solveFailure = { status: getElement("status").textContent, phase: app.phase() };
+    app.load(entry);
+    return app.catalogRun().then(() => {
+      process.stdout.write(JSON.stringify({
+        rejected,
+        solveFailure,
+        catalogueFailure: { status: getElement("status").textContent, phase: app.phase() },
+        successUnchanged: app.requireSolveAnswer(success) === success,
+        backendSolveCalls,
+      }));
+    });
+  }).catch((error) => { console.error(error); process.exitCode = 1; });
 }
 """
     completed = subprocess.run(
@@ -441,6 +543,102 @@ if (probeName === "failure-locale") {
     )
     assert completed.returncode == 0, completed.stderr
     return json.loads(completed.stdout)
+
+
+def _browser_executable() -> str | None:
+    candidates: list[str | Path | None] = [
+        shutil.which(name) for name in ("chrome", "google-chrome", "chromium", "msedge")
+    ]
+    candidates.extend(
+        [
+            Path(r"C:\Program Files\Google\Chrome\Application\chrome.exe"),
+            Path(r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"),
+            Path(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"),
+        ]
+    )
+    for candidate in candidates:
+        if candidate and Path(candidate).is_file():
+            return str(candidate)
+    return None
+
+
+def _call_browser_target_probe(tmp_path: Path, viewport_width: int):
+    browser = _browser_executable()
+    if browser is None:
+        pytest.skip("Chrome/Edge is unavailable for the real layout regression probe")
+
+    web = ROOT / "src" / "qrsalvage" / "web"
+    source = (web / "app.js").read_text(encoding="utf-8")
+    start = source.index("function canvasPoint(e)")
+    end = source.index('\ncanvas.addEventListener("click"', start)
+    canvas_point = source[start:end]
+    style_uri = (web / "style.css").resolve().as_uri()
+    inner_page = f"""<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="{style_uri}"></head>
+<body>
+  <section id="live"><p class="stage"><a href="#method">How recovery works</a></p></section>
+  <canvas id="landscape" class="outline-editing" width="16" height="8" data-scale="1"></canvas>
+  <canvas id="portrait" class="outline-editing" width="8" height="16" data-scale="1"></canvas>
+  <script>
+    let canvas;
+    {canvas_point}
+    const measureCanvas = (id) => {{
+      canvas = document.getElementById(id);
+      const rect = canvas.getBoundingClientRect();
+      const mapped = canvasPoint({{
+        clientX: rect.left + rect.width * .25,
+        clientY: rect.top + rect.height * .75,
+      }});
+      return {{ width: rect.width, height: rect.height, mapped }};
+    }};
+    const linkRect = document.querySelector("#live .stage a").getBoundingClientRect();
+    document.body.dataset.measurement = JSON.stringify({{
+      viewport: window.innerWidth,
+      link: {{ width: linkRect.width, height: linkRect.height }},
+      landscape: measureCanvas("landscape"),
+      portrait: measureCanvas("portrait"),
+    }});
+  </script>
+</body></html>"""
+    page = tmp_path / f"dynamic-targets-{viewport_width}.html"
+    page.write_text(
+        f"""<!doctype html><html><body>
+<iframe id="probe" width="{viewport_width}" height="700"
+  srcdoc="{html.escape(inner_page, quote=True)}"></iframe>
+<script>
+  const probe = document.getElementById("probe");
+  probe.addEventListener("load", () => {{
+    document.body.dataset.measurement = probe.contentDocument.body.dataset.measurement;
+  }});
+</script>
+</body></html>""",
+        encoding="utf-8",
+    )
+    profile = tmp_path / f"browser-profile-{viewport_width}"
+    completed = subprocess.run(
+        [
+            browser,
+            "--headless=new",
+            "--disable-gpu",
+            "--no-first-run",
+            "--allow-file-access-from-files",
+            "--force-device-scale-factor=1",
+            f"--window-size={viewport_width},800",
+            f"--user-data-dir={profile}",
+            "--dump-dom",
+            "--virtual-time-budget=1000",
+            page.resolve().as_uri(),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=30,
+    )
+    assert completed.returncode == 0, completed.stderr
+    match = re.search(r'data-measurement="([^"]+)"', completed.stdout)
+    assert match is not None, completed.stdout
+    return json.loads(html.unescape(match.group(1)))
 
 
 def _call_companion_controller_probe(probe: str):
@@ -1183,6 +1381,18 @@ def test_app_normalizes_narrow_api_failures_without_weakening_successes():
     assert result["successUnchanged"] is True
 
 
+def test_app_rejects_incomplete_successes_inside_solve_and_catalogue():
+    result = _call_app_runtime_probe("malformed-success")
+
+    assert all("incomplete successful result" in message for message in result["rejected"])
+    assert "incomplete successful result" in result["solveFailure"]["status"]
+    assert result["solveFailure"]["phase"] == "failure"
+    assert "incomplete successful result" in result["catalogueFailure"]["status"]
+    assert result["catalogueFailure"]["phase"] == "failure"
+    assert result["successUnchanged"] is True
+    assert result["backendSolveCalls"] == 2
+
+
 def test_outline_editor_is_served_with_touch_and_curved_geometry(running_server):
     """The manual escape hatch must survive unchanged in every static deployment."""
     host, port = running_server
@@ -1670,9 +1880,27 @@ def test_backend_failure_prefix_is_localized_again_without_losing_technical_deta
             "failurePrefixKey": "backend.failure.browser",
         },
     }
-    assert result["english"].endswith(result["detail"])
-    assert result["german"].endswith(result["detail"])
-    assert result["english"] != result["german"]
+    announcements = {
+        "boot.failure": "Die Recovery-Engine konnte nicht gestartet werden",
+        "result.failure": "Rettung fehlgeschlagen",
+        "catalogue.recoveryFailure": "Katalogrettung fehlgeschlagen",
+    }
+    for key, expected_announcement in announcements.items():
+        localized = result["localizedFailures"][key]
+        assert localized["english"].endswith(result["detail"])
+        assert localized["german"].endswith(result["detail"])
+        assert localized["english"] != localized["german"]
+        assert localized["announcement"] == expected_announcement
+    assert result["assistance"] == {
+        "status": "",
+        "controls": {
+            "retry": True,
+            "outlineRetry": True,
+            "outlineSolve": True,
+            "cancel": False,
+        },
+    }
+    assert result["newerStatus"] == "requesting camera access…"
     assert result["backendSolveCalls"] == 0
 
 
@@ -1691,8 +1919,31 @@ def test_locale_rerender_preserves_active_assistance_controls_and_geometry():
         "outlineSolve": False,
         "cancel": False,
     }
-    assert result["findersBefore"] == finder_controls
-    assert result["findersAfter"] == finder_controls
+    for snapshot in (result["oneFinderBefore"], result["oneFinderAfter"]):
+        assert snapshot["controls"] == finder_controls
+        assert snapshot["geometry"]["picked"] == [{"x": 2, "y": 3}]
+    for snapshot in (result["twoFindersBefore"], result["twoFindersAfter"]):
+        assert snapshot["controls"] == finder_controls
+        assert snapshot["geometry"]["picked"] == [
+            {"x": 2, "y": 3},
+            {"x": 12, "y": 3},
+        ]
+    incomplete_controls = {
+        "retry": True,
+        "outlineRetry": True,
+        "outlineSolve": True,
+        "cancel": False,
+    }
+    for snapshot in (
+        result["incompleteOutlineBefore"],
+        result["incompleteOutlineAfter"],
+    ):
+        assert snapshot["controls"] == incomplete_controls
+        assert snapshot["geometry"] == {
+            "picked": [],
+            "corners": [{"x": 1, "y": 1}, {"x": 14, "y": 1}],
+            "midpoints": [],
+        }
     assert result["outlineBefore"] == outline_controls
     assert result["outlineAfter"] == outline_controls
     assert result["geometryAfter"] == result["geometryBefore"]
@@ -1772,6 +2023,7 @@ def test_locale_manifest_covers_every_static_app_and_html_consumer():
         "direct",
         "hintKey",
         "labelKey",
+        "lastBackendFailure.announcementKey",
         "lastBackendFailure.prefixKey",
         "localeKey",
         "warningKey",
@@ -1959,6 +2211,25 @@ def test_dynamic_live_link_and_outline_canvas_keep_44_pixel_targets():
     assert "min-width: 44px" in outline_canvas["body"]
     assert "min-height: 44px" in outline_canvas["body"]
     assert (state["canvasWidth"], state["canvasHeight"]) == (16, 8)
+
+
+@pytest.mark.parametrize("viewport_width", [1440, 320])
+def test_real_browser_keeps_dynamic_targets_large_without_warping_coordinates(
+    tmp_path, viewport_width
+):
+    measurement = _call_browser_target_probe(tmp_path, viewport_width)
+
+    assert measurement["viewport"] == viewport_width
+    assert measurement["link"]["height"] >= 44
+    landscape = measurement["landscape"]
+    portrait = measurement["portrait"]
+    for canvas in (landscape, portrait):
+        assert canvas["width"] >= 44
+        assert canvas["height"] >= 44
+    assert landscape["width"] / landscape["height"] == pytest.approx(2)
+    assert portrait["width"] / portrait["height"] == pytest.approx(0.5)
+    assert landscape["mapped"] == pytest.approx({"x": 4, "y": 6})
+    assert portrait["mapped"] == pytest.approx({"x": 2, "y": 12})
 
 
 def test_generated_png_download_is_one_anchor_control_not_nested_interactives():
