@@ -1073,11 +1073,11 @@ function requireSolveAnswer(answer) {
       Array.isArray(answer.fusion.mirrored) &&
       Number.isFinite(answer.fusion.disagreeing)
     );
-    const payload = !answer.payload_info || (() => {
+    const owns = (map, key) => Object.prototype.hasOwnProperty.call(map, key);
+    const payload = !owns(answer, "payload_info") || (() => {
+      if (typeof answer.payload_info !== "object" || answer.payload_info === null) return false;
       const { kind, fields } = answer.payload_info;
-      const owns = (map, key) => Object.prototype.hasOwnProperty.call(map, key);
-      return typeof answer.payload_info === "object" &&
-        owns(DYNAMIC_LOCALE_KEYS.payloadLabels, kind) &&
+      return owns(DYNAMIC_LOCALE_KEYS.payloadLabels, kind) &&
         owns(DYNAMIC_LOCALE_KEYS.payloadHints, kind) &&
         typeof fields === "object" && fields !== null && !Array.isArray(fields) &&
         Object.keys(fields).every((key) =>
