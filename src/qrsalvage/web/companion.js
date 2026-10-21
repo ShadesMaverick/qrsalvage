@@ -61,22 +61,52 @@
     let currentAnimation = null;
     let observer = null;
     let currentTarget = null;
+    let currentRectangle = null;
+    let currentPlacement = null;
     let currentDecision = null;
     let activeBubble = null;
 
     function moveTo(anchor, motion) {
       const target = anchors[anchor];
-      if (!target || target === currentTarget) return;
-      currentTarget = target;
-      const rectangle = target.getBoundingClientRect();
-      const viewport = root.ownerDocument.defaultView;
-      const x = Math.max(8, Math.min(rectangle.right - 88, viewport.innerWidth - 336));
-      const y = Math.max(8, Math.min(rectangle.top + 16, viewport.innerHeight - 112));
-      const nextTransform = `translate3d(${Math.round(x)}px, ${Math.round(y)}px, 0)`;
       currentAnimation?.cancel();
+      currentAnimation = null;
+      if (!target) return;
+      if (target !== currentTarget) {
+        currentTarget = target;
+        currentRectangle = target.getBoundingClientRect();
+      }
+      const rootWidth = root.offsetWidth || 96;
+      const rootHeight = root.offsetHeight || 96;
+      const bubbleLeft = bubble.hidden ? 0 : bubble.offsetLeft;
+      const bubbleTop = bubble.hidden ? 0 : bubble.offsetTop;
+      const bubbleWidth = bubble.hidden ? 0 : bubble.offsetWidth;
+      const bubbleHeight = bubble.hidden ? 0 : bubble.offsetHeight;
+      const placement = [
+        anchor, bubble.hidden, bubbleLeft, bubbleTop, bubbleWidth, bubbleHeight,
+      ].join(":");
+      if (placement === currentPlacement) return;
+      currentPlacement = placement;
+      const leftExtent = Math.min(0, bubbleLeft);
+      const rightExtent = Math.max(rootWidth, bubbleLeft + bubbleWidth);
+      const topExtent = Math.min(0, bubbleTop);
+      const bottomExtent = Math.max(rootHeight, bubbleTop + bubbleHeight);
+      const rectangle = currentRectangle;
+      const viewport = root.ownerDocument.defaultView;
+      const clamp = (value, minimum, maximum) =>
+        Math.max(minimum, Math.min(value, Math.max(minimum, maximum)));
+      const x = clamp(
+        rectangle.right - rootWidth + 8,
+        8 - leftExtent,
+        viewport.innerWidth - 8 - rightExtent,
+      );
+      const y = clamp(
+        rectangle.top + 16,
+        8 - topExtent,
+        viewport.innerHeight - 8 - bottomExtent,
+      );
+      const nextTransform = `translate3d(${Math.round(x)}px, ${Math.round(y)}px, 0)`;
       if (motion === "still" || typeof root.animate !== "function") {
         root.style.transform = nextTransform;
-        currentAnimation = null;
         return;
       }
       const previousTransform = viewport.getComputedStyle(root).transform;
@@ -124,7 +154,6 @@
       root.dataset.pose = decision.pose;
       root.dataset.motion = decision.motion;
       sprite.style.backgroundPosition = POSE_POSITION[decision.pose] || POSE_POSITION.idle;
-      moveTo(decision.anchor, decision.motion);
       if (decision.offerDonation) {
         renderDonation(decision);
       } else if (decision.hintKey && COMPANION_HINT_KEYS.includes(decision.hintKey)) {
@@ -132,6 +161,7 @@
       } else if (activeBubble && activeBubble.anchor !== decision.anchor) {
         hideBubble();
       }
+      moveTo(decision.anchor, decision.motion);
     }
 
     function update(state) {
@@ -166,7 +196,13 @@
     }
 
     function destroy() {
-      currentAnimation?.cancel();
+      root.dataset.motion = "still";
+      const animations = new Set(
+        typeof root.getAnimations === "function" ? root.getAnimations({ subtree: true }) : [],
+      );
+      if (currentAnimation) animations.add(currentAnimation);
+      for (const animation of animations) animation.cancel();
+      currentAnimation = null;
       observer?.disconnect();
     }
 

@@ -48,12 +48,14 @@ function guardedStorage(name) {
   try { storage = window[name]; } catch { /* private browsing may refuse the storage object */ }
   return {
     get(key) {
-      try { return storage ? storage.getItem(key) ?? memory.get(key) ?? null : memory.get(key) ?? null; }
-      catch { return memory.get(key) ?? null; }
+      if (memory.has(key)) return memory.get(key);
+      try { return storage ? storage.getItem(key) : null; }
+      catch { storage = null; return null; }
     },
     set(key, value) {
       memory.set(key, value);
-      try { if (storage) storage.setItem(key, value); } catch { /* the current view still works */ }
+      try { if (storage) storage.setItem(key, value); }
+      catch { storage = null; /* the in-memory preference remains authoritative */ }
     },
   };
 }

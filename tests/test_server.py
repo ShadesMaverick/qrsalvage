@@ -46,6 +46,196 @@ process.stdout.write(JSON.stringify(helper[process.argv[2]](...args)));
     return json.loads(completed.stdout)
 
 
+def _call_companion_controller_probe(probe: str):
+    helper = ROOT / "src" / "qrsalvage" / "web" / "companion.js"
+    app = ROOT / "src" / "qrsalvage" / "web" / "app.js"
+    script = r"""
+const fs = require("fs");
+const { createCompanionController } = require(process.argv[1]);
+const probe = process.argv[2];
+
+if (probe === "storage") {
+  const source = fs.readFileSync(process.argv[3], "utf8");
+  const start = source.indexOf("function guardedStorage");
+  const end = source.indexOf("\nconst companionLocal", start);
+  const definition = source.slice(start, end);
+  const compile = (window) => new Function(
+    "window", `"use strict"; ${definition}; return guardedStorage;`
+  )(window);
+  let stored = "false";
+  let failRead = false;
+  const window = {
+    localStorage: {
+      getItem() {
+        if (failRead) throw new Error("read refused");
+        return stored;
+      },
+      setItem() { throw new Error("write refused"); },
+    },
+  };
+  const local = compile(window)("localStorage");
+  const before = local.get("qrsalvage.motionReduced");
+  local.set("qrsalvage.motionReduced", "true");
+  const afterFailedWrite = local.get("qrsalvage.motionReduced");
+  failRead = true;
+  const afterFailedRead = local.get("qrsalvage.motionReduced");
+  let readAttempts = 0;
+  const readFailureWindow = {
+    localStorage: {
+      getItem() {
+        readAttempts += 1;
+        if (readAttempts === 1) throw new Error("read refused");
+        return "false";
+      },
+      setItem() { throw new Error("write refused"); },
+    },
+  };
+  const afterReadFailure = compile(readFailureWindow)("localStorage");
+  const failedRead = afterReadFailure.get("qrsalvage.motionReduced");
+  afterReadFailure.set("qrsalvage.motionReduced", "true");
+  const memoryAfterReadFailure = afterReadFailure.get("qrsalvage.motionReduced");
+  process.stdout.write(JSON.stringify({
+    before, afterFailedWrite, afterFailedRead, failedRead, memoryAfterReadFailure,
+  }));
+  process.exit(0);
+}
+
+function createHarness() {
+  const animations = [];
+  const cssAnimation = { cancelled: 0, cancel() { this.cancelled += 1; } };
+  let observer = null;
+  class FakeObserver {
+    constructor(callback) {
+      this.callback = callback;
+      this.disconnected = false;
+      observer = this;
+    }
+    observe() {}
+    disconnect() { this.disconnected = true; }
+  }
+  const viewport = {
+    innerWidth: 320,
+    innerHeight: 240,
+    getComputedStyle() { return { transform: "none" }; },
+    IntersectionObserver: FakeObserver,
+  };
+  const button = { addEventListener() {} };
+  const sprite = { style: {} };
+  const bubble = {
+    hidden: true,
+    style: {},
+    innerHTML: "",
+    offsetWidth: 208,
+    offsetHeight: 160,
+    get offsetLeft() {
+      return this.style.left ? Number.parseFloat(this.style.left) : 76;
+    },
+    get offsetTop() {
+      return this.style.top ? Number.parseFloat(this.style.top) : 64;
+    },
+    querySelector() { return button; },
+    replaceChildren() { this.innerHTML = ""; },
+  };
+  function anchor(rect) {
+    return { getBoundingClientRect() { return { ...rect }; } };
+  }
+  const anchors = {
+    hero: anchor({ right: 140, top: 20 }),
+    studio: anchor({ right: 180, top: 40 }),
+    progress: anchor({ right: 220, top: 70 }),
+    canvas: anchor({ right: 260, top: 90 }),
+    manual: anchor({ right: 280, top: 110 }),
+    result: anchor({ right: 315, top: 220 }),
+    recovery: anchor({ right: 300, top: 180 }),
+  };
+  const root = {
+    ownerDocument: { defaultView: viewport },
+    style: {},
+    dataset: {},
+    offsetWidth: 96,
+    offsetHeight: 96,
+    querySelector(selector) {
+      if (selector !== "#companionSprite") throw new Error(`unexpected selector: ${selector}`);
+      return sprite;
+    },
+    animate() {
+      const animation = { cancelled: 0, cancel() { this.cancelled += 1; } };
+      animations.push(animation);
+      return animation;
+    },
+    getAnimations() { return [cssAnimation]; },
+  };
+  const localValues = new Map();
+  const sessionValues = new Map();
+  const adapter = (values) => ({
+    get(key) { return values.get(key) ?? null; },
+    set(key, value) { values.set(key, value); },
+  });
+  const controller = createCompanionController({
+    root,
+    bubble,
+    anchors,
+    t: (key) => key,
+    local: adapter(localValues),
+    session: adapter(sessionValues),
+    media: { matches: false },
+  });
+  return {
+    animations, cssAnimation, observer, root, bubble, localValues, controller, viewport,
+  };
+}
+
+const harness = createHarness();
+if (probe === "same-anchor-reduction") {
+  harness.controller.update({ phase: "ready", payloadReady: false });
+  harness.localValues.set("qrsalvage.motionReduced", "true");
+  const decision = harness.controller.update({ phase: "ready", payloadReady: false });
+  process.stdout.write(JSON.stringify({
+    cancelled: harness.animations[0].cancelled,
+    motion: decision.motion,
+    renderedMotion: harness.root.dataset.motion,
+  }));
+} else if (probe === "destroy") {
+  harness.controller.update({ phase: "recovering", payloadReady: false });
+  harness.controller.destroy();
+  process.stdout.write(JSON.stringify({
+    waapiCancelled: harness.animations[0].cancelled,
+    cssCancelled: harness.cssAnimation.cancelled,
+    motion: harness.root.dataset.motion,
+    observerDisconnected: harness.observer.disconnected,
+  }));
+} else if (probe === "placement") {
+  harness.controller.update({ phase: "success", payloadReady: true });
+  const match = /translate3d\((-?\d+)px, (-?\d+)px/.exec(harness.root.style.transform);
+  if (!match) throw new Error(`missing transform: ${harness.root.style.transform}`);
+  const x = Number(match[1]);
+  const y = Number(match[2]);
+  const left = Math.min(x, x + harness.bubble.offsetLeft);
+  const right = Math.max(
+    x + harness.root.offsetWidth,
+    x + harness.bubble.offsetLeft + harness.bubble.offsetWidth,
+  );
+  const top = Math.min(y, y + harness.bubble.offsetTop);
+  const bottom = Math.max(
+    y + harness.root.offsetHeight,
+    y + harness.bubble.offsetTop + harness.bubble.offsetHeight,
+  );
+  process.stdout.write(JSON.stringify({ left, right, top, bottom }));
+} else {
+  throw new Error(`unknown probe: ${probe}`);
+}
+"""
+    completed = subprocess.run(
+        ["node", "-e", script, str(helper), probe, str(app)],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert completed.returncode == 0, completed.stderr
+    return json.loads(completed.stdout)
+
+
 def _call_outline_editor(function: str, *args):
     return _call_web_module("outline-editor.js", function, *args)
 
@@ -581,6 +771,44 @@ def test_companion_reduced_motion_is_static_and_hints_are_once_only():
     assert seen["hintKey"] is None
 
 
+def test_companion_reduction_cancels_an_in_flight_same_anchor_animation():
+    result = _call_companion_controller_probe("same-anchor-reduction")
+
+    assert result == {"cancelled": 1, "motion": "still", "renderedMotion": "still"}
+
+
+def test_companion_destroy_cancels_all_motion_and_leaves_a_still_sprite():
+    result = _call_companion_controller_probe("destroy")
+
+    assert result == {
+        "waapiCancelled": 1,
+        "cssCancelled": 1,
+        "motion": "still",
+        "observerDisconnected": True,
+    }
+
+
+def test_companion_places_the_sprite_and_visible_bubble_inside_the_viewport():
+    result = _call_companion_controller_probe("placement")
+
+    assert result["left"] >= 8
+    assert result["right"] <= 312
+    assert result["top"] >= 8
+    assert result["bottom"] <= 232
+
+
+def test_companion_storage_prefers_memory_after_browser_storage_fails():
+    result = _call_companion_controller_probe("storage")
+
+    assert result == {
+        "before": "false",
+        "afterFailedWrite": "true",
+        "afterFailedRead": "true",
+        "failedRead": None,
+        "memoryAfterReadFailure": "true",
+    }
+
+
 def test_companion_motion_control_is_labelled_and_os_reduction_always_wins():
     web = ROOT / "src" / "qrsalvage" / "web"
     page = (web / "index.html").read_text(encoding="utf-8")
@@ -607,7 +835,16 @@ def test_companion_has_one_anchored_nonblocking_layer_and_motion_safe_sprite():
     for anchor in ("hero", "studio", "progress", "canvas", "manual", "result", "recovery"):
         assert page.count(f'data-companion-anchor="{anchor}"') == 1
     assert re.search(r"#companion\s*\{[^}]*pointer-events:\s*none", style, re.DOTALL)
-    assert re.search(r"#companionBubble[^}]*pointer-events:\s*auto", style, re.DOTALL)
+    bubble_rule = re.search(r"#companionBubble\s*\{(?P<body>[^}]*)\}", style, re.DOTALL)
+    controls_rule = re.search(
+        r"#companionBubble a, #companionBubble button\s*\{(?P<body>[^}]*)\}",
+        style,
+        re.DOTALL,
+    )
+    assert bubble_rule is not None
+    assert "pointer-events: none" in bubble_rule["body"]
+    assert controls_rule is not None
+    assert "pointer-events: auto" in controls_rule["body"]
     assert "new IntersectionObserver" in script
     assert ".getBoundingClientRect()" in script
     assert ".animate(" in script
