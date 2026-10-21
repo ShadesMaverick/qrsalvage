@@ -198,14 +198,52 @@ def test_signal_manual_preserves_ordered_bilingual_chapters_and_technical_eviden
     assert tuple(section.attrs.get("id") for section in sections) == expected_ids
 
     expected_shapes = {
-        "known": (0, 0, ("fig-known.svg",)),
-        "levels": (2, 0, ("fig-levels.svg",)),
-        "posterior": (2, 0, ("fig-posterior.svg",)),
-        "grid": (1, 0, ("fig-objective.svg",)),
-        "search": (0, 0, ()),
-        "probe": (1, 0, ("fig-probe.svg",)),
-        "rs": (1, 0, ("fig-rs.svg",)),
-        "limits": (0, 1, ()),
+        "known": (0, ("fig-known.svg",)),
+        "levels": (0, ("fig-levels.svg",)),
+        "posterior": (0, ("fig-posterior.svg",)),
+        "grid": (0, ("fig-objective.svg",)),
+        "search": (0, ()),
+        "probe": (0, ("fig-probe.svg",)),
+        "rs": (0, ("fig-rs.svg",)),
+        "limits": (1, ()),
+    }
+    expected_language_blocks = {
+        "known": ("en", "de", "en", "de"),
+        "levels": ("en", "de", "en", "de"),
+        "posterior": ("en", "de", "en", "de"),
+        "grid": ("en", "de", "en", "de", "en", "de"),
+        "search": ("en", "de"),
+        "probe": ("en", "de", "en", "de", "en", "de"),
+        "rs": ("en", "de", "en", "de"),
+        "limits": ("en", "de", "en", "de"),
+    }
+    expected_formulas = {
+        "known": (),
+        "levels": (
+            (
+                "D(r,c) = a₀ + a₁r + a₂c + a₃r² + a₄c² + a₅rc",
+                "L(r,c) = b₀ + b₁r + b₂c + b₃r² + b₄c² + b₅rc",
+                "a = argmin Σ known dark ( D(r,c) − mean(r,c) )²",
+            ),
+            ("T(r,c) = ( D + L ) / 2 C(r,c) = max( L − D , ε )",),
+        ),
+        "posterior": (
+            (
+                "ℓ(r,c) = [ (x − L̂)² − (x − D̂)² ] / ( 2σ(r,c)² )",
+                "P(dark) = 1 / ( 1 + e −ℓ )",
+            ),
+            ("σ(r,c) = √( σ₀² + ( k · max(0, s(r,c) − s̄) / C )² )",),
+        ),
+        "grid": (
+            (
+                "m(r,c) = ± ( T(r,c) − mean(r,c) ) / C(r,c)",
+                "Q = mean known tanh( 4 · m )",
+            ),
+        ),
+        "search": (),
+        "probe": (("cost(r,c) = log( max(p, 1−p) / min(p, 1−p) )",),),
+        "rs": (("2·e unknown + e located ≤ t",),),
+        "limits": (),
     }
     evidence = {
         "known": ("244 of 841 cells", "244 von 841 Zellen", "about 29 %"),
@@ -260,15 +298,24 @@ def test_signal_manual_preserves_ordered_bilingual_chapters_and_technical_eviden
             if child.attrs.get("data-lang") in {"en", "de"}
         ]
         assert language_blocks
-        assert [block.attrs["data-lang"] for block in language_blocks] == ["en", "de"] * (
-            len(language_blocks) // 2
+        assert (
+            tuple(block.attrs["data-lang"] for block in language_blocks)
+            == (expected_language_blocks[section_id])
         )
         assert all(block.text for block in language_blocks)
 
-        formula_count, table_count, figure_sources = expected_shapes[section_id]
-        assert sum(element.has_class("formula") for element in section.elements("div")) == (
-            formula_count
-        )
+        formula_blocks = [
+            element for element in section.elements("div") if element.has_class("formula")
+        ]
+        formula_signatures = expected_formulas[section_id]
+        assert len(formula_blocks) == len(formula_signatures)
+        for formula_block, signature in zip(formula_blocks, formula_signatures, strict=True):
+            for literal in signature:
+                assert literal in formula_block.text, (
+                    f"{section_id} has the wrong formula block: {literal}"
+                )
+
+        table_count, figure_sources = expected_shapes[section_id]
         assert len(section.elements("table")) == table_count
         actual_sources = tuple(image.attrs.get("src") for image in section.elements("img"))
         assert actual_sources == figure_sources
@@ -286,22 +333,6 @@ def test_signal_manual_preserves_ordered_bilingual_chapters_and_technical_eviden
         "fig-probe.svg",
         "fig-rs.svg",
     ]
-
-    page = _text("src/qrsalvage/web/method.html")
-    for formula in (
-        "D(r,c) = a₀ + a₁r + a₂c + a₃r² + a₄c² + a₅rc",
-        "L(r,c) = b₀ + b₁r + b₂c + b₃r² + b₄c² + b₅rc",
-        "a = argmin Σ<sub>known dark</sub> ( D(r,c) − mean(r,c) )²",
-        "T(r,c) = ( D + L ) / 2 &nbsp;&nbsp;&nbsp; C(r,c) = max( L − D , ε )",
-        "ℓ(r,c) = [ (x − L̂)² − (x − D̂)² ] / ( 2σ(r,c)² )",
-        "P(dark) = 1 / ( 1 + e<sup>−ℓ</sup> )",
-        "σ(r,c) = √( σ₀² + ( k · max(0, s(r,c) − s̄) / C )² )",
-        "m(r,c) = ± ( T(r,c) − mean(r,c) ) / C(r,c)",
-        "Q = mean<sub>known</sub> tanh( 4 · m )",
-        "cost(r,c) = log( max(p, 1−p) / min(p, 1−p) )",
-        "2·e<sub>unknown</sub> + e<sub>located</sub> ≤ t",
-    ):
-        assert formula in page
 
 
 def test_secondary_pages_use_the_exact_local_only_policy_and_metadata_hooks():
