@@ -435,6 +435,27 @@ def running_server():
     httpd.server_close()
 
 
+def test_front_page_has_the_adaptive_studio_shell(running_server):
+    host, port = running_server
+    connection = http.client.HTTPConnection(host, port, timeout=10)
+    connection.request("GET", "/")
+    page = connection.getresponse().read().decode("utf-8")
+    for marker in (
+        'id="studioShell"',
+        'id="siteHero"',
+        'id="studio"',
+        'id="modeEasy"',
+        'id="modePro"',
+        'id="localeDe"',
+        'id="localeEn"',
+        'data-companion-anchor="hero"',
+        'data-companion-anchor="studio"',
+    ):
+        assert marker in page
+    assert page.index('src="studio-state.js"') < page.index('src="app.js"')
+    assert page.index('src="locale.js"') < page.index('src="app.js"')
+
+
 def test_static_assets_are_served_and_nothing_else(running_server):
     host, port = running_server
     connection = http.client.HTTPConnection(host, port, timeout=10)
@@ -449,6 +470,11 @@ def test_static_assets_are_served_and_nothing_else(running_server):
     response = connection.getresponse()
     assert response.status == 200
     assert b"chooseLocale" in response.read()
+
+    connection.request("GET", "/studio-state.js")
+    response = connection.getresponse()
+    assert response.status == 200
+    assert b"createStudioState" in response.read()
 
     # No directory traversal, no serving of anything but the one page.
     connection.request("GET", "/../pyproject.toml")
@@ -946,7 +972,7 @@ def test_the_public_page_leads_with_general_qr_recovery():
 def test_search_discovery_files_are_part_of_the_static_build():
     from scripts.build_site import PAGE_FILES
 
-    assert {"robots.txt", "sitemap.xml", "locale.js"} <= set(PAGE_FILES)
+    assert {"robots.txt", "sitemap.xml", "locale.js", "studio-state.js"} <= set(PAGE_FILES)
 
 
 def test_wait_feedback_is_graphical_accessible_and_motion_safe(running_server):
@@ -975,6 +1001,18 @@ def test_wait_feedback_is_graphical_accessible_and_motion_safe(running_server):
     assert '<div id="workspace" aria-busy="false">' in page
     assert page.index('id="progress"') < page.index('id="workspace"')
     assert page.index('id="statusLive"') < page.index('id="workspace"')
+    assert page.count('<main id="mainContent">') == 1
+    assert '<a class="skip-link" href="#mainContent"' in page
+    for button_id, label, pressed in (
+        ("modeEasy", "Easy", "true"),
+        ("modePro", "Pro", "false"),
+        ("localeDe", "DE", "false"),
+        ("localeEn", "EN", "true"),
+    ):
+        assert re.search(
+            rf'<button id="{button_id}"[^>]*aria-pressed="{pressed}"[^>]*>{label}</button>',
+            page,
+        )
 
     reduced_motion = re.search(
         r"@media \(prefers-reduced-motion: reduce\)\s*\{(?P<body>.*?)\n\s*\}",
