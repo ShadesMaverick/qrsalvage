@@ -28,12 +28,12 @@ FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "engraved-curved-ha
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def _call_outline_editor(function: str, *args):
-    helper = ROOT / "src" / "qrsalvage" / "web" / "outline-editor.js"
+def _call_web_module(file_name: str, function: str, *args):
+    helper = ROOT / "src" / "qrsalvage" / "web" / file_name
     script = """
-const editor = require(process.argv[1]);
+const helper = require(process.argv[1]);
 const args = JSON.parse(process.argv[3]);
-process.stdout.write(JSON.stringify(editor[process.argv[2]](...args)));
+process.stdout.write(JSON.stringify(helper[process.argv[2]](...args)));
 """
     completed = subprocess.run(
         ["node", "-e", script, str(helper), function, json.dumps(args)],
@@ -44,6 +44,10 @@ process.stdout.write(JSON.stringify(editor[process.argv[2]](...args)));
     )
     assert completed.returncode == 0, completed.stderr
     return json.loads(completed.stdout)
+
+
+def _call_outline_editor(function: str, *args):
+    return _call_web_module("outline-editor.js", function, *args)
 
 
 def _data_url(image: Path | np.ndarray) -> str:
@@ -491,6 +495,42 @@ def test_outline_editor_is_served_with_touch_and_curved_geometry(running_server)
     instructions = "top left", "top right", "bottom right", "bottom left"
     positions = [script.index(name) for name in instructions]
     assert positions == sorted(positions)
+
+
+def test_studio_state_reducer_keeps_mode_separate_from_recovery_phase():
+    state = _call_web_module("studio-state.js", "createStudioState", "pro")
+    assert state == {"phase": "welcome", "mode": "pro"}
+    state = _call_web_module(
+        "studio-state.js", "reduceStudioState", state, {"type": "RECOVERY_STARTED"}
+    )
+    assert state == {"phase": "recovering", "mode": "pro"}
+    state = _call_web_module(
+        "studio-state.js", "reduceStudioState", state, {"type": "SET_MODE", "mode": "easy"}
+    )
+    assert state == {"phase": "recovering", "mode": "easy"}
+
+
+@pytest.mark.parametrize(
+    ("event", "phase"),
+    [
+        ("RESET", "welcome"),
+        ("IMAGES_READY", "ready"),
+        ("PREPARING", "preparing"),
+        ("RECOVERY_STARTED", "recovering"),
+        ("ASSISTANCE_REQUIRED", "assistance"),
+        ("RECOVERY_SUCCEEDED", "success"),
+        ("RECOVERY_FAILED", "failure"),
+    ],
+)
+def test_studio_state_reducer_has_one_named_phase(event, phase):
+    state = _call_web_module("studio-state.js", "createStudioState", "invalid")
+    state = _call_web_module(
+        "studio-state.js", "reduceStudioState", state, {"type": event}
+    )
+    view = _call_web_module("studio-state.js", "viewForState", state)
+    assert state["phase"] == phase
+    assert state["mode"] == "easy"
+    assert view["phaseClass"] == f"studio-phase-{phase}"
 
 
 def test_outline_editor_selects_the_nearest_overlapping_handle():

@@ -44,3 +44,4 @@ idea.png
 site/
 vendor-cache/
 .worktrees/
+.superpowers/
