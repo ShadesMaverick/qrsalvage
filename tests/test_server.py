@@ -769,6 +769,24 @@ def test_outline_editor_is_served_with_touch_and_curved_geometry(running_server)
     assert positions == sorted(positions)
 
 
+def test_photo_selection_and_outline_expose_complete_keyboard_paths(running_server):
+    """The visible upload and canvas cannot depend on a pointing device."""
+    host, port = running_server
+    connection = http.client.HTTPConnection(host, port, timeout=10)
+    connection.request("GET", "/")
+    page = connection.getresponse().read().decode("utf-8")
+    connection.request("GET", "/app.js")
+    script = connection.getresponse().read().decode("utf-8")
+    connection.close()
+
+    assert re.search(r'<div id="drop"[^>]*role="button"[^>]*tabindex="0"', page)
+    assert re.search(r'<canvas id="photo"[^>]*role="application"[^>]*tabindex="0"', page)
+    assert 'drop.addEventListener("keydown"' in script
+    assert 'canvas.addEventListener("keydown"' in script
+    assert "qrStudioState.isActivationKey" in script
+    assert "qrOutlineEditor.keyboardCommand" in script
+
+
 def test_studio_state_reducer_keeps_mode_separate_from_recovery_phase():
     state = _call_web_module("studio-state.js", "createStudioState", "pro")
     assert state == {"phase": "welcome", "mode": "pro"}
@@ -780,6 +798,31 @@ def test_studio_state_reducer_keeps_mode_separate_from_recovery_phase():
         "studio-state.js", "reduceStudioState", state, {"type": "SET_MODE", "mode": "easy"}
     )
     assert state == {"phase": "recovering", "mode": "easy"}
+
+
+def test_keyboard_commands_cover_activation_placement_and_adjustment():
+    assert _call_web_module("studio-state.js", "isActivationKey", "Enter") is True
+    assert _call_web_module("studio-state.js", "isActivationKey", " ") is True
+    assert _call_web_module("studio-state.js", "isActivationKey", "Tab") is False
+
+    assert _call_outline_editor("keyboardCommand", "Enter", False) == {"type": "place"}
+    assert _call_outline_editor("keyboardCommand", "ArrowLeft", False) == {
+        "type": "move",
+        "x": -1,
+        "y": 0,
+        "multiplier": 1,
+    }
+    assert _call_outline_editor("keyboardCommand", "ArrowDown", True) == {
+        "type": "move",
+        "x": 0,
+        "y": 1,
+        "multiplier": 5,
+    }
+    assert _call_outline_editor("keyboardCommand", "]", False) == {
+        "type": "cycle",
+        "direction": 1,
+    }
+    assert _call_outline_editor("keyboardCommand", "Escape", False) is None
 
 
 def test_companion_only_offers_kofi_after_a_visible_success_once_per_session():

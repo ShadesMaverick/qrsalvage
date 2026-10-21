@@ -17,6 +17,10 @@
     return value === "pro" ? "pro" : "easy";
   }
 
+  function isActivationKey(key) {
+    return key === "Enter" || key === " ";
+  }
+
   function createStudioState(mode) {
     return { phase: "welcome", mode: normalizeMode(mode) };
   }
@@ -37,5 +41,5 @@
     };
   }
 
-  return { createStudioState, reduceStudioState, viewForState };
+  return { createStudioState, isActivationKey, reduceStudioState, viewForState };
 });

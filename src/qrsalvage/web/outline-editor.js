@@ -44,5 +44,27 @@
     return { corners: movedCorners, edgeMidpoints: movedMidpoints };
   }
 
-  return { selectNearestHandle, moveHandle };
+  function keyboardCommand(key, shiftKey) {
+    if (key === "Enter" || key === " ") return { type: "place" };
+    const directions = {
+      ArrowLeft: [-1, 0],
+      ArrowRight: [1, 0],
+      ArrowUp: [0, -1],
+      ArrowDown: [0, 1],
+    };
+    if (directions[key]) {
+      return {
+        type: "move",
+        x: directions[key][0],
+        y: directions[key][1],
+        multiplier: shiftKey ? 5 : 1,
+      };
+    }
+    if (key === "[" || key === "]") {
+      return { type: "cycle", direction: key === "]" ? 1 : -1 };
+    }
+    return null;
+  }
+
+  return { selectNearestHandle, moveHandle, keyboardCommand };
 });
