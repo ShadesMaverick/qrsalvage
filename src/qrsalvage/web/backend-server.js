@@ -6,8 +6,8 @@
  * expose exactly the interface below, and both return the answers of qrsalvage.api unchanged
  * -- the same dictionaries, the same progress events, the same export bytes.
  *
- *   qrBackend.mode           a word for the page to show ("local server" / "your browser")
- *   qrBackend.privacyNote    how to say "this stayed with you" truthfully in this mode
+ *   qrBackend.modeKey        locale key naming where recovery runs
+ *   qrBackend.privacyKey     locale key saying "this stayed with you" truthfully
  *   qrBackend.failurePrefix  how to introduce a failure that is the backend's fault
  *   qrBackend.ready          a promise that resolves once recovering is possible
  *   qrBackend.onBoot(fn)     progress while that promise is pending (here: nothing to report)
@@ -18,8 +18,8 @@
 "use strict";
 
 window.qrBackend = {
-  mode: "local server",
-  privacyNote: "Ran on your own machine — nothing was uploaded.",
+  modeKey: "backend.mode.server",
+  privacyKey: "privacy.server",
   failurePrefix: "the local server did not answer: ",
   ready: Promise.resolve(),
   onBoot() {},
@@ -30,6 +30,17 @@ window.qrBackend = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...payload, stream: true }),
     });
+    if (!response.ok) {
+      let reason = `${response.status}`;
+      try {
+        const body = await response.text();
+        reason = JSON.parse(body).failure || reason;
+      } catch {
+        /* an empty or non-JSON response still has a useful HTTP status */
+      }
+      throw new Error(reason);
+    }
+    if (!response.body) throw new Error("the local server returned no response body");
     // Newline-delimited JSON: every line but the last is a step of the actual recovery — the
     // grid snapping into place, the versions competing, the probe counting. The last line is
     // the result.
@@ -37,20 +48,29 @@ window.qrBackend = {
     const decoder = new TextDecoder();
     let buffer = "";
     let answer = null;
+    const consume = (line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
+      const event = JSON.parse(trimmed);
+      if (event.type === "result") answer = event;
+      else onEvent(event);
+    };
     for (;;) {
       const { done, value } = await reader.read();
-      if (done) break;
+      if (done) {
+        buffer += decoder.decode();
+        break;
+      }
       buffer += decoder.decode(value, { stream: true });
       let cut;
       while ((cut = buffer.indexOf("\n")) >= 0) {
-        const line = buffer.slice(0, cut).trim();
+        const line = buffer.slice(0, cut);
         buffer = buffer.slice(cut + 1);
-        if (!line) continue;
-        const event = JSON.parse(line);
-        if (event.type === "result") answer = event;
-        else onEvent(event);
+        consume(line);
       }
     }
+    consume(buffer);
+    if (!answer) throw new Error("the local server returned no result");
     return answer;
   },
 

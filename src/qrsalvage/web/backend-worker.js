@@ -71,8 +71,8 @@ window.qrBackend = (() => {
     });
 
   return {
-    mode: "your browser",
-    privacyNote: "Ran inside your browser — there is no server to upload anything to.",
+    modeKey: "backend.mode.browser",
+    privacyKey: "privacy.browser",
     failurePrefix: "the recovery engine failed: ",
     ready,
     onBoot(fn) {

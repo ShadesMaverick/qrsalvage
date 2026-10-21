@@ -60,19 +60,27 @@
     const sprite = root.querySelector("#companionSprite");
     let currentAnimation = null;
     let observer = null;
+    let layoutObserver = null;
     let currentTarget = null;
     let currentRectangle = null;
     let currentPlacement = null;
     let currentDecision = null;
     let activeBubble = null;
+    let refreshFrame = null;
+
+    function invalidatePlacement() {
+      currentRectangle = null;
+      currentPlacement = null;
+    }
 
     function moveTo(anchor, motion) {
       const target = anchors[anchor];
       if (!target) return;
       if (target !== currentTarget) {
         currentTarget = target;
-        currentRectangle = target.getBoundingClientRect();
+        invalidatePlacement();
       }
+      if (!currentRectangle) currentRectangle = target.getBoundingClientRect();
       const rootWidth = root.offsetWidth || 96;
       const rootHeight = root.offsetHeight || 96;
       const bubbleLeft = bubble.hidden ? 0 : bubble.offsetLeft;
@@ -80,7 +88,8 @@
       const bubbleWidth = bubble.hidden ? 0 : bubble.offsetWidth;
       const bubbleHeight = bubble.hidden ? 0 : bubble.offsetHeight;
       const placement = [
-        anchor, bubble.hidden, bubbleLeft, bubbleTop, bubbleWidth, bubbleHeight,
+        anchor, currentRectangle.right, currentRectangle.top,
+        bubble.hidden, bubbleLeft, bubbleTop, bubbleWidth, bubbleHeight,
       ].join(":");
       if (placement === currentPlacement) {
         if (motion === "still") {
@@ -188,6 +197,38 @@
       return decision;
     }
 
+    function refreshLocale() {
+      if (!currentDecision || !activeBubble) return;
+      const previous = activeBubble;
+      activeBubble = null;
+      if (previous.kind === "hint") {
+        renderHint({ ...currentDecision, hintKey: previous.key });
+      } else if (previous.kind === "donation") {
+        renderDonation(currentDecision);
+      }
+      invalidatePlacement();
+      moveTo(currentDecision.anchor, currentDecision.motion);
+    }
+
+    function refreshPosition() {
+      if (!currentDecision) return;
+      invalidatePlacement();
+      moveTo(currentDecision.anchor, currentDecision.motion);
+    }
+
+    function schedulePositionRefresh() {
+      if (refreshFrame !== null) return;
+      const viewport = root.ownerDocument.defaultView;
+      if (typeof viewport.requestAnimationFrame !== "function") {
+        refreshPosition();
+        return;
+      }
+      refreshFrame = viewport.requestAnimationFrame(() => {
+        refreshFrame = null;
+        refreshPosition();
+      });
+    }
+
     function dismissHint(key) {
       local.set(`qrsalvage.hints.${key}`, "true");
       hideBubble();
@@ -209,9 +250,20 @@
           (entry) => reverseAnchors.get(entry.target) === currentDecision.anchor,
         );
         const target = preferred || visible[0];
+        invalidatePlacement();
         moveTo(reverseAnchors.get(target.target), currentDecision.motion);
       }, { threshold: [0.2, 0.6] });
       for (const anchor of Object.values(anchors)) observer.observe(anchor);
+    }
+    const viewport = root.ownerDocument.defaultView;
+    viewport.addEventListener?.("resize", schedulePositionRefresh);
+    viewport.addEventListener?.("scroll", schedulePositionRefresh, { passive: true });
+    const ResizeObserver = viewport.ResizeObserver;
+    if (typeof ResizeObserver === "function") {
+      layoutObserver = new ResizeObserver(schedulePositionRefresh);
+      for (const element of [...Object.values(anchors), root, bubble]) {
+        layoutObserver.observe(element);
+      }
     }
 
     function destroy() {
@@ -223,9 +275,14 @@
       for (const animation of animations) animation.cancel();
       currentAnimation = null;
       observer?.disconnect();
+      layoutObserver?.disconnect();
+      viewport.removeEventListener?.("resize", schedulePositionRefresh);
+      viewport.removeEventListener?.("scroll", schedulePositionRefresh);
+      if (refreshFrame !== null) viewport.cancelAnimationFrame?.(refreshFrame);
+      refreshFrame = null;
     }
 
-    return { update, dismissHint, destroy };
+    return { update, refreshLocale, dismissHint, destroy };
   }
 
   return { companionDecision, createCompanionController };

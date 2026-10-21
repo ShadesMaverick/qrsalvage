@@ -18,15 +18,15 @@
       object-src 'none'; base-uri 'none'; form-action 'self'">
 <!-- The title is the search result's first line, so it carries the broad task -- damaged QR
      code recovery -- before the project's name. Nobody searches for qrsalvage itself. -->
-<title>Damaged QR code recovery from a photo | qrsalvage</title>
+<title data-i18n="meta.title">Damaged QR code recovery from a photo | qrsalvage</title>
 <!-- What a shared link looks like. It starts with the universal problem, not the bulb that
      happened to inspire the project: the same damaged QR may sit on packaging, a ticket, a
      document, a product label, a sign or a device. -->
-<meta name="description" content="Recover damaged, scratched or faded QR codes from photos of
+<meta name="description" data-i18n-content="meta.description" content="Recover damaged, scratched or faded QR codes from photos of
       packaging, tickets, documents, signs and product labels. Runs privately in your browser.">
 <link rel="canonical" href="https://shadesmaverick.github.io/qrsalvage/">
-<meta property="og:title" content="Damaged QR code recovery — qrsalvage">
-<meta property="og:description" content="Recover scratched, faded, torn, curved or engraved QR
+<meta property="og:title" data-i18n-content="meta.ogTitle" content="Damaged QR code recovery — qrsalvage">
+<meta property="og:description" data-i18n-content="meta.ogDescription" content="Recover scratched, faded, torn, curved or engraved QR
       codes from photographs of packaging, tickets, documents, signs and product labels. Runs
       entirely in your browser; nothing is uploaded.">
 <meta property="og:url" content="https://shadesmaverick.github.io/qrsalvage/">
@@ -38,17 +38,17 @@
 </head>
 <body>
 <a class="skip-link" href="#mainContent" data-i18n="a11y.skip">Skip to the tool</a>
-<nav class="site-nav" aria-label="Primary">
-  <a class="site-brand" href="index.html" aria-label="qrsalvage home">qrsalvage</a>
+<nav class="site-nav" aria-label="Primary" data-i18n-aria="nav.primary">
+  <a class="site-brand" href="index.html" aria-label="qrsalvage home" data-i18n-aria="nav.home">qrsalvage</a>
   <a href="#studio" data-i18n="nav.studio">Studio</a>
   <a href="method.html" data-i18n="nav.method">Method</a>
   <a href="https://github.com/ShadesMaverick/qrsalvage" data-i18n="nav.github">GitHub</a>
   <a href="legal.html" data-i18n="nav.privacy">Privacy</a>
-  <div class="mode-switch" aria-label="Workspace mode">
+  <div class="mode-switch" aria-label="Workspace mode" data-i18n-aria="mode.label">
     <button id="modeEasy" type="button" data-i18n="mode.easy" aria-pressed="true">Easy</button>
     <button id="modePro" type="button" data-i18n="mode.pro" aria-pressed="false">Pro</button>
   </div>
-  <div class="locale-switch" aria-label="Language">
+  <div class="locale-switch" aria-label="Language" data-i18n-aria="locale.label">
     <button id="localeDe" type="button" data-locale="de" aria-pressed="false">DE</button>
     <button id="localeEn" type="button" data-locale="en" aria-pressed="true">EN</button>
   </div>
@@ -88,29 +88,29 @@
   <div id="workspace" aria-busy="false">
 
   <div id="drop" role="button" tabindex="0" data-i18n-aria="action.choose">
-    <p><strong id="dropTitle">Drop a photograph here</strong>
-       <span id="dropMore">&nbsp;or click to choose one</span>
-       <button id="cameraOpen" class="linkish hidden">· use the camera</button>
-       <button id="reset" class="linkish hidden">start over</button></p>
-    <p class="hint">Several photographs of the same code are read together — take them from
-      different angles and what one loses, the others still hold.<br>
+    <p><strong id="dropTitle" data-i18n="input.drop">Drop a photograph here</strong>
+       <span id="dropMore" data-i18n="input.choose">or click to choose one</span>
+       <button id="cameraOpen" class="linkish hidden" data-i18n="action.camera">Use the camera</button>
+       <button id="reset" class="linkish hidden" data-i18n="action.reset">Start over</button></p>
+    <p class="hint"><span data-i18n="input.multiHint">Several photographs of the same code are read together — take them from
+      different angles and what one loses, the others still hold.</span><br>
       <!-- The backend replaces this with the claim that is true where it runs. The wording
            here holds for both worlds, so a page whose script never ran still says something
            honest rather than something specific and wrong. -->
-      <span id="privacyNote">Nothing is uploaded, nothing leaves this device.</span></p>
+      <span id="privacyNote" data-i18n="privacy.fallback">Nothing is uploaded, nothing leaves this device.</span></p>
     <input id="file" type="file" accept="image/*" multiple class="hidden">
   </div>
 
   <!-- The camera turns the strongest measured lever into a gesture: one press gathers several
        genuinely different views instead of asking someone to repeat the upload flow. -->
   <div id="cameraPanel" class="panel hidden">
-    <h2>Camera</h2>
+    <h2 data-i18n="camera.title">Camera</h2>
     <video id="cameraFeed" autoplay playsinline muted></video>
     <div class="note" id="cameraNote"></div>
     <div class="actions">
-      <button id="capture">Capture</button>
-      <button id="torch" class="hidden">Light on</button>
-      <button id="cameraClose">Close</button>
+      <button id="capture" data-i18n="camera.captureSingle">Capture</button>
+      <button id="torch" class="hidden" data-i18n="camera.lightOn">Light on</button>
+      <button id="cameraClose" data-i18n="camera.close">Close</button>
     </div>
   </div>
 
@@ -118,19 +118,18 @@
        one code (fuse them) or several different codes (catalogue them). -->
   <div id="modeRow">
     <label><input type="radio" name="mode" value="one" checked>
-      one code — photographs are read together</label>
+      <span data-i18n="input.modeOne">one code — photographs are read together</span></label>
     <label><input type="radio" name="mode" value="many">
-      different codes — build a printable catalogue</label>
+      <span data-i18n="input.modeMany">different codes — build a printable catalogue</span></label>
   </div>
 
   <div id="results" class="hidden">
     <div class="row">
       <div class="panel">
-        <h2>Input</h2>
+        <h2 data-i18n="stage.input">Input</h2>
         <div id="thumbs" class="hidden"></div>
         <div id="photoStage" class="photo-stage" data-companion-anchor="canvas">
-          <canvas id="photo" role="application" tabindex="0"
-                  data-i18n-aria="manual.outlineCanvas"></canvas>
+          <canvas id="photo"></canvas>
           <div id="successLock" class="success-lock" aria-hidden="true">
             <span class="lock-corner top-left"></span>
             <span class="lock-corner top-right"></span>
@@ -170,39 +169,39 @@
     <div class="row" id="images"></div>
 
     <div class="panel hidden" id="exports">
-      <h2>Export</h2>
-      <p class="note" style="margin-top:0">
+      <h2 data-i18n="stage.export">Export</h2>
+      <p class="note" style="margin-top:0" data-i18n="export.explanation">
         Whether a printed code scans is decided by the width of a module, not by the pixel
         count. <em>SVG and PDF carry the size below for real</em>; the PNGs above are for sharing.
         Raising the error correction is not free: the redundancy needs modules, so at a fixed
         printed size a stronger level means <em>smaller</em> ones.
       </p>
       <div class="actions">
-        <button data-format="svg">SVG</button>
-        <button data-format="pdf">PDF</button>
+        <button data-format="svg" data-i18n="format.svg">SVG</button>
+        <button data-format="pdf" data-i18n="format.pdf">PDF</button>
       </div>
       <details id="advancedExport">
         <summary aria-expanded="false" data-i18n="export.advanced">Advanced export options</summary>
         <div class="actions">
-        <label class="size">edge length
+        <label class="size"><span data-i18n="export.edgeLength">edge length</span>
           <input id="sizeMm" type="number" value="40" min="5" max="500" step="1"> mm
         </label>
-        <label class="size">error correction
+        <label class="size"><span data-i18n="export.errorCorrection">error correction</span>
           <select id="ecc">
-            <option value="">as the original</option>
+            <option value="" data-i18n="export.originalLevel">as the original</option>
             <option value="L">L — 7 %</option>
             <option value="M">M — 15 %</option>
             <option value="Q">Q — 25 %</option>
             <option value="H">H — 30 %</option>
           </select>
         </label>
-        <button data-format="json">JSON</button>
-        <button data-format="html">Report</button>
+        <button data-format="json" data-i18n="format.json">JSON</button>
+        <button data-format="html" data-i18n="export.report">Report</button>
         </div>
         <label class="note" id="splitRow" style="display:none">
           <input id="split" type="checkbox">
-          split the payload into fields in the JSON export — off by default: install codes,
-          passcodes and network keys are secrets rather than identifiers
+          <span data-i18n="export.splitPayload">split the payload into fields in the JSON export — off by default: install codes,
+          passcodes and network keys are secrets rather than identifiers</span>
         </label>
       </details>
     </div>
@@ -214,8 +213,8 @@
   </div>
 
   <div class="panel hidden" id="catalogPanel">
-    <h2>Catalogue</h2>
-    <p class="note" style="margin-top:0">
+    <h2 data-i18n="catalogue.title">Catalogue</h2>
+    <p class="note" style="margin-top:0" data-i18n="catalogue.explanation">
       Every photograph is treated as its own code. Give each one the name it has in your life —
       <em>archive box 14</em> or <em>ticket A</em> — and the PDF prints three to an A4 page: the code at a real
       physical size on the left, its content on the right, your title above. Duplicate
@@ -223,10 +222,10 @@
     </p>
     <div class="cards" id="cards"></div>
     <div class="actions">
-      <label class="size">code size
+      <label class="size"><span data-i18n="catalogue.codeSize">code size</span>
         <input id="catalogSizeMm" type="number" value="50" min="20" max="70" step="1"> mm
       </label>
-      <button id="catalogPdf">Download A4 catalogue (PDF)</button>
+      <button id="catalogPdf" data-i18n="catalogue.download">Download A4 catalogue (PDF)</button>
     </div>
   </div>
   </div>
@@ -251,7 +250,7 @@
   </section>
 
   <section id="situations">
-    <p class="eyebrow">Field notes</p>
+    <p class="eyebrow" data-i18n="situations.eyebrow">Field notes</p>
     <h2 data-i18n="situations.title">Built for difficult surfaces</h2>
 
   <!-- The questions people actually type into a search engine, as headings, answered honestly.
@@ -401,13 +400,13 @@
   </section>
 
   <section id="privacyOpenSource">
-    <p class="eyebrow">Local by design</p>
+    <p class="eyebrow" data-i18n="privacy.eyebrow">Local by design</p>
     <h2 data-i18n="privacy.title">Private by construction, open by default</h2>
-    <p>Every QR code can carry something different. Recovery runs entirely on this device;
+    <p data-i18n="privacy.explanation">Every QR code can carry something different. Recovery runs entirely on this device;
       photographs and recovered text are never uploaded, and the same-origin security policy
       prevents the application from sending them elsewhere.</p>
     <div class="editorial-links">
-      <a href="https://github.com/ShadesMaverick/qrsalvage">View the source repository</a>
+      <a href="https://github.com/ShadesMaverick/qrsalvage" data-i18n="privacy.source">View the source repository</a>
       <a href="legal.html" data-i18n="nav.privacy">Privacy</a>
     </div>
   </section>
@@ -496,11 +495,11 @@
   <!-- Quiet on purpose. A person here has a problem to solve; the legal page is required to
        be reachable, not prominent. -->
   <footer>
-    <a href="method.html">how it works</a>
+    <a href="method.html" data-i18n="footer.method">how it works</a>
     <span aria-hidden="true">·</span>
-    <a href="legal.html">Impressum &amp; Datenschutz</a>
+    <a href="legal.html" data-i18n="footer.legal">Impressum &amp; Datenschutz</a>
     <span aria-hidden="true">·</span>
-    <span>free software, Apache-2.0</span>
+    <span data-i18n="footer.license">free software, Apache-2.0</span>
   </footer>
 
 <!-- Which of the two backends this is decides where the recovery runs: the local Python
