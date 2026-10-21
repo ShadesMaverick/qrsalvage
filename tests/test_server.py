@@ -435,7 +435,7 @@ def running_server():
     httpd.server_close()
 
 
-def test_it_serves_the_page_and_nothing_else(running_server):
+def test_static_assets_are_served_and_nothing_else(running_server):
     host, port = running_server
     connection = http.client.HTTPConnection(host, port, timeout=10)
 
@@ -444,6 +444,11 @@ def test_it_serves_the_page_and_nothing_else(running_server):
     body = response.read()
     assert response.status == 200
     assert b"qrsalvage" in body
+
+    connection.request("GET", "/locale.js")
+    response = connection.getresponse()
+    assert response.status == 200
+    assert b"chooseLocale" in response.read()
 
     # No directory traversal, no serving of anything but the one page.
     connection.request("GET", "/../pyproject.toml")
@@ -531,6 +536,88 @@ def test_studio_state_reducer_has_one_named_phase(event, phase):
     assert state["phase"] == phase
     assert state["mode"] == "easy"
     assert view["phaseClass"] == f"studio-phase-{phase}"
+
+
+def test_locale_prefers_a_saved_choice_then_browser_german_then_english():
+    assert _call_web_module("locale.js", "chooseLocale", "en", ["de-DE"]) == "en"
+    assert _call_web_module("locale.js", "chooseLocale", None, ["de-DE", "en"]) == "de"
+    assert _call_web_module("locale.js", "chooseLocale", None, ["fr-FR"]) == "en"
+
+
+def test_locale_interpolates_values_and_falls_back_to_english():
+    assert (
+        _call_web_module("locale.js", "translate", "de", "progress.photoCount", {"count": 3})
+        == "3 Fotos werden gemeinsam gelesen"
+    )
+    assert _call_web_module("locale.js", "translate", "fr", "action.reset") == "Start over"
+
+
+def test_locale_dictionaries_have_identical_keys():
+    keys = _call_web_module("locale.js", "dictionaryKeys")
+    assert keys["en"] == keys["de"]
+
+
+def test_locale_controller_applies_the_dom_and_survives_failed_storage():
+    helper = ROOT / "src" / "qrsalvage" / "web" / "locale.js"
+    script = r"""
+const { createLocaleController } = require(process.argv[1]);
+const text = { dataset: { i18n: "action.reset" }, textContent: "" };
+const aria = {
+  dataset: { i18nAria: "action.copy" },
+  setAttribute(name, value) { this[name] = value; },
+};
+const german = { dataset: { lang: "de" }, hidden: false };
+const english = { dataset: { lang: "en" }, hidden: false };
+const deButton = {
+  dataset: { locale: "de" },
+  setAttribute(name, value) { this[name] = value; },
+};
+const enButton = {
+  dataset: { locale: "en" },
+  setAttribute(name, value) { this[name] = value; },
+};
+const groups = {
+  "[data-i18n]": [text],
+  "[data-i18n-aria]": [aria],
+  "[data-lang]": [german, english],
+  "[data-locale]": [deButton, enButton],
+};
+const document = {
+  documentElement: { lang: "" },
+  querySelectorAll(selector) { return groups[selector]; },
+};
+const storage = { setItem() { throw new Error("denied"); } };
+const controller = createLocaleController({ locale: "en", document, storage });
+controller.setLocale("de");
+process.stdout.write(JSON.stringify({
+  locale: controller.locale,
+  lang: document.documentElement.lang,
+  text: text.textContent,
+  aria: aria["aria-label"],
+  germanHidden: german.hidden,
+  englishHidden: english.hidden,
+  dePressed: deButton["aria-pressed"],
+  enPressed: enButton["aria-pressed"],
+}));
+"""
+    completed = subprocess.run(
+        ["node", "-e", script, str(helper)],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert completed.returncode == 0, completed.stderr
+    assert json.loads(completed.stdout) == {
+        "locale": "de",
+        "lang": "de",
+        "text": "Neu beginnen",
+        "aria": "Kopieren",
+        "germanHidden": False,
+        "englishHidden": True,
+        "dePressed": "true",
+        "enPressed": "false",
+    }
 
 
 def test_outline_editor_selects_the_nearest_overlapping_handle():
@@ -698,7 +785,7 @@ def test_the_public_page_leads_with_general_qr_recovery():
 def test_search_discovery_files_are_part_of_the_static_build():
     from scripts.build_site import PAGE_FILES
 
-    assert {"robots.txt", "sitemap.xml"} <= set(PAGE_FILES)
+    assert {"robots.txt", "sitemap.xml", "locale.js"} <= set(PAGE_FILES)
 
 
 def test_wait_feedback_is_graphical_accessible_and_motion_safe(running_server):
