@@ -332,7 +332,10 @@ if (probeName === "failure-locale") {
   probeName === "malformed-success" ||
   probeName === "malformed-payload-guard" ||
   probeName === "malformed-payload-solve" ||
-  probeName === "malformed-payload-catalogue"
+  probeName === "malformed-payload-catalogue" ||
+  probeName === "falsy-payload-guard" ||
+  probeName === "falsy-payload-solve" ||
+  probeName === "falsy-payload-catalogue"
 ) {
   exposure = `globalThis.__app = {
     solve,
@@ -586,6 +589,37 @@ if (probeName === "failure-locale") {
     kind: "matter",
     fields: { unknown_field: "value" },
   }));
+  app.load(entry);
+  app.catalogRun().then(() => {
+    process.stdout.write(JSON.stringify({
+      status: getElement("status").textContent,
+      phase: app.phase(),
+      backendSolveCalls,
+    }));
+  }).catch((error) => { console.error(error); process.exitCode = 1; });
+} else if (probeName === "falsy-payload-guard") {
+  const rejected = [null, false, 0, ""].map((payloadInfo) => {
+    try { app.requireSolveAnswer(successfulAnswer(payloadInfo)); return null; }
+    catch (error) { return String(error); }
+  });
+  const absent = successfulAnswer(undefined);
+  delete absent.payload_info;
+  process.stdout.write(JSON.stringify({
+    rejected,
+    absentUnchanged: app.requireSolveAnswer(absent) === absent,
+  }));
+} else if (probeName === "falsy-payload-solve") {
+  app.setBackendAnswer(successfulAnswer(null));
+  app.load(entry);
+  app.solve().then(() => {
+    process.stdout.write(JSON.stringify({
+      status: getElement("status").textContent,
+      phase: app.phase(),
+      backendSolveCalls,
+    }));
+  }).catch((error) => { console.error(error); process.exitCode = 1; });
+} else if (probeName === "falsy-payload-catalogue") {
+  app.setBackendAnswer(successfulAnswer(false));
   app.load(entry);
   app.catalogRun().then(() => {
     process.stdout.write(JSON.stringify({
@@ -1482,6 +1516,29 @@ def test_app_rejects_unknown_payload_kind_inside_solve():
 
 def test_app_rejects_unknown_payload_field_inside_catalogue():
     result = _call_app_runtime_probe("malformed-payload-catalogue")
+
+    assert "incomplete successful result" in result["status"]
+    assert result["phase"] == "failure"
+    assert result["backendSolveCalls"] == 1
+
+
+def test_app_rejects_present_falsy_payload_metadata_but_allows_absence():
+    result = _call_app_runtime_probe("falsy-payload-guard")
+
+    assert all("incomplete successful result" in message for message in result["rejected"])
+    assert result["absentUnchanged"] is True
+
+
+def test_app_rejects_null_payload_metadata_inside_solve():
+    result = _call_app_runtime_probe("falsy-payload-solve")
+
+    assert "incomplete successful result" in result["status"]
+    assert result["phase"] == "failure"
+    assert result["backendSolveCalls"] == 1
+
+
+def test_app_rejects_false_payload_metadata_inside_catalogue():
+    result = _call_app_runtime_probe("falsy-payload-catalogue")
 
     assert "incomplete successful result" in result["status"]
     assert result["phase"] == "failure"
