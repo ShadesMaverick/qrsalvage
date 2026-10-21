@@ -6,6 +6,7 @@
 
 "use strict";
 const $ = (id) => document.getElementById(id);
+const t = (key, values) => window.qrLocale.t(key, values);
 
 function readPreference(key) {
   try { return window.localStorage.getItem(key); } catch { return null; }
@@ -16,6 +17,14 @@ function writePreference(key, value) {
 }
 
 let studioState = window.qrStudioState.createStudioState(readPreference("qrsalvage.mode"));
+let disclosureMode = null;
+
+function setDisclosure(id, expanded) {
+  const details = $(id);
+  details.open = expanded;
+  const summary = details.querySelector("summary");
+  if (summary) summary.setAttribute("aria-expanded", String(expanded));
+}
 
 function dispatchStudio(event) {
   studioState = window.qrStudioState.reduceStudioState(studioState, event);
@@ -24,22 +33,27 @@ function dispatchStudio(event) {
   shell.className = `${view.phaseClass} ${view.modeClass}`;
   $("modeEasy").setAttribute("aria-pressed", String(studioState.mode === "easy"));
   $("modePro").setAttribute("aria-pressed", String(studioState.mode === "pro"));
+  if (disclosureMode !== studioState.mode) {
+    setDisclosure("diagnosticsDetails", view.diagnosticsExpanded);
+    setDisclosure("advancedExport", view.diagnosticsExpanded);
+    setDisclosure("matrixDetails", view.diagnosticsExpanded);
+    disclosureMode = studioState.mode;
+  }
+  syncManualTools(view.manualToolsExpanded);
 }
 
 window.dispatchStudio = dispatchStudio;
-dispatchStudio({ type: "SET_MODE", mode: studioState.mode });
-
-const preferredLocales = navigator.languages || [navigator.language || "en"];
-window.qrLocale.createLocaleController({
-  document,
-  locale: window.qrLocale.chooseLocale(readPreference("qrsalvage.locale"), preferredLocales),
-  storage: { setItem: writePreference },
-});
 
 for (const [id, modeName] of [["modeEasy", "easy"], ["modePro", "pro"]]) {
   $(id).addEventListener("click", () => {
     writePreference("qrsalvage.mode", modeName);
     dispatchStudio({ type: "SET_MODE", mode: modeName });
+  });
+}
+
+for (const id of ["diagnosticsDetails", "advancedExport", "matrixDetails"]) {
+  $(id).addEventListener("toggle", () => {
+    $(id).querySelector("summary").setAttribute("aria-expanded", String($(id).open));
   });
 }
 
@@ -65,8 +79,7 @@ function thanksHtml() {
   // decision. The wording applies equally to every kind of recovered QR code.
   return `<div class="thanks"><img src="axolotl.png" alt="">
     <span>${escapeHtml(window.qrBackend.privacyNote)}
-    Saved your QR code? <em>5&nbsp;€</em> helps maintain the recovery engine and keeps this
-    private browser tool available.</span>
+    ${escapeHtml(t("donation.successPrompt"))}</span>
     <span class="links">${links}</span></div>`;
 }
 const drop = $("drop"), fileInput = $("file"), status = $("status");
@@ -106,6 +119,23 @@ let pendingWarning = "";
 const bootProgressOwner = Symbol("boot");
 let mode = "one";   // "one": several photographs of one code; "many": a catalogue
 let lastSolved = false;  // a fresh drop after a success starts a fresh recovery
+
+function syncManualTools(direct = studioState.mode === "pro") {
+  const active = picking || outlineEditing;
+  const single = loaded.length === 1;
+  const recoveryChoice = studioState.phase === "failure" || studioState.phase === "assistance";
+  const expanded = active || (single && (direct || recoveryChoice) && studioState.phase !== "success");
+  const controls = $("manualTools");
+  controls.hidden = !expanded;
+  controls.setAttribute("aria-expanded", String(expanded));
+  if (active) return;
+  $("retry").hidden = !expanded;
+  $("outlineRetry").hidden = !expanded;
+  $("outlineSolve").hidden = true;
+  $("cancel").hidden = true;
+}
+
+dispatchStudio({ type: "SET_MODE", mode: studioState.mode });
 
 function announce(message) {
   if (!message || message === lastAnnouncement) return;
@@ -191,18 +221,20 @@ window.qrBackend.onBoot((event) => {
   if (event.done) {
     if (progressOwner === bootProgressOwner && progressIdle(bootProgressOwner)) {
       status.textContent = "";
-      announce("Recovery engine ready");
+      announce(t("boot.ready"));
     }
     return;
   }
   if (progressOwner !== null && progressOwner !== bootProgressOwner) return;
   progressWorking(bootProgressOwner);
-  const seconds = event.seconds ? ` <span class="mono">${Number(event.seconds)} s</span>` : "";
+  const seconds = event.seconds
+    ? ` <span class="mono">${escapeHtml(Number(event.seconds))} s</span>`
+    : "";
   status.innerHTML =
-    `starting the recovery engine in ${escapeHtml(window.qrBackend.mode)}` +
+    escapeHtml(t("boot.startingIn", { mode: window.qrBackend.mode })) +
     ` — ${escapeHtml(event.stage)}${seconds}` +
-    `<span class="quiet"> — once only, then it stays warm</span>`;
-  announce(`Starting the recovery engine: ${event.stage}`);
+    `<span class="quiet"> — ${escapeHtml(t("boot.once"))}</span>`;
+  announce(t("boot.starting", { stage: event.stage }));
 });
 
 /** Wait until recovering is possible at all. Answers false if it never will be. */
@@ -214,7 +246,7 @@ async function backendReady(owner) {
     if (progressIdle(owner)) {
       document.body.classList.remove("busy");
       status.textContent = window.qrBackend.failurePrefix + err;
-      announce("The recovery engine could not start");
+      announce(t("boot.failure"));
       dispatchStudio({ type: "RECOVERY_FAILED" });
     }
     return false;
@@ -246,8 +278,8 @@ async function openCamera() {
   if (cameraStream || document.body.classList.contains("busy")) return;
   const owner = Symbol("camera");
   progressWorking(owner);
-  status.textContent = "requesting camera access…";
-  announce("Requesting camera access");
+  status.textContent = t("camera.requesting");
+  announce(t("camera.requestingAnnouncement"));
   let stream;
   try {
     stream = await navigator.mediaDevices.getUserMedia({
@@ -256,9 +288,8 @@ async function openCamera() {
     });
   } catch (err) {
     if (progressIdle(owner)) {
-      status.textContent =
-        "no camera: " + err.name + " — dropping a photograph works exactly the same";
-      announce("Camera access failed; dropping a photograph still works");
+      status.textContent = t("camera.unavailable", { name: err.name });
+      announce(t("camera.unavailableAnnouncement"));
     }
     return;
   }
@@ -270,18 +301,15 @@ async function openCamera() {
   if (progressIdle(owner)) status.textContent = "";
   $("cameraFeed").srcObject = cameraStream;
   $("cameraPanel").classList.remove("hidden");
-  $("cameraNote").innerHTML = mode === "one"
-    ? "Fill the frame with the code. One press takes <em>four frames over two seconds</em> — " +
-      "move the camera slowly around the code while it counts. They are read together."
-    : "Fill the frame with the code — one press, one photograph, one catalogue entry.";
-  $("capture").textContent = mode === "one" ? "Capture 4 frames" : "Capture";
+  $("cameraNote").textContent = t(mode === "one" ? "camera.noteBurst" : "camera.noteSingle");
+  $("capture").textContent = t(mode === "one" ? "camera.captureBurst" : "camera.captureSingle");
 
   // A torch helps on shadowed, reflective and low-contrast labels in dark corners.
   const track = cameraStream.getVideoTracks()[0];
   const capabilities = track.getCapabilities ? track.getCapabilities() : {};
   $("torch").classList.toggle("hidden", !capabilities.torch);
   torchOn = false;
-  $("torch").textContent = "Light on";
+  $("torch").textContent = t("camera.lightOn");
 }
 
 function closeCamera() {
@@ -307,28 +335,29 @@ async function toggleTorch() {
   torchOn = !torchOn;
   try {
     await cameraStream.getVideoTracks()[0].applyConstraints({ advanced: [{ torch: torchOn }] });
-    $("torch").textContent = torchOn ? "Light off" : "Light on";
+    $("torch").textContent = t(torchOn ? "camera.lightOff" : "camera.lightOn");
   } catch { /* not every browser lets the page at the torch; the button just stays honest */ }
 }
 
 async function captureBurst() {
   if (!cameraStream || capturing || document.body.classList.contains("busy")) return;
   const video = $("cameraFeed");
-  if (!video.videoWidth) { $("cameraNote").textContent = "the camera is still starting…"; return; }
+  if (!video.videoWidth) { $("cameraNote").textContent = t("camera.starting"); return; }
   const owner = Symbol("capture");
   const frames = [];
   captureOwner = owner;
   capturing = true;
   document.body.classList.add("busy");
   progressWorking(owner);
-  status.textContent = "capturing photographs…";
-  announce("Capturing photographs");
+  status.textContent = t("camera.capturing");
+  announce(t("camera.capturingAnnouncement"));
   const count = mode === "one" ? 4 : 1;
   let committed = false;
   try {
     for (let i = 0; i < count; i++) {
-      $("cameraNote").innerHTML =
-        count > 1 ? `<em>frame ${i + 1} of ${count}</em> — keep moving slowly…` : "captured.";
+      $("cameraNote").textContent = count > 1
+        ? t("camera.frame", { current: i + 1, total: count })
+        : t("camera.captured");
       const frame = document.createElement("canvas");
       frame.width = video.videoWidth;
       frame.height = video.videoHeight;
@@ -351,15 +380,15 @@ async function captureBurst() {
     loaded.push(...frames);
     committed = true;
     closeCamera();
-    status.textContent = "preparing the captured photographs…";
-    announce("Preparing the captured photographs");
+    status.textContent = t("camera.preparing");
+    announce(t("camera.preparingAnnouncement"));
     refresh();
     run();
   } catch (err) {
     if (progressIdle(owner)) {
       document.body.classList.remove("busy");
-      status.textContent = "camera capture failed: " + err.message;
-      announce("Camera capture failed");
+      status.textContent = t("camera.failure", { message: err.message });
+      announce(t("camera.failureAnnouncement"));
     }
   } finally {
     if (!committed) releaseBitmaps(frames);
@@ -419,12 +448,13 @@ async function addFiles(files) {
   document.body.classList.add("busy");
   const owner = Symbol("selection");
   progressWorking(owner);
-  status.textContent = images.length === 1
-    ? "reading the selected photograph…"
-    : `reading ${images.length} selected photographs…`;
-  announce(images.length === 1
-    ? "Reading the selected photograph"
-    : `Reading ${images.length} selected photographs`);
+  status.textContent = t(images.length === 1 ? "input.readingOne" : "input.readingMany", {
+    count: images.length,
+  });
+  announce(t(
+    images.length === 1 ? "input.readingOneAnnouncement" : "input.readingManyAnnouncement",
+    { count: images.length }
+  ));
 
   const accepted = [];
   const refused = [];
@@ -466,9 +496,8 @@ async function addFiles(files) {
   if (!accepted.length) {
     if (progressIdle(owner)) {
       document.body.classList.remove("busy");
-      status.textContent = `could not read: ${refused.join(", ")} — likely HEIC (iPhone). ` +
-        "Export or share the photo as JPEG and drop it again.";
-      announce("One or more selected photographs could not be read");
+      status.textContent = t("input.unreadable", { names: refused.join(", ") });
+      announce(t("input.unreadableAnnouncement"));
     }
     return;
   }
@@ -482,9 +511,7 @@ async function addFiles(files) {
   loaded.push(...accepted);
   dispatchStudio({ type: "IMAGES_READY" });
   if (refused.length) {
-    const warning = `could not read: ${refused.join(", ")} — likely HEIC (iPhone). ` +
-      "Export or share the photo as JPEG and drop it again.";
-    pendingWarning = warning;
+    pendingWarning = t("input.unreadable", { names: refused.join(", ") });
   }
   picked = []; picking = false;
   clearOutlineEditor(false);
@@ -508,8 +535,8 @@ function resetAll() {
   $("catalogPanel").classList.add("hidden");
   drop.classList.remove("compact");
   $("reset").classList.add("hidden");
-  $("dropTitle").textContent = "Drop a photograph here";
-  $("dropMore").innerHTML = "&nbsp;or click to choose one";
+  $("dropTitle").textContent = t("input.drop");
+  $("dropMore").textContent = ` ${t("input.choose")}`;
   status.textContent = "";
   dispatchStudio({ type: "RESET" });
 }
@@ -517,15 +544,17 @@ function resetAll() {
 function refresh() {
   drop.classList.add("compact");
   $("reset").classList.remove("hidden");
-  $("dropTitle").textContent =
-    loaded.length === 1 ? "1 photograph loaded" : `${loaded.length} photographs loaded`;
-  $("dropMore").textContent = " — drop more of the same code to add them";
+  $("dropTitle").textContent = t(
+    loaded.length === 1 ? "input.loadedOne" : "input.loadedMany",
+    { count: loaded.length }
+  );
+  $("dropMore").textContent = ` — ${t("input.more")}`;
 
   const thumbs = $("thumbs");
   thumbs.classList.toggle("hidden", mode === "one" && loaded.length < 2);
   thumbs.innerHTML = loaded
-    .map((l, i) => `<div class="thumb"><img src="${l.dataUrl}" alt="">` +
-                   `<button data-index="${i}" title="remove">×</button></div>`)
+    .map((l, i) => `<div class="thumb"><img src="${escapeHtml(l.dataUrl)}" alt="">` +
+                   `<button data-index="${escapeHtml(i)}" title="${escapeHtml(t("input.remove"))}">×</button></div>`)
     .join("");
   for (const button of thumbs.querySelectorAll("button")) {
     button.addEventListener("click", () => {
@@ -650,24 +679,26 @@ canvas.addEventListener("click", (e) => {
   if (!picking) return;
   picked.push(canvasPoint(e));
   draw();
-  $("canvasNote").innerHTML = picked.length < 3
-    ? `<em>${picked.length} of 3</em> marked — click the centre of the next corner square.`
-    : "Three marked, recovering…";
+  $("canvasNote").textContent = picked.length < 3
+    ? t("manual.finderProgress", { count: picked.length })
+    : t("manual.findersReady");
   if (picked.length === 3) { picking = false; solve(picked); }
 });
 
-const OUTLINE_CORNER_NAMES = ["top left", "top right", "bottom right", "bottom left"];
+const OUTLINE_CORNER_KEYS = [
+  "manual.topLeft", "manual.topRight", "manual.bottomRight", "manual.bottomLeft",
+];
 
 function updateOutlineInstructions() {
   if (outlineCorners.length < 4) {
-    const next = OUTLINE_CORNER_NAMES[outlineCorners.length];
-    $("canvasNote").innerHTML =
-      "Tap the four QR corners in order: <em>top left, top right, bottom right, bottom left</em>. " +
-      `<em>${outlineCorners.length} of 4</em> marked — next: ${next}.`;
+    const next = t(OUTLINE_CORNER_KEYS[outlineCorners.length]);
+    $("canvasNote").textContent = t("manual.outlineProgress", {
+      count: outlineCorners.length,
+      next,
+    });
     return;
   }
-  $("canvasNote").textContent =
-    "Drag the numbered corners and the smaller diamond edge handles until the curve follows the QR code.";
+  $("canvasNote").textContent = t("manual.outlineAdjust");
 }
 
 function freezeOutlineEditor() {
@@ -683,7 +714,7 @@ function clearOutlineEditor(redraw = true) {
   freezeOutlineEditor();
   outlineCorners = [];
   outlineMidpoints = [];
-  $("outlineSolve").classList.add("hidden");
+  $("outlineSolve").hidden = true;
   if (redraw && loaded.length) draw();
 }
 
@@ -706,7 +737,7 @@ canvas.addEventListener("pointerdown", (e) => {
     if (outlineCorners.length === 4) {
       outlineMidpoints = defaultEdgeMidpoints(outlineCorners);
       canvas.classList.add("outline-ready");
-      $("outlineSolve").classList.remove("hidden");
+      $("outlineSolve").hidden = false;
     }
     updateOutlineInstructions();
     draw();
@@ -756,16 +787,19 @@ function busy(on, owner) {
   document.body.classList.add("busy");
   progressWorking(owner);
   const started = Date.now();
-  const together = loaded.length > 1 ? ` · reading ${loaded.length} photographs together` : "";
+  const together = loaded.length > 1
+    ? ` · ${t("progress.readingTogether", { count: loaded.length })}`
+    : "";
   const warning = pendingWarning
     ? `<span class="quiet"> · ${escapeHtml(pendingWarning)}</span>`
     : "";
   status.innerHTML =
-    `<strong>recovering…</strong> <span class="mono" id="elapsed" aria-hidden="true">0 s</span>` +
-    `<span class="quiet" id="progressStage">${together || " · reading the photograph"}` +
-    ` — a large photograph can take a minute</span>${warning}`;
-  announce(pendingWarning ? "Recovery started; some selected photographs could not be read" :
-    "Recovery started");
+    `<strong>${escapeHtml(t("progress.recovering"))}</strong> ` +
+    `<span class="mono" id="elapsed" aria-hidden="true">0 s</span>` +
+    `<span class="quiet" id="progressStage">${escapeHtml(
+      together || ` · ${t("progress.readingOne")}`
+    )} — ${escapeHtml(t("progress.largePhoto"))}</span>${warning}`;
+  announce(pendingWarning ? t("progress.startedWarning") : t("progress.started"));
   pendingWarning = "";
   timerId = setInterval(() => {
     const el = $("elapsed");
@@ -778,15 +812,15 @@ async function solve(points, outlineHint) {
   if (!loaded.length) return;
   prepareRecoveryVisuals();
   for (const id of ["retry", "outlineRetry", "outlineSolve", "cancel"]) {
-    $(id).classList.add("hidden");
+    $(id).hidden = true;
   }
   const my = ++seq;
   const owner = Symbol(`solve-${my}`);
   $("catalogPanel").classList.add("hidden");
   document.body.classList.add("busy");
   progressWorking(owner);
-  status.textContent = "preparing the recovery engine…";
-  announce("Preparing the recovery engine");
+  status.textContent = t("progress.preparing");
+  announce(t("progress.preparingAnnouncement"));
   dispatchStudio({ type: "PREPARING" });
   const ready = await backendReady(owner);
   if (!ready || my !== seq) {
@@ -822,7 +856,7 @@ async function solve(points, outlineHint) {
       clearOutlineEditor(false);
       liveEnd(false);
       status.textContent = window.qrBackend.failurePrefix + err;
-      announce("Recovery failed");
+      announce(t("result.failure"));
       dispatchStudio({ type: "RECOVERY_FAILED" });
     }
     return;
@@ -834,7 +868,7 @@ async function solve(points, outlineHint) {
   if (answer) {
     render(answer);
     if (answer.ok) {
-      progressComplete("QR code recovered");
+      progressComplete(t("result.success"));
       celebrateRecovery();
       dispatchStudio({ type: "RECOVERY_SUCCEEDED" });
     } else {
@@ -861,16 +895,16 @@ let liveChosen = null;
 // directory and land at the host root under two of those three. method.html is the file's real
 // name; the local server answers /method as well, but only the name works everywhere.
 const STAGES = {
-  image:   ['reading the photograph', null],
-  finders: ['looking for finder patterns', 'method.html#search'],
-  polarity:['trying inverted polarity', 'method.html#search'],
-  grid:    ['fitting the grid — coordinate descent on the known cells', 'method.html#grid'],
-  chosen:  ['version chosen', 'method.html#search'],
-  sampled: ['sampling — a probability for every module', 'method.html#posterior'],
-  repair:  ['Reed-Solomon with erasures', 'method.html#rs'],
-  probe:   ['probing the least certain cells', 'method.html#probe'],
-  member:  ['reading photographs', null],
-  fusion:  ['fusing the photographs', null],
+  image:   ["recovery.stage.image", null],
+  finders: ["recovery.stage.finders", "method.html#search"],
+  polarity:["recovery.stage.polarity", "method.html#search"],
+  grid:    ["recovery.stage.grid", "method.html#grid"],
+  chosen:  ["recovery.stage.chosen", "method.html#search"],
+  sampled: ["recovery.stage.sampled", "method.html#posterior"],
+  repair:  ["recovery.stage.repair", "method.html#rs"],
+  probe:   ["recovery.stage.probe", "method.html#probe"],
+  member:  ["recovery.stage.member", null],
+  fusion:  ["recovery.stage.fusion", null],
 };
 
 function liveStart() {
@@ -901,22 +935,32 @@ function liveEnd(persistGrid) {
 function liveEvent(e) {
   const stage = STAGES[e.type];
   if (stage) {
-    const member = e.member !== undefined ? `photograph ${e.member + 1} · ` : "";
+    const member = e.member !== undefined
+      ? `${t("recovery.member", { count: e.member + 1 })} · `
+      : "";
+    const stageText = t(stage[0]);
     const extra =
-      e.type === "grid" && e.phase === "bow" ? " — letting it bow" :
-      e.type === "grid" && e.phase === "restart" ? " — the grid sat badly, trying a wider step" :
-      e.type === "probe" ? ` — ${e.tried} of ${e.budget} attempts` :
-      e.type === "repair" ? (e.method === "ladder" ? ` — ${e.step} erasures` : ` — ${e.step} sets`) :
-      e.type === "member" ? ` — ${e.index + 1} of ${e.total}` : "";
-    $("liveStage").innerHTML = member + (stage[1]
-      ? `<a href="${stage[1]}" target="_blank">${stage[0]}</a>` : stage[0]) + escapeHtml(extra);
+      e.type === "grid" && e.phase === "bow" ? ` — ${t("recovery.gridBow")}` :
+      e.type === "grid" && e.phase === "restart" ? ` — ${t("recovery.gridRestart")}` :
+      e.type === "probe" ? ` — ${t("recovery.probeAttempts", { tried: e.tried, budget: e.budget })}` :
+      e.type === "repair" ? ` — ${t(
+        e.method === "ladder" ? "recovery.repairErasures" : "recovery.repairSets",
+        { count: e.step }
+      )}` :
+      e.type === "member" ? ` — ${t("recovery.memberProgress", {
+        current: e.index + 1,
+        total: e.total,
+      })}` : "";
+    $("liveStage").innerHTML = escapeHtml(member) + (stage[1]
+      ? `<a href="${escapeHtml(stage[1])}" target="_blank">${escapeHtml(stageText)}</a>`
+      : escapeHtml(stageText)) + escapeHtml(extra);
     const progressStage = $("progressStage");
     if (progressStage) {
-      progressStage.textContent = ` · ${member}${stage[0]}${extra}`;
+      progressStage.textContent = ` · ${member}${stageText}${extra}`;
     }
     // The visible diagnostics may update on every probe. Screen readers get the meaningful
     // stage only, and announce() suppresses identical consecutive stages.
-    announce(`Recovery stage: ${member}${stage[0]}`);
+    announce(t("progress.stage", { stage: `${member}${stageText}` }));
   }
   if (e.type === "member") {
     liveGrid = null; liveGrids = {}; liveSizes = {}; liveChosen = null; scheduleDraw();
@@ -950,9 +994,11 @@ function renderRace() {
     const share = Math.min(s.wrong / Math.max(s.total, 1) / 0.4, 1);
     const width = 4 + Math.round(76 * share);
     const best = liveChosen === m ? " best" : "";
-    return `<dt>${Number(m)} modules</dt>` +
-           `<dd><span class="racebar${best}" style="width:${width}px"></span>` +
-           `${Number(s.wrong)} / ${Number(s.total)} wrong</dd>`;
+    return `<dt>${escapeHtml(t("diagnostics.modules", { count: Number(m) }))}</dt>` +
+           `<dd><span class="racebar${escapeHtml(best)}" style="width:${escapeHtml(width)}px"></span>` +
+           `${escapeHtml(t("diagnostics.wrong", {
+             wrong: Number(s.wrong), total: Number(s.total),
+           }))}</dd>`;
   });
   $("liveSizes").innerHTML = rows.join("");
 }
@@ -979,9 +1025,11 @@ function renderHeat(e) {
     }
   }
   context.putImageData(pixels, 0, 0);
-  $("heatNote").textContent =
-    `what the machine sees: ${e.modules}×${e.modules} cells, ` +
-    `${e.uncertain} uncertain (red), ${e.wrong_known} known cells wrong`;
+  $("heatNote").textContent = t("diagnostics.heatmap", {
+    modules: e.modules,
+    uncertain: e.uncertain,
+    wrongKnown: e.wrong_known,
+  });
 }
 
 function scheduleDraw() {
@@ -993,7 +1041,8 @@ function scheduleDraw() {
 /* --- catalogue mode: every photograph its own code ---------------------------------- */
 
 function titleFrom(name) {
-  return (name || "").replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").trim() || "untitled";
+  return (name || "").replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").trim() ||
+    t("catalogue.untitled");
 }
 
 async function catalogRun() {
@@ -1006,10 +1055,9 @@ async function catalogRun() {
   $("catalogPanel").classList.remove("hidden");
   document.body.classList.add("busy");
   progressWorking(owner);
-  status.innerHTML = "preparing the recovery engine…" +
+  status.innerHTML = escapeHtml(t("catalogue.preparing")) +
     (warning ? `<span class="quiet"> · ${escapeHtml(warning)}</span>` : "");
-  announce(warning ? "Preparing the catalogue; some selected photographs could not be read" :
-    "Preparing the recovery engine for the catalogue");
+  announce(t(warning ? "catalogue.preparingWarning" : "catalogue.preparingAnnouncement"));
   dispatchStudio({ type: "PREPARING" });
   const ready = await backendReady(owner);
   if (!ready || my !== seq) {
@@ -1028,10 +1076,13 @@ async function catalogRun() {
   let done = 0;
   for (const item of pending) {
     status.innerHTML =
-      `<strong>recovering ${++done} of ${pending.length}…</strong> ` +
+      `<strong>${escapeHtml(t("catalogue.recovering", {
+        current: ++done,
+        total: pending.length,
+      }))}</strong> ` +
       `<span class="quiet">${escapeHtml(item.name)}</span>` +
       (warning ? `<span class="quiet"> · ${escapeHtml(warning)}</span>` : "");
-    announce(`Recovering catalogue photograph ${done} of ${pending.length}`);
+    announce(t("catalogue.recoveringAnnouncement", { current: done, total: pending.length }));
     catalogRender();
     try {
       // A catalogue narrates its own progress card by card, so the events of the single
@@ -1044,7 +1095,7 @@ async function catalogRun() {
       if (progressIdle(owner)) {
         document.body.classList.remove("busy");
         status.textContent = window.qrBackend.failurePrefix + err;
-        announce("Catalogue recovery failed");
+        announce(t("catalogue.recoveryFailure"));
         dispatchStudio({ type: "RECOVERY_FAILED" });
       }
       return;
@@ -1054,7 +1105,7 @@ async function catalogRun() {
   if (!progressIdle(owner)) return;
   document.body.classList.remove("busy");
   catalogRender();
-  progressComplete("Catalogue recovery complete");
+  progressComplete(t("catalogue.complete"));
   dispatchStudio({
     type: loaded.some((item) => item.result && item.result.ok)
       ? "RECOVERY_SUCCEEDED"
@@ -1068,26 +1119,27 @@ function catalogRender() {
     const r = item.result;
     if (item.title === undefined) item.title = titleFrom(item.name);
     if (!r) {
-      return `<div class="card"><span class="state quiet">waiting…</span>
-        <img src="${item.dataUrl}" alt=""></div>`;
+      return `<div class="card"><span class="state quiet">${escapeHtml(t("catalogue.waiting"))}</span>
+        <img src="${escapeHtml(item.dataUrl)}" alt=""></div>`;
     }
     if (!r.ok) {
-      return `<div class="card miss"><span class="state bad">not recovered</span>
-        <img src="${item.dataUrl}" alt="">
+      return `<div class="card miss"><span class="state bad">${escapeHtml(t("catalogue.notRecovered"))}</span>
+        <img src="${escapeHtml(item.dataUrl)}" alt="">
         <div class="snippet">${escapeHtml(item.name)} — ${escapeHtml(r.failure || "")}.
-        Several photographs of it, read together in the other mode, often succeed.</div></div>`;
+        ${escapeHtml(t("catalogue.failureAdvice"))}</div></div>`;
     }
     const first = seen.get(r.text);
     if (first !== undefined) {
-      return `<div class="card dup"><span class="state quiet">same code as
-        “${escapeHtml(loaded[first].title)}” — folded into one entry</span>
-        <img src="${item.dataUrl}" alt=""></div>`;
+      return `<div class="card dup"><span class="state quiet">${escapeHtml(
+        t("catalogue.duplicate", { title: loaded[first].title })
+      )}</span>
+        <img src="${escapeHtml(item.dataUrl)}" alt=""></div>`;
     }
     seen.set(r.text, index);
-    return `<div class="card"><span class="state ok">recovered</span>
-      ${r.clean_png ? `<img src="${r.clean_png}" alt="">` : ""}
-      <input class="title" data-index="${index}" value="${escapeHtml(item.title)}"
-        placeholder="what is this code, to you?">
+    return `<div class="card"><span class="state ok">${escapeHtml(t("catalogue.recovered"))}</span>
+      ${r.clean_png ? `<img src="${escapeHtml(r.clean_png)}" alt="">` : ""}
+      <input class="title" data-index="${escapeHtml(index)}" value="${escapeHtml(item.title)}"
+        placeholder="${escapeHtml(t("catalogue.titlePlaceholder"))}">
       <div class="snippet">${escapeHtml(r.text)}</div></div>`;
   });
   $("cards").innerHTML = cards.join("");
@@ -1110,8 +1162,9 @@ $("catalogPdf").addEventListener("click", async () => {
     const r = item.result;
     if (!r || !r.ok || seen.has(r.text)) continue;
     seen.add(r.text);
-    const note = (r.version ? `version ${r.version}` : "") +
-      (r.ecc ? ` · error correction ${r.ecc}` : "") + ` · ${r.text.length} characters`;
+    const note = (r.version ? t("catalogue.version", { version: r.version }) : "") +
+      (r.ecc ? ` · ${t("catalogue.errorCorrection", { level: r.ecc })}` : "") +
+      ` · ${t("catalogue.characters", { count: r.text.length })}`;
     entries.push({ title: item.title || titleFrom(item.name), text: r.text,
                    ecc: r.ecc || null, note: note.replace(/^ · /, "") });
   }
@@ -1119,8 +1172,8 @@ $("catalogPdf").addEventListener("click", async () => {
   const owner = Symbol("catalog-export");
   document.body.classList.add("busy");
   progressWorking(owner);
-  status.textContent = "preparing the catalogue download…";
-  announce("Preparing the catalogue download");
+  status.textContent = t("catalogue.preparingDownload");
+  announce(t("catalogue.preparingDownloadAnnouncement"));
   let file;
   try {
     file = await window.qrBackend.file("catalog", {
@@ -1130,8 +1183,8 @@ $("catalogPdf").addEventListener("click", async () => {
   } catch (err) {
     if (progressIdle(owner)) {
       document.body.classList.remove("busy");
-      status.textContent = "catalogue failed: " + err.message;
-      announce("Catalogue export failed");
+      status.textContent = t("catalogue.exportFailure", { message: err.message });
+      announce(t("catalogue.exportFailureAnnouncement"));
     }
     return;
   }
@@ -1143,7 +1196,7 @@ $("catalogPdf").addEventListener("click", async () => {
   link.click();
   URL.revokeObjectURL(url);
   document.body.classList.remove("busy");
-  progressComplete("Catalogue downloaded");
+  progressComplete(t("catalogue.downloaded"));
   $("catalogThanks").innerHTML = thanksHtml();
 });
 
@@ -1158,25 +1211,23 @@ function informationGone(a) {
 
 function verdictFor(a) {
   if (a.ok && a.source === "direct") {
-    return ["ok", "decoded directly from the photograph — no reconstruction was needed"];
+    return ["ok", t("verdict.direct")];
   }
   if (!a.modules) {
     const n = a.finders.length;
-    return ["bad", `no grid — ${n} finder candidate${n === 1 ? "" : "s"} found`];
+    return ["bad", t(n === 1 ? "verdict.noGridOne" : "verdict.noGrid", { count: n })];
   }
   const rate = a.wrong_known / a.known_total;
   const seated = rate <= 0.01 && a.timing >= 100;
-  if (a.ok && seated) return ["ok", "grid seated cleanly — the payload fell out almost by itself"];
-  if (a.ok) return ["ok", "recovered — the numbers below say how hard it fought"];
+  if (a.ok && seated) return ["ok", t("verdict.clean")];
+  if (a.ok) return ["ok", t("verdict.recovered")];
   if (rate > 0.05 || a.timing < 100) {
-    return ["bad", "the grid did not seat — none of the cell counts below can be trusted yet"];
+    return ["bad", t("verdict.geometry")];
   }
   if (informationGone(a)) {
-    return ["bad", `the grid is clean across ${a.images_given} photographs and the data still ` +
-      "does not read — that usually means modules are physically gone. Only a genuinely " +
-      "different view of the damaged area might help; more of the same will not"];
+    return ["bad", t("verdict.informationGone", { count: a.images_given })];
   }
-  return ["warn", "the grid seats but the payload is out of reach — more photographs are the strongest lever"];
+  return ["warn", t("verdict.outOfReach")];
 }
 
 function render(a) {
@@ -1188,7 +1239,7 @@ function render(a) {
   const single = loaded.length === 1;
   draw(single && !picked.length ? a.finders : null);
   $("canvasNote").textContent = single
-    ? "" : `showing the first photograph — ${loaded.length} are read together`;
+    ? "" : t("result.showingFirst", { count: loaded.length });
 
   const [cls, text] = verdictFor(a);
   const verdict = $("verdict");
@@ -1198,34 +1249,43 @@ function render(a) {
   const rows = [];
   const push = (k, v, klass) =>
     rows.push(
-      `<dt>${escapeHtml(k)}</dt><dd${klass ? ` class="${klass}"` : ""}>${escapeHtml(String(v))}</dd>`
+      `<dt>${escapeHtml(k)}</dt><dd${klass ? ` class="${escapeHtml(klass)}"` : ""}>${escapeHtml(String(v))}</dd>`
     );
 
-  push("image", `${a.width} × ${a.height} px`);
+  push(t("metrics.image"), `${a.width} × ${a.height} px`);
   if (a.source === "direct") {
-    push("route", "direct reader");
+    push(t("metrics.route"), t("metrics.directReader"));
   } else {
-    push("finders", a.finders.length, a.finders.length >= 3 ? "" : "bad");
+    push(t("metrics.finders"), a.finders.length, a.finders.length >= 3 ? "" : "bad");
   }
   if (a.modules) {
-    push("version", `${a.version} · ${a.modules} modules`);
+    push(t("metrics.version"), t("metrics.versionValue", {
+      version: a.version,
+      modules: a.modules,
+    }));
     const rate = a.wrong_known / a.known_total;
-    push("known cells wrong", `${a.wrong_known} / ${a.known_total}`,
+    push(t("metrics.knownWrong"), `${a.wrong_known} / ${a.known_total}`,
          rate > 0.05 ? "bad" : rate > 0.01 ? "warn" : "ok");
-    push("timing pattern", `${a.timing} %`, a.timing < 100 ? "warn" : "ok");
-    push("uncertain", `${a.uncertain} / ${a.modules * a.modules}`);
-    push("decode attempts", a.candidates_tried);
-    if (a.repair) push("reed-solomon", a.repair);
+    push(t("metrics.timing"), `${a.timing} %`, a.timing < 100 ? "warn" : "ok");
+    push(t("metrics.uncertain"), `${a.uncertain} / ${a.modules * a.modules}`);
+    push(t("metrics.decodeAttempts"), a.candidates_tried);
+    if (a.repair) push(t("metrics.reedSolomon"), a.repair);
   }
   if (a.fusion) {
-    push("photographs fused", a.fusion.photographs);
+    push(t("metrics.photographsFused"), a.fusion.photographs);
     const worst = Math.min(...a.fusion.agreement.slice(1));
-    if (isFinite(worst)) push("agreement", `${(worst * 100).toFixed(1)} % (lowest)`);
-    push("cells in dispute", a.fusion.disagreeing);
+    if (isFinite(worst)) push(t("metrics.agreement"), t("metrics.agreementLowest", {
+      percent: (worst * 100).toFixed(1),
+    }));
+    push(t("metrics.cellsInDispute"), a.fusion.disagreeing);
     if (a.fusion.rejected.length)
-      push("dropped", `${a.fusion.rejected.length} — did not match the best reading`, "warn");
+      push(t("metrics.dropped"), t("metrics.droppedValue", {
+        count: a.fusion.rejected.length,
+      }), "warn");
     if (a.fusion.mirrored.length)
-      push("mirrored", `${a.fusion.mirrored.length}, turned back`);
+      push(t("metrics.mirrored"), t("metrics.mirroredValue", {
+        count: a.fusion.mirrored.length,
+      }));
   }
   $("metrics").innerHTML = rows.join("");
 
@@ -1251,66 +1311,61 @@ function render(a) {
     // lie -- but Reed-Solomon can produce valid-and-wrong answers, and a confidently wrong
     // install code costs more than none. One sentence buys the check that settles it.
     const caveat = a.candidates_tried > 100
-      ? `<div class="note"><span class="warn">Hard-won (${Number(a.candidates_tried)} attempts).</span>
-         Before typing a secret anywhere, scan the re-encoded code below with your own phone
-         and check it shows the same text.</div>`
+      ? `<div class="note"><span class="warn">${escapeHtml(t("result.hardWon", {
+          count: Number(a.candidates_tried),
+        }))}</span> ${escapeHtml(t("result.verifyAdvice"))}</div>`
       : "";
     payload.innerHTML =
-      `<div class="label" style="color:var(--pink)">recovered · ${a.text.length} characters</div>
+      `<div class="label" style="color:var(--pink)">${escapeHtml(t("result.recovered", {
+        count: a.text.length,
+      }))}</div>
        <code>${escapeHtml(a.text)}</code>${knowledge}${caveat}
-       <div class="actions"><button id="copy">Copy</button></div>${thanksHtml()}`;
+       <div class="actions"><button id="copy">${escapeHtml(t("action.copy"))}</button></div>${thanksHtml()}`;
     $("copy").addEventListener("click", async () => {
       const button = $("copy");
-      try { await navigator.clipboard.writeText(a.text); button.textContent = "copied ✓"; }
-      catch { button.textContent = "copy failed — select the text"; }
-      setTimeout(() => { button.textContent = "Copy"; }, 1600);
+      try { await navigator.clipboard.writeText(a.text); button.textContent = t("clipboard.copied"); }
+      catch { button.textContent = t("clipboard.failure"); }
+      setTimeout(() => { button.textContent = t("clipboard.copy"); }, 1600);
     });
   } else {
     // The moment of failure is the one moment advice is worth anything. The order follows
     // what actually rescues photographs, measured: geometry first, then the fusion.
     const tips = [];
     if (a.finders.length < 3 && single) {
-      tips.push("Photograph closer, or crop away the surroundings — a busy background is the " +
-                "most common reason the finder search comes up short.");
+      tips.push(t("assistance.photographCloser"));
     }
     if (single) {
-      tips.push("Mark the three corner squares by hand — the button under the photograph. " +
-                "Roughly is enough.");
+      tips.push(t("assistance.markFinders"));
     }
     if (informationGone(a)) {
-      tips.push(`This looks <em>information-limited, not geometry-limited</em>: the grid sits
-                 cleanly and still nothing reads. If part of the label is scratched away or
-                 missing, no amount of photographs restores it — only a view that shows those
-                 modules intact would.`);
+      tips.push(t("assistance.informationLimited"));
     } else {
-      tips.push(`Add two or three <em>more photographs of the same code</em> — different angle,
-               different light. They are read together, and photographs that fail alone
-               regularly decode as a group.`);
+      tips.push(t("assistance.morePhotographs"));
     }
     payload.innerHTML =
-      `<div class="label" style="color:var(--bad)">not recovered</div>
-       <div class="note">${escapeHtml(a.failure || "unknown reason")}</div>
-       <ul class="tips">${tips.map((t) => `<li>${t}</li>`).join("")}</ul>
-       <div class="actions"><button id="addMore">Add photographs</button></div>`;
+      `<div class="label" style="color:var(--bad)">${escapeHtml(t("result.notRecovered"))}</div>
+       <div class="note">${escapeHtml(a.failure || t("result.unknownReason"))}</div>
+       <ul class="tips">${tips.map((tip) => `<li>${escapeHtml(tip)}</li>`).join("")}</ul>
+       <div class="actions"><button id="addMore">${escapeHtml(t("action.addPhotographs"))}</button></div>`;
     $("addMore").addEventListener("click", () => fileInput.click());
   }
 
   const offerManual = single && !a.ok;
-  $("retry").classList.toggle("hidden", !offerManual || picking);
-  $("outlineRetry").classList.toggle("hidden", !offerManual || outlineEditing);
-  $("outlineSolve").classList.add("hidden");
-  $("cancel").classList.add("hidden");
+  $("retry").hidden = !offerManual || picking;
+  $("outlineRetry").hidden = !offerManual || outlineEditing;
+  $("outlineSolve").hidden = true;
+  $("cancel").hidden = true;
 
   const images = $("images");
   images.innerHTML = "";
   if (a.reconstructed_png)
-    images.appendChild(panel("Recovered matrix", a.reconstructed_png, "reconstructed.png",
-      "As sampled from the photograph — repaired cells included."));
+    images.appendChild(panel(t("panel.recoveredMatrix"), a.reconstructed_png, "reconstructed.png",
+      t("panel.recoveredMatrixNote")));
   if (a.clean_png)
-    images.appendChild(panel("Re-encoded · standards clean", a.clean_png, "qrsalvage.png",
-      "Freshly encoded from the recovered text. <em>This is the one to print.</em>"));
+    images.appendChild(panel(t("panel.cleanMatrix"), a.clean_png, "qrsalvage.png",
+      t("panel.cleanMatrixNote")));
 
-  $("grid").textContent = a.grid || "(no grid sampled)";
+  $("grid").textContent = a.grid || t("result.noGridSampled");
 
   token = a.token || null;
   $("exports").classList.toggle("hidden", !a.exportable);
@@ -1324,8 +1379,8 @@ async function download(format) {
   const owner = Symbol("export");
   document.body.classList.add("busy");
   progressWorking(owner);
-  status.textContent = `preparing the ${format.toUpperCase()} download…`;
-  announce(`Preparing the ${format.toUpperCase()} download`);
+  status.textContent = t("export.preparing", { format: format.toUpperCase() });
+  announce(t("export.preparingAnnouncement", { format: format.toUpperCase() }));
   let file;
   try {
     file = await window.qrBackend.file("export", {
@@ -1338,8 +1393,8 @@ async function download(format) {
   } catch (err) {
     if (progressIdle(owner)) {
       document.body.classList.remove("busy");
-      status.textContent = "export failed: " + err.message;
-      announce("Export failed");
+      status.textContent = t("export.failure", { message: err.message });
+      announce(t("export.failureAnnouncement"));
     }
     return;
   }
@@ -1351,7 +1406,7 @@ async function download(format) {
   link.click();
   URL.revokeObjectURL(url);
   document.body.classList.remove("busy");
-  progressComplete(`${format.toUpperCase()} downloaded`);
+  progressComplete(t("export.downloaded", { format: format.toUpperCase() }));
 }
 
 for (const button of document.querySelectorAll("#exports button")) {
@@ -1361,9 +1416,9 @@ for (const button of document.querySelectorAll("#exports button")) {
 function panel(title, dataUrl, filename, note) {
   const div = document.createElement("div");
   div.className = "panel";
-  div.innerHTML = `<h2>${title}</h2><img src="${dataUrl}" alt="${title}">
-    <div class="note">${note || ""}</div>
-    <div class="actions"><a download="${filename}" href="${dataUrl}"><button>Download PNG</button></a></div>`;
+  div.innerHTML = `<h2>${escapeHtml(title)}</h2><img src="${escapeHtml(dataUrl)}" alt="${escapeHtml(title)}">
+    <div class="note">${escapeHtml(note || "")}</div>
+    <div class="actions"><a download="${escapeHtml(filename)}" href="${escapeHtml(dataUrl)}"><button>${escapeHtml(t("export.downloadPng"))}</button></a></div>`;
   return div;
 }
 
@@ -1371,12 +1426,10 @@ $("retry").addEventListener("click", () => {
   dispatchStudio({ type: "ASSISTANCE_REQUIRED" });
   clearOutlineEditor(false);
   picked = []; picking = true; draw();
-  $("retry").classList.add("hidden");
-  $("outlineRetry").classList.add("hidden");
-  $("cancel").classList.remove("hidden");
-  $("canvasNote").innerHTML =
-    "Click the centre of each of the three large corner squares, <em>in any order</em>. " +
-    "Roughly is enough — the click only picks the candidate, the position comes from the image.";
+  $("retry").hidden = true;
+  $("outlineRetry").hidden = true;
+  $("cancel").hidden = false;
+  $("canvasNote").textContent = t("manual.finderInstructions");
 });
 
 $("outlineRetry").addEventListener("click", () => {
@@ -1388,10 +1441,10 @@ $("outlineRetry").addEventListener("click", () => {
   outlineDrag = null;
   canvas.classList.add("outline-editing");
   canvas.classList.remove("outline-ready", "outline-dragging");
-  $("retry").classList.add("hidden");
-  $("outlineRetry").classList.add("hidden");
-  $("outlineSolve").classList.add("hidden");
-  $("cancel").classList.remove("hidden");
+  $("retry").hidden = true;
+  $("outlineRetry").hidden = true;
+  $("outlineSolve").hidden = true;
+  $("cancel").hidden = false;
   updateOutlineInstructions();
   draw();
 });
@@ -1403,9 +1456,9 @@ $("outlineSolve").addEventListener("click", () => {
     edgeMidpoints: outlineMidpoints.map((point) => ({ ...point })),
   };
   freezeOutlineEditor();
-  $("outlineSolve").classList.add("hidden");
-  $("cancel").classList.add("hidden");
-  $("canvasNote").textContent = "Outline marked, recovering…";
+  $("outlineSolve").hidden = true;
+  $("cancel").hidden = true;
+  $("canvasNote").textContent = t("manual.outlineReady");
   draw();
   solve(null, outlineHint);
 });
@@ -1414,9 +1467,9 @@ $("cancel").addEventListener("click", () => {
   picked = []; picking = false;
   clearOutlineEditor(false);
   draw();
-  $("cancel").classList.add("hidden");
-  $("retry").classList.remove("hidden");
-  $("outlineRetry").classList.remove("hidden");
+  $("cancel").hidden = true;
+  $("retry").hidden = false;
+  $("outlineRetry").hidden = false;
   $("canvasNote").textContent = "";
 });
 

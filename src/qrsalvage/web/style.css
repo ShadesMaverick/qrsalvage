@@ -451,10 +451,13 @@ footer { max-width: 76rem; margin-right: auto; margin-left: auto; }
 #studioShell:not(.studio-phase-welcome) #siteHero .hero-lead,
 #studioShell:not(.studio-phase-welcome) #siteHero .primary-action { display: none; }
 .studio-mode-easy #results > .row:first-child { grid-template-columns: 1fr; }
-.studio-mode-easy #results > .row:first-child > .panel:nth-child(2),
-.studio-mode-easy details.panel { display: none; }
-.studio-mode-pro #results > .row:first-child > .panel:nth-child(2),
-.studio-mode-pro details.panel { display: block; }
+.studio-mode-easy #diagnosticsPanel { grid-column: 1; }
+.studio-mode-easy #diagnosticsDetails > summary,
+.studio-mode-easy #advancedExport > summary { color: var(--muted); }
+.studio-mode-pro #diagnosticsPanel { grid-column: auto; }
+.studio-mode-pro #diagnosticsDetails > summary,
+.studio-mode-pro #advancedExport > summary { color: var(--pink-soft); }
+#diagnosticsDetails, #advancedExport { margin-top: 1rem; }
 
 /* --- responsive breakpoints ------------------------------------------------------- */
 @media (max-width: 48rem) {

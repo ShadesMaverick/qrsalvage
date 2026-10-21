@@ -134,25 +134,28 @@
           </div>
         </div>
         <div class="note" id="canvasNote"></div>
-        <div class="actions">
-          <button id="retry" class="hidden">Mark the three finders by hand</button>
-          <button id="outlineRetry" class="hidden">Mark the QR outline</button>
-          <button id="outlineSolve" class="hidden">Recover with this outline</button>
-          <button id="cancel" class="hidden">Cancel</button>
+        <div class="actions" id="manualTools" hidden aria-expanded="false">
+          <button id="retry" hidden data-i18n="manual.markFinders">Mark the three finders by hand</button>
+          <button id="outlineRetry" hidden data-i18n="manual.markOutline">Mark the QR outline</button>
+          <button id="outlineSolve" hidden data-i18n="manual.recoverOutline">Recover with this outline</button>
+          <button id="cancel" hidden data-i18n="action.cancel">Cancel</button>
         </div>
       </div>
-      <div class="panel">
-        <h2>Diagnostics</h2>
+      <div class="panel" id="diagnosticsPanel">
+        <h2 data-i18n="diagnostics.title">Diagnostics</h2>
         <div id="live" class="hidden">
           <div id="liveStage" class="stage"></div>
+        </div>
+        <div id="verdict" class="hidden"></div>
+        <details id="diagnosticsDetails">
+          <summary aria-expanded="false" data-i18n="diagnostics.details">Detailed diagnostics</summary>
           <dl id="liveSizes"></dl>
           <div class="heatrow">
             <canvas id="heat" width="0" height="0"></canvas>
             <div class="note" id="heatNote"></div>
           </div>
-        </div>
-        <div id="verdict" class="hidden"></div>
-        <dl id="metrics"></dl>
+          <dl id="metrics"></dl>
+        </details>
       </div>
     </div>
 
@@ -168,6 +171,12 @@
         printed size a stronger level means <em>smaller</em> ones.
       </p>
       <div class="actions">
+        <button data-format="svg">SVG</button>
+        <button data-format="pdf">PDF</button>
+      </div>
+      <details id="advancedExport">
+        <summary aria-expanded="false" data-i18n="export.advanced">Advanced export options</summary>
+        <div class="actions">
         <label class="size">edge length
           <input id="sizeMm" type="number" value="40" min="5" max="500" step="1"> mm
         </label>
@@ -180,20 +189,19 @@
             <option value="H">H — 30 %</option>
           </select>
         </label>
-        <button data-format="svg">SVG</button>
-        <button data-format="pdf">PDF</button>
         <button data-format="json">JSON</button>
         <button data-format="html">Report</button>
-      </div>
-      <label class="note" id="splitRow" style="display:none">
-        <input id="split" type="checkbox">
-        split the payload into fields in the JSON export — off by default: install codes,
-        passcodes and network keys are secrets rather than identifiers
-      </label>
+        </div>
+        <label class="note" id="splitRow" style="display:none">
+          <input id="split" type="checkbox">
+          split the payload into fields in the JSON export — off by default: install codes,
+          passcodes and network keys are secrets rather than identifiers
+        </label>
+      </details>
     </div>
 
-    <details class="panel">
-      <summary>Sampled matrix &mdash; # dark, . light, ? unknown</summary>
+    <details class="panel" id="matrixDetails">
+      <summary aria-expanded="false" data-i18n="diagnostics.matrix">Sampled matrix &mdash; # dark, . light, ? unknown</summary>
       <pre class="grid" id="grid"></pre>
     </details>
   </div>
