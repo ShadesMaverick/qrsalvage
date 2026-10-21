@@ -52,16 +52,17 @@
     margin-right: auto; color: var(--fg); font: 600 1rem/1 var(--mono);
     letter-spacing: .06em;
   }
-  .mode-switch, .locale-switch {
+  .mode-switch, .locale-switch, .nav-overflow {
     display: inline-flex; gap: 4px; padding: 4px; border: 1px solid var(--line);
     border-radius: 9px; background: var(--panel-in);
   }
-  .mode-switch button, .locale-switch button {
+  .mode-switch button, .locale-switch button, .nav-overflow button {
     min-width: 44px; min-height: 44px; padding: 8px 12px; border: 0; background: transparent;
     color: var(--muted);
   }
   .mode-switch button[aria-pressed="true"],
-  .locale-switch button[aria-pressed="true"] { color: var(--bg); background: var(--fg); }
+  .locale-switch button[aria-pressed="true"],
+  .nav-overflow button[aria-pressed="true"] { color: var(--bg); background: var(--fg); }
   .eyebrow {
     margin: 0 0 12px; color: var(--pink-soft); font: 600 .72rem/1 var(--mono);
     letter-spacing: .15em; text-transform: uppercase;
@@ -371,17 +372,40 @@
   .knowledge { margin-top: .9rem; padding-top: .8rem; border-top: 1px solid var(--line); }
   .payload-kind { color: var(--pink-soft); font: 600 .76rem/1.2 var(--mono);
                   letter-spacing: .08em; text-transform: uppercase; }
-  .thanks {
-    display: flex; gap: .8rem; align-items: center; flex-wrap: wrap;
-    margin-top: .9rem; padding-top: .85rem; border-top: 1px solid var(--line);
-    font-size: .88rem; color: var(--muted);
-  }
-  .thanks img { height: 34px; image-rendering: pixelated; flex: none; }
-  .thanks span { flex: 1 1 18rem; }
-  .thanks .links { display: flex; gap: .55rem; flex: none; }
-  .thanks em { color: var(--pink-soft); font-style: normal; }
   .knowledge dl { margin-top: .6rem; font-size: .9rem; }
   .knowledge .note { margin-top: .3rem; }
+
+/* --- state-driven companion ------------------------------------------------------ */
+#companion {
+  position: fixed; z-index: 40; top: 0; left: 0; width: 96px; min-height: 96px;
+  pointer-events: none; will-change: transform;
+}
+#companionSprite {
+  width: 96px; height: 96px; background: url("axolotl-companion.png") 0 0 / 600% 100% no-repeat;
+  image-rendering: pixelated;
+}
+#companion[data-pose="walk"][data-motion="active"] #companionSprite {
+  animation: companion-walk .56s steps(1, end) infinite;
+}
+@keyframes companion-walk {
+  from { background-position: 20% 0; }
+  to { background-position: 40% 0; }
+}
+#companion[data-motion="still"] #companionSprite { animation: none; }
+#companionBubble {
+  position: absolute; left: 76px; top: 64px; width: min(18rem, calc(100vw - 7rem));
+  padding: 12px; pointer-events: auto; border: 1px solid var(--pink);
+  border-radius: 9px; color: var(--fg); background: var(--panel-in);
+  font-size: .86rem; line-height: 1.45;
+}
+#companionBubble p { margin: 0 0 8px; }
+#companionBubble > button { display: block; margin-left: auto; }
+#companionBubble .companion-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+#companionBubble a, #companionBubble button {
+  min-height: 44px; padding: 10px 12px; pointer-events: auto; border: 1px solid var(--line);
+  border-radius: 7px; color: var(--fg); background: var(--panel);
+}
+#companionBubble a { display: inline-flex; align-items: center; border-color: var(--pink); }
 
 /* The footer is a legal obligation before it is a design element, so it stays legible and
    stops there -- no columns, no repeated navigation, nothing competing with the work. */
@@ -465,7 +489,7 @@ footer { max-width: 76rem; margin-right: auto; margin-left: auto; }
   .site-nav { padding: 12px 0; flex-wrap: wrap; gap: 8px 12px; }
   .site-brand { flex-basis: calc(100% - 8rem); }
   .site-nav > a:not(.site-brand) { order: 3; }
-  .mode-switch, .locale-switch { order: 2; }
+  .mode-switch, .locale-switch, .nav-overflow { order: 2; }
   #siteHero { padding-top: 4rem; }
   #studio { padding: 1rem; border-radius: 13px; }
   .studio-header { align-items: flex-start; flex-direction: column; }
@@ -479,7 +503,7 @@ footer { max-width: 76rem; margin-right: auto; margin-left: auto; }
   body { padding-right: 12px; padding-left: 12px; }
   .site-nav, .actions, #modeRow, .editorial-links { align-items: stretch; }
   .site-nav > *, .actions > *, #modeRow label { max-width: 100%; }
-  .mode-switch, .locale-switch { flex-wrap: wrap; }
+  .mode-switch, .locale-switch, .nav-overflow { flex-wrap: wrap; }
   .panel, .payload, #drop { padding-right: 12px; padding-left: 12px; min-width: 0; }
   label.size { flex-wrap: wrap; }
   input, select, button { max-width: 100%; }
@@ -499,4 +523,5 @@ footer { max-width: 76rem; margin-right: auto; margin-left: auto; }
   #results.success-reveal #images, #results.success-reveal #exports { animation: none; }
   .photo-stage.locked .lock-corner { opacity: 1; }
   .photo-stage.locked .lock-sweep { opacity: 0; }
+  #companion, #companionSprite { animation: none !important; transition: none; }
 }

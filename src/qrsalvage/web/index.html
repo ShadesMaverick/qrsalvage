@@ -52,6 +52,10 @@
     <button id="localeDe" type="button" data-locale="de" aria-pressed="false">DE</button>
     <button id="localeEn" type="button" data-locale="en" aria-pressed="true">EN</button>
   </div>
+  <div class="nav-overflow">
+    <button id="motionToggle" type="button" data-i18n="companion.motion"
+            data-i18n-aria="companion.motionToggle" aria-pressed="false">Reduce motion</button>
+  </div>
 </nav>
 <main id="mainContent">
   <div id="studioShell" class="studio-phase-welcome studio-mode-easy">
@@ -66,7 +70,8 @@
         <p class="eyebrow" data-i18n="studio.eyebrow">Signal Studio</p>
         <h2 data-i18n="studio.title">Reconstruction workspace</h2>
       </header>
-      <div id="studioStatus" class="session-strip" role="status" aria-live="polite">
+      <div id="studioStatus" class="session-strip" role="status" aria-live="polite"
+           data-companion-anchor="progress">
         <div id="progress" class="progress">
           <div class="progress-mark" aria-hidden="true">
             <span class="progress-finder top-left"></span>
@@ -123,7 +128,7 @@
       <div class="panel">
         <h2>Input</h2>
         <div id="thumbs" class="hidden"></div>
-        <div id="photoStage" class="photo-stage">
+        <div id="photoStage" class="photo-stage" data-companion-anchor="canvas">
           <canvas id="photo"></canvas>
           <div id="successLock" class="success-lock" aria-hidden="true">
             <span class="lock-corner top-left"></span>
@@ -134,7 +139,8 @@
           </div>
         </div>
         <div class="note" id="canvasNote"></div>
-        <div class="actions" id="manualTools" hidden aria-expanded="false">
+        <div class="actions" id="manualTools" hidden aria-expanded="false"
+             data-companion-anchor="manual">
           <button id="retry" hidden data-i18n="manual.markFinders">Mark the three finders by hand</button>
           <button id="outlineRetry" hidden data-i18n="manual.markOutline">Mark the QR outline</button>
           <button id="outlineSolve" hidden data-i18n="manual.recoverOutline">Recover with this outline</button>
@@ -146,7 +152,7 @@
         <div id="live" class="hidden">
           <div id="liveStage" class="stage"></div>
         </div>
-        <div id="verdict" class="hidden"></div>
+        <div id="verdict" class="hidden" data-companion-anchor="recovery"></div>
         <details id="diagnosticsDetails">
           <summary aria-expanded="false" data-i18n="diagnostics.details">Detailed diagnostics</summary>
           <dl id="liveSizes"></dl>
@@ -159,7 +165,7 @@
       </div>
     </div>
 
-    <div class="payload" id="payload"></div>
+    <div class="payload" id="payload" data-companion-anchor="result"></div>
     <div class="row" id="images"></div>
 
     <div class="panel hidden" id="exports">
@@ -221,11 +227,15 @@
       </label>
       <button id="catalogPdf">Download A4 catalogue (PDF)</button>
     </div>
-    <div id="catalogThanks"></div>
   </div>
   </div>
 
     </section>
+  </div>
+
+  <div id="companion" data-pose="idle" data-motion="active">
+    <div id="companionSprite" aria-hidden="true"></div>
+    <div id="companionBubble" hidden></div>
   </div>
 
   <section id="methodSummary">
@@ -497,6 +507,7 @@
 <script src="backend.js"></script>
 <script src="studio-state.js"></script>
 <script src="locale.js"></script>
+<script src="companion.js"></script>
 <script src="outline-editor.js"></script>
 <script src="app.js"></script>
 </body>
