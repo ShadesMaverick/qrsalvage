@@ -523,7 +523,12 @@ def test_outline_editor_is_served_with_touch_and_curved_geometry(running_server)
     from scripts.build_site import PAGE_FILES
 
     assert "outline-editor.js" in PAGE_FILES
-    instructions = "top left", "top right", "bottom right", "bottom left"
+    instructions = (
+        "manual.topLeft",
+        "manual.topRight",
+        "manual.bottomRight",
+        "manual.bottomLeft",
+    )
     positions = [script.index(name) for name in instructions]
     assert positions == sorted(positions)
 
@@ -562,6 +567,83 @@ def test_studio_state_reducer_has_one_named_phase(event, phase):
     assert state["phase"] == phase
     assert state["mode"] == "easy"
     assert view["phaseClass"] == f"studio-phase-{phase}"
+
+
+def test_easy_and_pro_change_visibility_not_recovery_requests():
+    easy = _call_web_module(
+        "studio-state.js", "viewForState", {"phase": "recovering", "mode": "easy"}
+    )
+    pro = _call_web_module(
+        "studio-state.js", "viewForState", {"phase": "recovering", "mode": "pro"}
+    )
+    assert easy["diagnosticsExpanded"] is False
+    assert pro["diagnosticsExpanded"] is True
+    script = (ROOT / "src" / "qrsalvage" / "web" / "app.js").read_text(
+        encoding="utf-8"
+    )
+    solve = script[
+        script.index("async function solve") : script.index("/* --- the live view")
+    ]
+    assert "studioState.mode" not in solve
+
+
+def test_runtime_messages_use_locale_keys_instead_of_raw_english_assignments():
+    script = (ROOT / "src" / "qrsalvage" / "web" / "app.js").read_text(
+        encoding="utf-8"
+    )
+    messages = {
+        '"requesting camera access…"': "camera.requesting",
+        '"capturing photographs…"': "camera.capturing",
+        '"preparing the captured photographs…"': "camera.preparing",
+        '"preparing the recovery engine…"': "progress.preparing",
+        '"Recovery started"': "progress.started",
+        '"Recovery failed"': "result.failure",
+        '"QR code recovered"': "result.success",
+        '"Catalogue recovery failed"': "catalogue.recoveryFailure",
+        '"Catalogue recovery complete"': "catalogue.complete",
+        '"preparing the catalogue download…"': "catalogue.preparingDownload",
+        '"Catalogue downloaded"': "catalogue.downloaded",
+        '"Export failed"': "export.failureAnnouncement",
+        '"copied ✓"': "clipboard.copied",
+        '"copy failed — select the text"': "clipboard.failure",
+    }
+    for literal, key in messages.items():
+        assert literal not in script
+        assert f't("{key}"' in script
+
+
+def test_studio_modes_share_controls_and_only_change_disclosure():
+    web = ROOT / "src" / "qrsalvage" / "web"
+    page = (web / "index.html").read_text(encoding="utf-8")
+    script = (web / "app.js").read_text(encoding="utf-8")
+    style = (web / "style.css").read_text(encoding="utf-8")
+    for element_id in (
+        "diagnosticsPanel",
+        "diagnosticsDetails",
+        "manualTools",
+        "advancedExport",
+        "matrixDetails",
+    ):
+        assert page.count(f'id="{element_id}"') == 1
+    dispatch = script[
+        script.index("function dispatchStudio") : script.index(
+            "window.dispatchStudio = dispatchStudio"
+        )
+    ]
+    assert "view.diagnosticsExpanded" in dispatch
+    assert "view.manualToolsExpanded" in dispatch
+    mode_handlers = script[
+        script.index('for (const [id, modeName] of [["modeEasy"') : script.index(
+            "/* Where the thanks go."
+        )
+    ]
+    assert "dispatchStudio" in mode_handlers
+    assert "qrsalvage.mode" in mode_handlers
+    assert "solve(" not in mode_handlers
+    assert "catalogRun(" not in mode_handlers
+    assert "qrBackend" not in mode_handlers
+    assert ".studio-mode-easy" in style
+    assert ".studio-mode-pro" in style
 
 
 def test_locale_prefers_a_saved_choice_then_browser_german_then_english():
@@ -644,6 +726,9 @@ def test_locale_dictionaries_cover_every_runtime_copy_consumer():
         "manual.topRight",
         "manual.bottomRight",
         "manual.bottomLeft",
+        "manual.markFinders",
+        "manual.markOutline",
+        "manual.recoverOutline",
         "recovery.stage.image",
         "recovery.stage.finders",
         "recovery.stage.polarity",
@@ -664,6 +749,9 @@ def test_locale_dictionaries_cover_every_runtime_copy_consumer():
         "diagnostics.modules",
         "diagnostics.wrong",
         "diagnostics.heatmap",
+        "diagnostics.title",
+        "diagnostics.details",
+        "diagnostics.matrix",
         "metrics.image",
         "metrics.route",
         "metrics.directReader",
@@ -736,6 +824,7 @@ def test_locale_dictionaries_cover_every_runtime_copy_consumer():
         "export.failureAnnouncement",
         "export.downloaded",
         "export.downloadPng",
+        "export.advanced",
         "clipboard.copied",
         "clipboard.failure",
         "clipboard.copy",
@@ -958,6 +1047,9 @@ def test_the_public_page_declares_its_canonical_address_and_search_files():
 def test_the_public_page_leads_with_general_qr_recovery():
     page = (ROOT / "src" / "qrsalvage" / "web" / "index.html").read_text(encoding="utf-8")
     script = (ROOT / "src" / "qrsalvage" / "web" / "app.js").read_text(encoding="utf-8")
+    locale = (ROOT / "src" / "qrsalvage" / "web" / "locale.js").read_text(
+        encoding="utf-8"
+    )
     head, body = page.split("</head>", 1)
 
     assert "damaged qr code recovery" in head.lower()
@@ -965,7 +1057,8 @@ def test_the_public_page_leads_with_general_qr_recovery():
     assert all(phrase in head.lower() for phrase in general_examples)
     assert "including codes on curved surfaces like light bulbs" not in head.lower()
     assert "every qr code can carry something different" in body.lower()
-    assert "saved your qr code?" in script.lower()
+    assert "saved your qr code?" in locale.lower()
+    assert 't("donation.successPrompt")' in script
     assert "saved your lamp?" not in script.lower()
 
 
