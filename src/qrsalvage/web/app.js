@@ -28,7 +28,9 @@ const DYNAMIC_LOCALE_KEYS = Object.freeze({
     fusion: "recovery.stage.fusion",
   }),
   backend: Object.freeze([
-    "backend.mode.server", "backend.mode.browser", "privacy.server", "privacy.browser",
+    "backend.mode.server", "backend.mode.browser",
+    "backend.failure.server", "backend.failure.browser",
+    "privacy.server", "privacy.browser",
   ]),
   payloadLabels: Object.freeze({
     zigbee: "payload.label.zigbee", matter: "payload.label.matter",
@@ -226,6 +228,7 @@ const bootProgressOwner = Symbol("boot");
 let mode = "one";   // "one": several photographs of one code; "many": a catalogue
 let lastSolved = false;  // a fresh drop after a success starts a fresh recovery
 let lastAnswer = null;   // presentation source for a locale-only rerender
+let lastBackendFailure = null;  // locale key plus the untouched technical detail
 
 function syncManualTools(direct = studioState.mode === "pro") {
   const active = picking || outlineEditing;
@@ -320,6 +323,19 @@ function celebrateRecovery() {
 
 $("privacyNote").textContent = t(window.qrBackend.privacyKey);
 
+function renderBackendFailure() {
+  if (!lastBackendFailure) return;
+  status.textContent = t(lastBackendFailure.prefixKey) + lastBackendFailure.detail;
+}
+
+function showBackendFailure(error) {
+  lastBackendFailure = {
+    prefixKey: window.qrBackend.failurePrefixKey,
+    detail: String(error),
+  };
+  renderBackendFailure();
+}
+
 /* Booting is free on the local server and costs the better part of a minute in the browser,
    where a Python runtime, NumPy and OpenCV have to arrive before anything can be recovered.
    Reported in the ordinary status line: a page that looks broken for forty seconds is worse
@@ -352,7 +368,7 @@ async function backendReady(owner) {
   } catch (err) {
     if (progressIdle(owner)) {
       document.body.classList.remove("busy");
-      status.textContent = window.qrBackend.failurePrefix + err;
+      showBackendFailure(err);
       announce(t("boot.failure"));
       dispatchStudio({ type: "RECOVERY_FAILED" });
     }
@@ -643,6 +659,7 @@ function resetAll() {
   releaseBitmaps(loaded);
   loaded = []; picked = []; picking = false; token = null; pendingWarning = "";
   lastAnswer = null;
+  lastBackendFailure = null;
   clearOutlineEditor(false);
   lastSolved = false;
   settledGrid = null;
@@ -1018,12 +1035,22 @@ function requireSolveAnswer(answer) {
   if (!answer || typeof answer !== "object" || typeof answer.ok !== "boolean") {
     throw new Error("the recovery engine returned no result");
   }
-  return answer;
+  if (answer.ok) return answer;
+  return {
+    ...answer,
+    failure: typeof answer.failure === "string" ? answer.failure : "",
+    finders: Array.isArray(answer.finders) ? answer.finders : [],
+    width: Number.isFinite(answer.width) ? answer.width : null,
+    height: Number.isFinite(answer.height) ? answer.height : null,
+    modules: Number.isFinite(answer.modules) ? answer.modules : null,
+    grid: typeof answer.grid === "string" ? answer.grid : "",
+  };
 }
 
 async function solve(points, outlineHint) {
   if (!loaded.length) return;
   lastAnswer = null;
+  lastBackendFailure = null;
   prepareRecoveryVisuals();
   for (const id of ["retry", "outlineRetry", "outlineSolve", "cancel"]) {
     $(id).hidden = true;
@@ -1065,12 +1092,12 @@ async function solve(points, outlineHint) {
       },
       (event) => { if (my === seq) liveEvent(event); }
     );
-    requireSolveAnswer(answer);
+    answer = requireSolveAnswer(answer);
   } catch (err) {
     if (my === seq && busy(false, owner)) {
       clearOutlineEditor(false);
       liveEnd(false);
-      status.textContent = window.qrBackend.failurePrefix + err;
+      showBackendFailure(err);
       announce(t("result.failure"));
       dispatchStudio({ type: "RECOVERY_FAILED" });
     }
@@ -1257,6 +1284,7 @@ function titleFrom(name) {
 
 async function catalogRun() {
   prepareRecoveryVisuals();
+  lastBackendFailure = null;
   const my = ++seq;
   const owner = Symbol(`catalog-${my}`);
   const warning = pendingWarning;
@@ -1299,15 +1327,16 @@ async function catalogRun() {
     try {
       // A catalogue narrates its own progress card by card, so the events of the single
       // recovery running right now have nowhere to go.
-      const answer = await window.qrBackend.solve({ images: [item.dataUrl] }, () => {});
-      requireSolveAnswer(answer);
+      const answer = requireSolveAnswer(
+        await window.qrBackend.solve({ images: [item.dataUrl] }, () => {})
+      );
       if (my !== seq) return;
       item.result = answer;
     } catch (err) {
       if (my !== seq) return;
       if (progressIdle(owner)) {
         document.body.classList.remove("busy");
-        status.textContent = window.qrBackend.failurePrefix + err;
+        showBackendFailure(err);
         announce(t("catalogue.recoveryFailure"));
         dispatchStudio({ type: "RECOVERY_FAILED" });
       }
@@ -1457,6 +1486,14 @@ function payloadFieldValue(key, value) {
   return raw;
 }
 
+function syncAssistanceControls(offerManual) {
+  const outlineReady = outlineCorners.length === 4 && outlineMidpoints.length === 4;
+  $("retry").hidden = picking || outlineEditing || !offerManual;
+  $("outlineRetry").hidden = picking || outlineEditing || !offerManual;
+  $("outlineSolve").hidden = !outlineEditing || !outlineReady;
+  $("cancel").hidden = !picking && !outlineEditing;
+}
+
 function renderAnswer(a, { focus = true } = {}) {
   lastAnswer = a;
   lastSolved = !!a.ok;
@@ -1481,7 +1518,9 @@ function renderAnswer(a, { focus = true } = {}) {
       `<dt>${escapeHtml(k)}</dt><dd${klass ? ` class="${escapeHtml(klass)}"` : ""}>${escapeHtml(String(v))}</dd>`
     );
 
-  push(t("metrics.image"), `${a.width} × ${a.height} px`);
+  if (Number.isFinite(a.width) && Number.isFinite(a.height)) {
+    push(t("metrics.image"), `${a.width} × ${a.height} px`);
+  }
   if (a.source === "direct") {
     push(t("metrics.route"), t("metrics.directReader"));
   } else {
@@ -1587,10 +1626,7 @@ function renderAnswer(a, { focus = true } = {}) {
   }
 
   const offerManual = single && !a.ok;
-  $("retry").hidden = !offerManual || picking;
-  $("outlineRetry").hidden = !offerManual || outlineEditing;
-  $("outlineSolve").hidden = true;
-  $("cancel").hidden = true;
+  syncAssistanceControls(offerManual);
 
   const images = $("images");
   images.innerHTML = "";
@@ -1726,6 +1762,7 @@ document.addEventListener("qrsalvage:localechange", () => {
     status.textContent = t("result.success");
     announce(t("result.success"));
   } else if (studioState.phase === "failure") {
+    renderBackendFailure();
     announce(t("result.failure"));
   }
   companion.refreshLocale();

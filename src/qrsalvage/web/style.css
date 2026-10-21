@@ -206,7 +206,9 @@
     max-width: 100%; display: block; border-radius: 8px; background: var(--panel-in);
   }
   canvas { cursor: crosshair; }
-  .outline-editing { touch-action: none; cursor: crosshair; }
+  canvas.outline-editing {
+    min-width: 44px; min-height: 44px; touch-action: none; cursor: crosshair;
+  }
   canvas.outline-editing.outline-ready { cursor: grab; }
   canvas.outline-editing.outline-dragging { cursor: grabbing; }
   .photo-stage {
@@ -302,7 +304,10 @@
 
   /* The live view during a recovery: the true intermediate states, not an animation. */
   #live .stage { font-size: .9rem; margin-bottom: .8rem; min-height: 1.3em; }
-  #live .stage a { color: var(--pink-soft); border-bottom: 1px solid transparent; }
+  #live .stage a {
+    display: inline-flex; align-items: center; min-height: 44px;
+    color: var(--pink-soft); border-bottom: 1px solid transparent;
+  }
   #live .stage a:hover { border-bottom-color: var(--pink-soft); }
   .heatrow { display: flex; gap: .9rem; align-items: flex-start; margin-top: .9rem; }
   #heat { image-rendering: pixelated; border-radius: 6px; max-width: 11rem; }
