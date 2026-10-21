@@ -121,9 +121,7 @@ def test_studio_state_reducer_keeps_mode_separate_from_recovery_phase():
 )
 def test_studio_state_reducer_has_one_named_phase(event, phase):
     state = _call_web_module("studio-state.js", "createStudioState", "invalid")
-    state = _call_web_module(
-        "studio-state.js", "reduceStudioState", state, {"type": event}
-    )
+    state = _call_web_module("studio-state.js", "reduceStudioState", state, {"type": event})
     view = _call_web_module("studio-state.js", "viewForState", state)
     assert state["phase"] == phase
     assert state["mode"] == "easy"
@@ -239,9 +237,10 @@ def test_locale_prefers_a_saved_choice_then_browser_german_then_english():
 
 
 def test_locale_interpolates_values_and_falls_back_to_english():
-    assert _call_web_module(
-        "locale.js", "translate", "de", "progress.photoCount", {"count": 3}
-    ) == "3 Fotos werden gemeinsam gelesen"
+    assert (
+        _call_web_module("locale.js", "translate", "de", "progress.photoCount", {"count": 3})
+        == "3 Fotos werden gemeinsam gelesen"
+    )
     assert _call_web_module("locale.js", "translate", "fr", "action.reset") == "Start over"
 
 
@@ -380,9 +379,15 @@ def test_front_page_has_the_adaptive_studio_shell(running_server):
     connection.request("GET", "/")
     page = connection.getresponse().read().decode("utf-8")
     for marker in (
-        'id="studioShell"', 'id="siteHero"', 'id="studio"',
-        'id="modeEasy"', 'id="modePro"', 'id="localeDe"', 'id="localeEn"',
-        'data-companion-anchor="hero"', 'data-companion-anchor="studio"',
+        'id="studioShell"',
+        'id="siteHero"',
+        'id="studio"',
+        'id="modeEasy"',
+        'id="modePro"',
+        'id="localeDe"',
+        'id="localeEn"',
+        'data-companion-anchor="hero"',
+        'data-companion-anchor="studio"',
     ):
         assert marker in page
     assert page.index('src="studio-state.js"') < page.index('src="app.js"')
@@ -641,12 +646,11 @@ def test_companion_only_offers_kofi_after_a_visible_success_once_per_session():
     first = _call_web_module("companion.js", "companionDecision", success, {})
     assert first["pose"] == "celebrate"
     assert first["offerDonation"] is True
-    again = _call_web_module(
-        "companion.js", "companionDecision", success, {"donationShown": True}
-    )
+    again = _call_web_module("companion.js", "companionDecision", success, {"donationShown": True})
     assert again["offerDonation"] is False
     failed = _call_web_module(
-        "companion.js", "companionDecision",
+        "companion.js",
+        "companionDecision",
         {"phase": "failure", "payloadReady": False, "reducedMotion": False},
         {},
     )
@@ -655,14 +659,18 @@ def test_companion_only_offers_kofi_after_a_visible_success_once_per_session():
 
 def test_companion_reduced_motion_is_static_and_hints_are_once_only():
     state = {
-        "phase": "assistance", "assistance": "outline",
-        "payloadReady": False, "reducedMotion": True,
+        "phase": "assistance",
+        "assistance": "outline",
+        "payloadReady": False,
+        "reducedMotion": True,
     }
     first = _call_web_module("companion.js", "companionDecision", state, {})
     assert first["motion"] == "still"
     assert first["hintKey"] == "companion.outline"
     seen = _call_web_module(
-        "companion.js", "companionDecision", state,
+        "companion.js",
+        "companionDecision",
+        state,
         {"seenHints": ["companion.outline"]},
     )
     assert seen["hintKey"] is None
@@ -710,6 +718,7 @@ Add a repository test using Pillow:
 ```python
 def test_companion_sprite_has_six_square_transparent_frames():
     from PIL import Image
+
     path = ROOT / "src" / "qrsalvage" / "web" / "axolotl-companion.png"
     with Image.open(path) as image:
         assert image.mode == "RGBA"
@@ -832,7 +841,13 @@ def test_signal_manual_preserves_all_method_sections_and_figures():
     page = (ROOT / "src" / "qrsalvage" / "web" / "method.html").read_text(encoding="utf-8")
     for section in ("known", "levels", "posterior", "grid", "search", "probe", "rs", "limits"):
         assert f'id="{section}"' in page
-    for figure in ("fig-known.svg", "fig-levels.svg", "fig-posterior.svg", "fig-probe.svg", "fig-rs.svg"):
+    for figure in (
+        "fig-known.svg",
+        "fig-levels.svg",
+        "fig-posterior.svg",
+        "fig-probe.svg",
+        "fig-rs.svg",
+    ):
         assert figure in page
 ```
 
@@ -982,8 +997,14 @@ Read `Handler.STATIC` and `PAGE_FILES` in a test and require these files in both
 
 ```python
 expected = {
-    "studio-state.js", "locale.js", "companion.js", "axolotl-companion.png",
-    "outline-editor.js", "app.js", "style.css", "axolotl.png",
+    "studio-state.js",
+    "locale.js",
+    "companion.js",
+    "axolotl-companion.png",
+    "outline-editor.js",
+    "app.js",
+    "style.css",
+    "axolotl.png",
 }
 assert expected <= set(PAGE_FILES)
 assert {f"/{name}" for name in expected} <= set(Handler.STATIC)
