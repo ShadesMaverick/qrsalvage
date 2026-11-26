@@ -29,7 +29,7 @@ try {
 
     $py = Join-Path $root '.venv\Scripts\python.exe'
     if (-not (Test-Path -LiteralPath $py)) {
-        Write-Output "Gates uebersprungen: .venv fehlt. Setup steht in CLAUDE.md."
+        Write-Output "Gates uebersprungen: .venv fehlt. Setup steht in AGENTS.md."
         exit 0
     }
 

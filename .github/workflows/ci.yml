@@ -28,7 +28,7 @@ jobs:
       - run: pip install -e .
       - run: ruff check .
       - run: ruff format --check .
-      # CLAUDE.md calls complete signatures in the core mandatory, and until this line existed
+      # AGENTS.md calls complete signatures in the core mandatory, and until this line existed
       # that was a rule the repository stated and no gate enforced. The editable install above
       # is what lets mypy follow the package's own imports.
       - run: mypy
